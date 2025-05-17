@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [v0.1.2] - 2025-05-17
+
+### Added
+
+- Added GitHub Actions workflow for Go test coverage (.github/workflows/coverage.yml)
+- Added coverage badge to README.md
+- Added `.testcoverage.yml` configuration for `go-test-coverage` GitHub Action Workflow
+  - Workflow runs on all `pull_request` events
+- Documentation: Added Makefile section in README.md with common development tasks
+- Documentation: Enhanced Testing & Coverage section in README.md to include `make test` and `make check-coverage`
+
+### Changed
+
+- Added write permissions to `GITHUB_TOKEN` in the GitHub Actions workflow to allow for release creation
+- Updated the `README.md` to include a note about the `GITHUB_TOKEN` permissions in the release workflow
+
 ## [v0.1.1] - 2025-05-17
 
 ### Added

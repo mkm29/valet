@@ -1,6 +1,7 @@
 # schemagen: JSON Schema Generator for Helm Charts
 <!-- GitHub Actions release status -->
 [![Release](https://github.com/mkm29/schemagen/actions/workflows/release.yml/badge.svg)](https://github.com/mkm29/schemagen/actions/workflows/release.yml)
+[![Coverage](https://github.com/mkm29/schemagen/actions/workflows/coverage.yml/badge.svg)](https://github.com/mkm29/schemagen/actions/workflows/coverage.yml)
 
 A command-line tool to generate a JSON Schema from a YAML `values.yaml` file, optionally merging an overrides file. Useful for Helm chart values and other YAML-based configurations.
 
@@ -23,6 +24,18 @@ Alternatively, install it directly (requires Go modules support):
 ```bash
   go install github.com/mkm29/schemagen@latest
 ```
+
+## Makefile
+
+A Makefile is provided with common development tasks:
+
+- `make help`: Show available commands (default when running `make`).
+- `make build`: Build the CLI (outputs `bin/schemagen`).
+- `make test`: Run tests, generate `cover.out` and `cover.html`.
+- `make check-coverage`: Install and run `go-test-coverage` to enforce coverage thresholds defined in `.testcoverage.yml`.
+- `make clean`: Remove build artifacts (`bin/` and `schemagen`).
+
+Make sure you have [GNU Make](https://www.gnu.org/software/make/) installed.
 
 ## Usage
 
@@ -144,6 +157,7 @@ Produces `values.schema.json` with contents:
 This project uses [GoReleaser](https://goreleaser.com) to automate builds and releases. Binaries for Linux and macOS (amd64 and arm64) are built when tags (e.g., `v0.1.0`) are pushed.
 
 - A GitHub Actions workflow (`.github/workflows/release.yml`) runs GoReleaser on push tags and via manual dispatch.
+- **Note**: The release workflow sets `permissions.contents: write` so that the `GITHUB_TOKEN` has sufficient permissions to create releases.
 - To run a local release:
 
   ```bash
@@ -152,6 +166,13 @@ This project uses [GoReleaser](https://goreleaser.com) to automate builds and re
   ```
 
 ## Testing & Coverage
+
+You can also use the Makefile to run tests and check coverage:
+
+```bash
+make test
+make check-coverage
+```
 
 To run the test suite:
 

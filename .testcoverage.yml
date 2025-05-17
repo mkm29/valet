@@ -1,0 +1,29 @@
+# (mandatory)
+# Path to coverage profile file (output of `go test -coverprofile` command).
+# For cases where there are many coverage profiles (e.g., unit and integration tests),
+# you can combine them into one comma-separated list (e.g., 'coverage.out,coverage.int.out').
+profile: coverage.out
+
+# Holds coverage threshold percentages, values should be in range [0-100].
+threshold:
+  # (optional; default 0) Minimum coverage percentage required for individual files.
+  file: 70
+  # (optional; default 0) Minimum coverage percentage required per package.
+  package: 80
+  # (optional; default 0) Minimum overall project coverage percentage required.
+  total: 90
+
+# Holds regexp rules which override thresholds for matched files or packages.
+# First matching rule applies; list from specific to general.
+override: []
+
+exclude:
+  paths:
+    - \.pb\.go$ # exclude protobuf generated files
+
+# File name of go-test-coverage breakdown file for analyzing coverage differences.
+breakdown-file-name: ""
+
+diff:
+  # Base breakdown file name for reporting coverage differences.
+  base-breakdown-file-name: ""

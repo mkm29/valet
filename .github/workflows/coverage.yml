@@ -1,0 +1,31 @@
+name: Go Test Coverage
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    # Run on all pull request targets (no branch filter)
+    # triggers for any PR
+
+jobs:
+  coverage:
+    name: Run tests with coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.24"
+      - name: Run tests with coverage
+        run: go test ./... -coverprofile=coverage.out -covermode=atomic
+      - name: check test coverage
+        uses: vladopajic/go-test-coverage@v2
+        with:
+          config: ./.testcoverage.yml
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: coverage.out
