@@ -1,8 +1,8 @@
 # (mandatory)
 # Path to coverage profile file (output of `go test -coverprofile` command).
 # For cases where there are many coverage profiles (e.g., unit and integration tests),
-# you can combine them into one comma-separated list (e.g., 'coverage.out,coverage.int.out').
-profile: coverage.out
+# you can combine them into one comma-separated list (e.g., 'cover.out,cover.int.out').
+profile: cover.out
 
 # Holds coverage threshold percentages, values should be in range [0-100].
 threshold:
