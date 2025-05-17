@@ -1,4 +1,4 @@
-# valet: Values YAML Schema Tool
+# Valet: Values YAML Schema Tool
 
 <!-- GitHub Actions release status -->
 [![Release](https://github.com/mkm29/valet/actions/workflows/release.yml/badge.svg)](https://github.com/mkm29/valet/actions/workflows/release.yml)
