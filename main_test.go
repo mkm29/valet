@@ -1,15 +1,15 @@
 package main
 
 import (
-   "encoding/json"
-   "flag"
-   "fmt"
-   "io"
-   "os"
-   "path/filepath"
-   "reflect"
-   "strings"
-   "testing"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
 )
 
 func TestDeepMerge_Shallow(t *testing.T) {
@@ -21,84 +21,85 @@ func TestDeepMerge_Shallow(t *testing.T) {
 		t.Errorf("deepMerge(shallow) = %v, want %v", got, want)
 	}
 }
+
 // Test version flag in main, expecting exit code 0 and version info.
 func TestMain_VersionFlag(t *testing.T) {
-   // reset flags before parsing in main
-   flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-   origArgs := os.Args
-   origExit := exit
-   defer func() {
-       os.Args = origArgs
-       exit = origExit
-   }()
-   exit = func(code int) { panic(code) }
-   reader, writer, _ := os.Pipe()
-   origStdout := os.Stdout
-   os.Stdout = writer
-   defer func() { os.Stdout = origStdout }()
-   os.Args = []string{"schemagen", "-version"}
-   var code int
-   defer func() {
-       if r := recover(); r != nil {
-           if c, ok := r.(int); ok {
-               code = c
-           } else {
-               t.Fatalf("unexpected panic: %v", r)
-           }
-       } else {
-           t.Fatalf("expected exit panic")
-       }
-       writer.Close()
-       b, _ := io.ReadAll(reader)
-       out := string(b)
-       if code != 0 {
-           t.Errorf("exit code = %d, want 0", code)
-       }
-       if !strings.HasPrefix(out, "github.com/mkm29/schemagen@") {
-           t.Errorf("version output = %q, want prefix %q", out, "github.com/mkm29/schemagen@")
-       }
-   }()
-   main()
+	// reset flags before parsing in main
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	origArgs := os.Args
+	origExit := exit
+	defer func() {
+		os.Args = origArgs
+		exit = origExit
+	}()
+	exit = func(code int) { panic(code) }
+	reader, writer, _ := os.Pipe()
+	origStdout := os.Stdout
+	os.Stdout = writer
+	defer func() { os.Stdout = origStdout }()
+	os.Args = []string{"valet", "-version"}
+	var code int
+	defer func() {
+		if r := recover(); r != nil {
+			if c, ok := r.(int); ok {
+				code = c
+			} else {
+				t.Fatalf("unexpected panic: %v", r)
+			}
+		} else {
+			t.Fatalf("expected exit panic")
+		}
+		writer.Close()
+		b, _ := io.ReadAll(reader)
+		out := string(b)
+		if code != 0 {
+			t.Errorf("exit code = %d, want 0", code)
+		}
+		if !strings.HasPrefix(out, "github.com/mkm29/valet@") {
+			t.Errorf("version output = %q, want prefix %q", out, "github.com/mkm29/valet@")
+		}
+	}()
+	main()
 }
 
 // Test missing args in main, expecting exit code 1 and usage printed.
 func TestMain_MissingArgs(t *testing.T) {
-   // reset flags before parsing in main
-   flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-   origArgs := os.Args
-   origExit := exit
-   defer func() {
-       os.Args = origArgs
-       exit = origExit
-   }()
-   exit = func(code int) { panic(code) }
-   reader, writer, _ := os.Pipe()
-   origStderr := os.Stderr
-   os.Stderr = writer
-   defer func() { os.Stderr = origStderr }()
-   os.Args = []string{"schemagen"}
-   var code int
-   defer func() {
-       if r := recover(); r != nil {
-           if c, ok := r.(int); ok {
-               code = c
-           } else {
-               t.Fatalf("unexpected panic: %v", r)
-           }
-       } else {
-           t.Fatalf("expected exit panic")
-       }
-       writer.Close()
-       b, _ := io.ReadAll(reader)
-       out := string(b)
-       if code != 1 {
-           t.Errorf("exit code = %d, want 1", code)
-       }
-       if !strings.Contains(out, "Usage: schemagen [flags] <context-dir>") {
-           t.Errorf("usage output = %q, missing usage prefix", out)
-       }
-   }()
-   main()
+	// reset flags before parsing in main
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	origArgs := os.Args
+	origExit := exit
+	defer func() {
+		os.Args = origArgs
+		exit = origExit
+	}()
+	exit = func(code int) { panic(code) }
+	reader, writer, _ := os.Pipe()
+	origStderr := os.Stderr
+	os.Stderr = writer
+	defer func() { os.Stderr = origStderr }()
+	os.Args = []string{"valet"}
+	var code int
+	defer func() {
+		if r := recover(); r != nil {
+			if c, ok := r.(int); ok {
+				code = c
+			} else {
+				t.Fatalf("unexpected panic: %v", r)
+			}
+		} else {
+			t.Fatalf("expected exit panic")
+		}
+		writer.Close()
+		b, _ := io.ReadAll(reader)
+		out := string(b)
+		if code != 1 {
+			t.Errorf("exit code = %d, want 1", code)
+		}
+		if !strings.Contains(out, "Usage: valet [flags] <context-dir>") {
+			t.Errorf("usage output = %q, missing usage prefix", out)
+		}
+	}()
+	main()
 }
 
 func TestDeepMerge_Nested(t *testing.T) {
@@ -383,7 +384,7 @@ func TestMain_Flow(t *testing.T) {
 	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	origArgs := os.Args
 	defer func() { os.Args = origArgs }()
-	os.Args = []string{"schemagen", dir}
+	os.Args = []string{"valet", dir}
 	old := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w

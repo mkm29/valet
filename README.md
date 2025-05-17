@@ -1,7 +1,7 @@
-# schemagen: JSON Schema Generator for Helm Charts
+# valet: JSON Schema Generator for Helm Charts
 <!-- GitHub Actions release status -->
-[![Release](https://github.com/mkm29/schemagen/actions/workflows/release.yml/badge.svg)](https://github.com/mkm29/schemagen/actions/workflows/release.yml)
-[![Coverage](https://github.com/mkm29/schemagen/actions/workflows/coverage.yml/badge.svg)](https://github.com/mkm29/schemagen/actions/workflows/coverage.yml)
+[![Release](https://github.com/mkm29/valet/actions/workflows/release.yml/badge.svg)](https://github.com/mkm29/valet/actions/workflows/release.yml)
+[![Coverage](https://github.com/mkm29/valet/actions/workflows/coverage.yml/badge.svg)](https://github.com/mkm29/valet/actions/workflows/coverage.yml)
 
 A command-line tool to generate a JSON Schema from a YAML `values.yaml` file, optionally merging an overrides file. Useful for Helm chart values and other YAML-based configurations.
 
@@ -14,15 +14,15 @@ A command-line tool to generate a JSON Schema from a YAML `values.yaml` file, op
 Clone the repository and build:
 
   ```bash
-  git clone https://github.com/mkm29/schemagen.git
-  cd schemagen
-  go build -o bin/schemagen main.go
+  git clone https://github.com/mkm29/valet.git
+  cd valet
+  go build -o bin/valet main.go
   ```
 
 Alternatively, install it directly (requires Go modules support):
 
 ```bash
-  go install github.com/mkm29/schemagen@latest
+  go install github.com/mkm29/valet@latest
 ```
 
 ## Makefile
@@ -30,10 +30,10 @@ Alternatively, install it directly (requires Go modules support):
 A Makefile is provided with common development tasks:
 
 - `make help`: Show available commands (default when running `make`).
-- `make build`: Build the CLI (outputs `bin/schemagen`).
+- `make build`: Build the CLI (outputs `bin/valet`).
 - `make test`: Run tests, generate `cover.out` and `cover.html`.
 - `make check-coverage`: Install and run `go-test-coverage` to enforce coverage thresholds defined in `.testcoverage.yml`.
-- `make clean`: Remove build artifacts (`bin/` and `schemagen`).
+- `make clean`: Remove build artifacts (`bin/` and `valet`).
 
 Make sure you have [GNU Make](https://www.gnu.org/software/make/) installed.
 
@@ -42,7 +42,7 @@ Make sure you have [GNU Make](https://www.gnu.org/software/make/) installed.
 Generate a JSON Schema from a `values.yaml` in the given `<context-dir>`:
 
 ```console
-  schemagen [flags] <context-dir>
+  valet [flags] <context-dir>
 
 Flags:
   -overrides string
@@ -58,23 +58,23 @@ The tool writes a `values.schema.json` file in the `<context-dir>`.
 Generate schema from a directory containing `values.yaml`:
 
 ```bash
-  ./bin/schemagen charts/mychart
+  ./bin/valet charts/mychart
 ```
 
 Generate schema merging an override file:
 
 ```bash
-  ./schemagen -overrides override.yaml charts/mychart
+  ./valet -overrides override.yaml charts/mychart
 ```
 
 - Print version/build information:
 
 ```bash
-  ./schemagen -version
+  ./valet -version
 ```
 Output format:
 ```text
-github.com/mkm29/schemagen@v0.1.1 (commit 9153c14b9ffddeaccba93268a0851d5da0ae8cbf)
+github.com/mkm29/valet@v0.1.1 (commit 9153c14b9ffddeaccba93268a0851d5da0ae8cbf)
 ```
 
 ## Example
@@ -94,7 +94,7 @@ env:
 Run:
 
 ```bash
-./bin/schemagen .
+./bin/valet .
 ```
 
 Produces `values.schema.json` with contents:
