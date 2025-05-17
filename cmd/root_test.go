@@ -1,10 +1,10 @@
 package cmd
 
 import (
-   "os"
-   "path/filepath"
-   "strings"
-   "testing"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
 )
 
 func TestRootCmd_DefaultContext(t *testing.T) {
@@ -83,9 +83,9 @@ func TestRootCmd_ConfigFile(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(sub, "values.yaml"), yaml, 0644); err != nil {
 		t.Fatalf("write values.yaml failed: %v", err)
 	}
-	// Create config file .schemagen.yaml in tmp
+	// Create config file .valet.yaml in tmp
 	cfgContent := []byte("context: subdir\n")
-	if err := os.WriteFile(filepath.Join(tmp, ".schemagen.yaml"), cfgContent, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, ".valet.yaml"), cfgContent, 0644); err != nil {
 		t.Fatalf("write config failed: %v", err)
 	}
 	// Change to temp dir
@@ -94,9 +94,9 @@ func TestRootCmd_ConfigFile(t *testing.T) {
 	os.Chdir(tmp)
 	// Reset global config
 	cfg = nil
-   cmd := NewRootCmd()
-   // Specify config-file flag
-   cmd.SetArgs([]string{"--config-file", ".schemagen.yaml"})
+	cmd := NewRootCmd()
+	// Specify config-file flag
+	cmd.SetArgs([]string{"--config-file", ".valet.yaml"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
@@ -109,15 +109,15 @@ func TestRootCmd_ConfigFile(t *testing.T) {
 
 // TestRootCmd_NoValues tests root command error when no values file present
 func TestRootCmd_NoValues(t *testing.T) {
-   tmp := t.TempDir()
-   cwd, _ := os.Getwd()
-   defer os.Chdir(cwd)
-   os.Chdir(tmp)
-   cfg = nil
-   cmd := NewRootCmd()
-   cmd.SetArgs([]string{})
-   err := cmd.Execute()
-   if err == nil || !strings.Contains(err.Error(), "no values.yaml or values.yml found in") {
-       t.Errorf("expected missing values error, got %v", err)
-   }
+	tmp := t.TempDir()
+	cwd, _ := os.Getwd()
+	defer os.Chdir(cwd)
+	os.Chdir(tmp)
+	cfg = nil
+	cmd := NewRootCmd()
+	cmd.SetArgs([]string{})
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "no values.yaml or values.yml found in") {
+		t.Errorf("expected missing values error, got %v", err)
+	}
 }
