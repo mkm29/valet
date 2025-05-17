@@ -1,0 +1,803 @@
+{
+  "$schema": "http://json-schema.org/schema#",
+  "default": {},
+  "properties": {
+    "alloy": {
+      "default": {},
+      "properties": {
+        "clustering": {
+          "default": {},
+          "properties": {
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            },
+            "name": {
+              "default": "",
+              "type": "string"
+            },
+            "portName": {
+              "default": "http",
+              "type": "string"
+            }
+          },
+          "required": [
+            "enabled",
+            "name",
+            "portName"
+          ],
+          "type": "object"
+        },
+        "configMap": {
+          "default": {},
+          "properties": {
+            "content": {
+              "default": "",
+              "type": "string"
+            },
+            "create": {
+              "default": true,
+              "type": "boolean"
+            },
+            "key": {
+              "default": "\u003cnil\u003e",
+              "type": "string"
+            },
+            "name": {
+              "default": "\u003cnil\u003e",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "key",
+            "create",
+            "content"
+          ],
+          "type": "object"
+        },
+        "enableReporting": {
+          "default": true,
+          "type": "boolean"
+        },
+        "envFrom": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "extraArgs": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "extraEnv": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "extraPorts": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "hostAliases": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "lifecycle": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "listenAddr": {
+          "default": "0.0.0.0",
+          "type": "string"
+        },
+        "listenPort": {
+          "default": 12345,
+          "type": "integer"
+        },
+        "listenScheme": {
+          "default": "HTTP",
+          "type": "string"
+        },
+        "mounts": {
+          "default": {},
+          "properties": {
+            "dockercontainers": {
+              "default": false,
+              "type": "boolean"
+            },
+            "extra": {
+              "default": [],
+              "items": {},
+              "type": "array"
+            },
+            "varlog": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "varlog",
+            "dockercontainers",
+            "extra"
+          ],
+          "type": "object"
+        },
+        "resources": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "securityContext": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "stabilityLevel": {
+          "default": "generally-available",
+          "type": "string"
+        },
+        "storagePath": {
+          "default": "/tmp/alloy",
+          "type": "string"
+        },
+        "uiPathPrefix": {
+          "default": "/",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mounts",
+        "securityContext",
+        "listenPort",
+        "uiPathPrefix",
+        "enableReporting",
+        "extraEnv",
+        "stabilityLevel",
+        "listenAddr",
+        "listenScheme",
+        "envFrom",
+        "extraArgs",
+        "lifecycle",
+        "configMap",
+        "storagePath",
+        "resources",
+        "clustering",
+        "extraPorts",
+        "hostAliases"
+      ],
+      "type": "object"
+    },
+    "configReloader": {
+      "default": {},
+      "properties": {
+        "customArgs": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "enabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "image": {
+          "default": {},
+          "properties": {
+            "digest": {
+              "default": "sha256:372cfc5b",
+              "type": "string"
+            },
+            "registry": {
+              "default": "registry1.dso.mil/ironbank/opensource",
+              "type": "string"
+            },
+            "repository": {
+              "default": "jimmidyson/configmap-reload",
+              "type": "string"
+            },
+            "tag": {
+              "default": "v0.15.0",
+              "type": "string"
+            }
+          },
+          "required": [
+            "registry",
+            "repository",
+            "tag",
+            "digest"
+          ],
+          "type": "object"
+        },
+        "resources": {
+          "default": {},
+          "properties": {
+            "requests": {
+              "default": {},
+              "properties": {
+                "cpu": {
+                  "default": "1m",
+                  "type": "string"
+                },
+                "memory": {
+                  "default": "5Mi",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "cpu",
+                "memory"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "requests"
+          ],
+          "type": "object"
+        },
+        "securityContext": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        }
+      },
+      "required": [
+        "resources",
+        "securityContext",
+        "enabled",
+        "image",
+        "customArgs"
+      ],
+      "type": "object"
+    },
+    "controller": {
+      "default": {},
+      "properties": {
+        "affinity": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "autoscaling": {
+          "default": {},
+          "properties": {
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            },
+            "maxReplicas": {
+              "default": 5,
+              "type": "integer"
+            },
+            "minReplicas": {
+              "default": 1,
+              "type": "integer"
+            },
+            "scaleDown": {
+              "default": {},
+              "properties": {
+                "policies": {
+                  "default": [],
+                  "items": {},
+                  "type": "array"
+                },
+                "selectPolicy": {
+                  "default": "Max",
+                  "type": "string"
+                },
+                "stabilizationWindowSeconds": {
+                  "default": 300,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "policies",
+                "selectPolicy",
+                "stabilizationWindowSeconds"
+              ],
+              "type": "object"
+            },
+            "scaleUp": {
+              "default": {},
+              "properties": {
+                "policies": {
+                  "default": [],
+                  "items": {},
+                  "type": "array"
+                },
+                "selectPolicy": {
+                  "default": "Max",
+                  "type": "string"
+                },
+                "stabilizationWindowSeconds": {
+                  "default": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "policies",
+                "selectPolicy",
+                "stabilizationWindowSeconds"
+              ],
+              "type": "object"
+            },
+            "targetCPUUtilizationPercentage": {
+              "default": 0,
+              "type": "integer"
+            },
+            "targetMemoryUtilizationPercentage": {
+              "default": 80,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "scaleDown",
+            "scaleUp",
+            "enabled",
+            "minReplicas",
+            "maxReplicas",
+            "targetCPUUtilizationPercentage",
+            "targetMemoryUtilizationPercentage"
+          ],
+          "type": "object"
+        },
+        "dnsPolicy": {
+          "default": "ClusterFirst",
+          "type": "string"
+        },
+        "enableStatefulSetAutoDeletePVC": {
+          "default": false,
+          "type": "boolean"
+        },
+        "extraAnnotations": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "extraContainers": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "hostNetwork": {
+          "default": false,
+          "type": "boolean"
+        },
+        "hostPID": {
+          "default": false,
+          "type": "boolean"
+        },
+        "initContainers": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "nodeSelector": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "parallelRollout": {
+          "default": true,
+          "type": "boolean"
+        },
+        "persistence": {
+          "default": {},
+          "properties": {
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "enabled"
+          ],
+          "type": "object"
+        },
+        "podAnnotations": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "podDisruptionBudget": {
+          "default": {},
+          "properties": {
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            },
+            "maxUnavailable": {
+              "default": "\u003cnil\u003e",
+              "type": "string"
+            },
+            "minAvailable": {
+              "default": "\u003cnil\u003e",
+              "type": "string"
+            }
+          },
+          "required": [
+            "maxUnavailable",
+            "enabled",
+            "minAvailable"
+          ],
+          "type": "object"
+        },
+        "podLabels": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "priorityClassName": {
+          "default": "",
+          "type": "string"
+        },
+        "replicas": {
+          "default": 1,
+          "type": "integer"
+        },
+        "terminationGracePeriodSeconds": {
+          "default": "\u003cnil\u003e",
+          "type": "string"
+        },
+        "tolerations": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "topologySpreadConstraints": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "type": {
+          "default": "daemonset",
+          "type": "string"
+        },
+        "updateStrategy": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "volumeClaimTemplates": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "volumes": {
+          "default": {},
+          "properties": {
+            "extra": {
+              "default": [],
+              "items": {},
+              "type": "array"
+            }
+          },
+          "required": [
+            "extra"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "volumes",
+        "replicas",
+        "dnsPolicy",
+        "terminationGracePeriodSeconds",
+        "podAnnotations",
+        "initContainers",
+        "parallelRollout",
+        "hostPID",
+        "tolerations",
+        "affinity",
+        "extraContainers",
+        "extraAnnotations",
+        "hostNetwork",
+        "updateStrategy",
+        "nodeSelector",
+        "topologySpreadConstraints",
+        "podLabels",
+        "autoscaling",
+        "volumeClaimTemplates",
+        "type",
+        "persistence",
+        "priorityClassName",
+        "podDisruptionBudget",
+        "enableStatefulSetAutoDeletePVC"
+      ],
+      "type": "object"
+    },
+    "crds": {
+      "default": {},
+      "properties": {
+        "create": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "create"
+      ],
+      "type": "object"
+    },
+    "fullnameOverride": {
+      "default": "\u003cnil\u003e",
+      "type": "string"
+    },
+    "global": {
+      "default": {},
+      "properties": {
+        "image": {
+          "default": {},
+          "properties": {
+            "pullSecrets": {
+              "default": [],
+              "items": {},
+              "type": "array"
+            },
+            "registry": {
+              "default": "",
+              "type": "string"
+            }
+          },
+          "required": [
+            "registry",
+            "pullSecrets"
+          ],
+          "type": "object"
+        },
+        "podSecurityContext": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        }
+      },
+      "required": [
+        "image",
+        "podSecurityContext"
+      ],
+      "type": "object"
+    },
+    "image": {
+      "default": {},
+      "properties": {
+        "pullPolicy": {
+          "default": "IfNotPresent",
+          "type": "string"
+        },
+        "pullSecrets": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "registry": {
+          "default": "docker.io",
+          "type": "string"
+        },
+        "repository": {
+          "default": "grafana/alloy",
+          "type": "string"
+        },
+        "tag": {
+          "default": "v1.5.0",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pullSecrets",
+        "registry",
+        "repository",
+        "tag",
+        "pullPolicy"
+      ],
+      "type": "object"
+    },
+    "ingress": {
+      "default": {},
+      "properties": {
+        "annotations": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "extraPaths": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "faroPort": {
+          "default": 12347,
+          "type": "integer"
+        },
+        "hosts": {
+          "default": [],
+          "items": {
+            "default": "chart-example.local",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "labels": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "path": {
+          "default": "/",
+          "type": "string"
+        },
+        "pathType": {
+          "default": "Prefix",
+          "type": "string"
+        },
+        "tls": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        }
+      },
+      "required": [
+        "enabled",
+        "annotations",
+        "path",
+        "faroPort",
+        "hosts",
+        "extraPaths",
+        "labels",
+        "pathType",
+        "tls"
+      ],
+      "type": "object"
+    },
+    "nameOverride": {
+      "default": "\u003cnil\u003e",
+      "type": "string"
+    },
+    "rbac": {
+      "default": {},
+      "properties": {
+        "create": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "create"
+      ],
+      "type": "object"
+    },
+    "service": {
+      "default": {},
+      "properties": {
+        "annotations": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "clusterIP": {
+          "default": "",
+          "type": "string"
+        },
+        "enabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "internalTrafficPolicy": {
+          "default": "Cluster",
+          "type": "string"
+        },
+        "nodePort": {
+          "default": 31128,
+          "type": "integer"
+        },
+        "type": {
+          "default": "ClusterIP",
+          "type": "string"
+        }
+      },
+      "required": [
+        "nodePort",
+        "clusterIP",
+        "internalTrafficPolicy",
+        "annotations",
+        "enabled",
+        "type"
+      ],
+      "type": "object"
+    },
+    "serviceAccount": {
+      "default": {},
+      "properties": {
+        "additionalLabels": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "annotations": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "create": {
+          "default": true,
+          "type": "boolean"
+        },
+        "name": {
+          "default": "\u003cnil\u003e",
+          "type": "string"
+        }
+      },
+      "required": [
+        "annotations",
+        "name",
+        "create",
+        "additionalLabels"
+      ],
+      "type": "object"
+    },
+    "serviceMonitor": {
+      "default": {},
+      "properties": {
+        "additionalLabels": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "interval": {
+          "default": "",
+          "type": "string"
+        },
+        "metricRelabelings": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "relabelings": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "tlsConfig": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        }
+      },
+      "required": [
+        "enabled",
+        "additionalLabels",
+        "interval",
+        "metricRelabelings",
+        "tlsConfig",
+        "relabelings"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "configReloader",
+    "controller",
+    "global",
+    "crds",
+    "alloy",
+    "rbac",
+    "service",
+    "serviceMonitor",
+    "ingress",
+    "nameOverride",
+    "fullnameOverride",
+    "image",
+    "serviceAccount"
+  ],
+  "type": "object"
+}

@@ -1,0 +1,97 @@
+prometheus.exporter.unix "default" {
+    include_exporter_metrics = true
+    
+    enable_collectors = [
+        "cpu",
+        "meminfo",
+        "diskstats",
+        "filesystem",
+        "loadavg",
+        "netdev",
+        "netstat",
+    ]
+
+    disable_collectors = [
+        "cpufreq",
+        "nfs",
+        "nfsd",
+        "zfs",
+        "pressure",
+        "tapestats",
+        "bonding",
+        "fibrechannel",
+        "ipvs",
+        "infiniband",
+        "systemd",
+    ]
+}
+
+discovery.relabel "pod_metrics" {
+    targets = discovery.kubernetes.pods.targets
+
+    rule {
+        regex = "destination_canonical_revision|source_canonical_revision|source_canonical_service|source_app|source_version|destination_version"
+        action = "labeldrop"
+    }
+
+    rule {
+        source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scrape"]
+        regex = "true"
+        action = "keep"
+    }
+
+    rule {
+        source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_path"]
+        regex = "(.+)"
+        target_label = "__metrics_path__"
+        replacement = "${1}"
+    }
+
+    rule {
+        source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_port"]
+        regex = "(.+)"
+        target_label = "__port__"
+        replacement = "${1}"
+    }
+
+    rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label = "namespace"
+    }
+
+    rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label = "pod"
+    }
+}
+
+
+prometheus.scrape "pods" {
+    targets    = discovery.relabel.pod_metrics.output
+    forward_to = [prometheus.remote_write.mimir.receiver]
+    scrape_interval = "30s"
+    scrape_timeout  = "10s"
+}
+
+prometheus.scrape "node_exporter" {
+    targets = prometheus.exporter.unix.default.targets
+    forward_to = [prometheus.remote_write.mimir.receiver]
+    scrape_interval = "30s"
+    scrape_timeout  = "10s"
+}
+
+prometheus.remote_write "mimir" {
+    external_labels = {
+      {{- range $key, $value := .Values.global.extraLabels }}
+      {{ $key }} = "{{ $value }}",
+      {{- end }}
+    }
+    endpoint {
+      {{- with .Values.global.prometheus }}
+      url = "{{ .service.protocol }}://{{ .service.url }}:{{ .service.port }}/{{ .service.prefix }}"
+      headers = {
+        "X-Scope-OrgID" = "{{ .orgID }}",
+      }
+      {{- end }}
+    }
+}

@@ -1,0 +1,19 @@
+{{- if .Values.controller.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "alloy.fullname" . }}-wal-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "alloy.labels" . | nindent 4 }}
+    app.kubernetes.io/component: config
+spec:
+  {{- with .Values.controller.persistence }}
+  storageClassName: {{ .storageClass | default "ebs-sc" }}
+  accessModes:
+    {{- toYaml .accessModes | nindent 4 }}
+  resources:
+    {{- toYaml .resources | nindent 4 }}
+  {{- end }}
+{{- end }}

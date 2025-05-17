@@ -1,0 +1,202 @@
+discovery.relabel "pods" {
+    targets = discovery.kubernetes.pods.targets
+
+    // Keep only relevant metadata labels, reduce cardinality
+    rule {
+        source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name", "__meta_kubernetes_pod_label_app", "__tmp_controller_name", "__meta_kubernetes_pod_name"]
+        regex         = "^;*([^;]+)(;.*)?$"
+        target_label  = "app"
+    }
+
+    rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "namespace"
+    }
+
+    rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod"
+    }
+
+    rule {
+        source_labels = ["__meta_kubernetes_pod_container_name"]
+        target_label  = "container"
+    }
+
+    // Drop high cardinality and noisy labels
+    rule {
+        regex = "(node_name|instance|component)"
+        action = "labeldrop"
+    }
+
+    // Filter out noisy namespaces
+    rule {
+        source_labels = ["namespace"]
+        regex = "(kube-system|monitoring)"  // Add other noisy namespaces
+        action = "drop"
+    }
+
+    // Drop logs from specific containers
+    rule {
+        source_labels = ["container"]
+        regex = "(prometheus|grafana-agent|fluent-bit)"  // Add other noisy containers
+        action = "drop"
+    }
+
+    // Keep only specific log paths
+    rule {
+        source_labels = ["__path__"]
+        regex = ".+/([^/]+)/[^/]+\\.log"
+        action = "keep"
+    }
+}
+
+loki.process "pods" {
+    // API Server logs
+    stage.match {
+        selector = "{container=\"kube-apiserver\", namespace=\"kube-system\"}"
+        stage.regex {
+            expression = `(?P<verb>[A-Z]+) (?P<requestURI>[^ ]+) (?P<user>[^ ]+) (?P<status>\d{3})`
+            source = "log"
+        }
+        stage.drop {
+            expression = ".*(watch|list|get).*"  // Drop noisy watch/list operations
+        }
+    }
+
+    // Controller Manager logs
+    stage.match {
+        selector = "{container=\"kube-controller-manager\", namespace=\"kube-system\"}"
+        stage.regex {
+            expression = `(?P<controller>[a-zA-Z]+Controller).*(?P<message>failed|error|warning)`
+            source = "log"
+        }
+    }
+
+    // Scheduler logs
+    stage.match {
+        selector = "{container=\"kube-scheduler\", namespace=\"kube-system\"}"
+        stage.regex {
+            expression = `(?P<pod>[a-zA-Z0-9-]+) (?P<message>Successfully bound|failed to schedule)`
+            source = "log"
+        }
+    }
+
+    // etcd logs
+    stage.match {
+        selector = "{container=\"etcd\", namespace=\"kube-system\"}"
+        stage.regex {
+            expression = `(?P<type>warning|error|fatal).*(?P<message>leader changed|split-brain|connection refused)`
+            source = "log"
+        }
+    }
+
+    // CoreDNS logs
+    stage.match {
+        selector = "{container=\"coredns\", namespace=\"kube-system\"}"
+        stage.regex {
+            expression = `(?P<error_code>NXDOMAIN|SERVFAIL|REFUSED) (?P<query_name>[^ ]+)`
+            source = "log"
+        }
+        stage.drop {
+            expression = ".*NOERROR.*"  // Drop successful DNS queries
+        }
+    }
+
+    // Istio Proxy logs
+    stage.match {
+        selector = "{container=\"istio-proxy\"}" 
+        stage.regex {
+            expression = `(?P<status>\d{3}) (?P<duration>\d+\.?\d*) (?P<method>[A-Z]+) (?P<path>[^ ]+)`
+            source = "log"
+        }
+    }
+
+    // AWS EBS CSI Driver logs
+    stage.match {
+        selector = "{container=~\"ebs-csi.*\", namespace=\"kube-system\"}"
+        
+        // Extract volume operations
+        stage.regex {
+            expression = `(?P<operation>CreateVolume|DeleteVolume|ControllerPublishVolume|ControllerUnpublishVolume) (?P<volume_id>vol-[a-z0-9]+)`
+            source = "log"
+        }
+
+        // Extract error messages
+        stage.regex {
+            expression = `error: (?P<error_message>.*)`
+            source = "log"
+        }
+
+        // Extract volume attachment operations
+        stage.regex {
+            expression = `AttachVolume.Attach succeeded for (?P<volume_id>vol-[a-z0-9]+)`
+            source = "log"
+        }
+    }
+
+    // Kyverno logs
+    stage.match {
+        selector = "{container=~\"kyverno.*\", namespace=\"kyverno\"}"
+        
+        // Extract policy validations and operations
+        stage.regex {
+            expression = `resource (?P<kind>[a-zA-Z]+)/(?P<name>[a-zA-Z0-9-]+) .* policy (?P<policy>[a-zA-Z0-9-]+) rule (?P<rule>[a-zA-Z0-9-]+) (?P<result>passed|failed|skipped)`
+            source = "log"
+        }
+
+        // Extract mutation operations
+        stage.regex {
+            expression = `mutation request: (?P<namespace>[a-zA-Z0-9-]+)/(?P<resource>[a-zA-Z0-9-]+)`
+            source = "log"
+        }
+
+        // Extract policy engine errors
+        stage.regex {
+            expression = `(?P<severity>error|warning): (?P<message>.*)`
+            source = "log"
+        }
+
+        // Extract background scan results
+        stage.regex {
+            expression = `background scan: policy (?P<policy>[a-zA-Z0-9-]+) (?P<result>passed|failed)`
+            source = "log"
+        }
+    }
+
+    stage.drop {
+        expression = ".*(healthcheck|health-check|/health|/ready|/metrics|/stats/prometheus).*"  // Drop monitoring endpoint logs
+    }
+
+    stage.drop {
+        longer_than = "10240"  // Drop very long log lines
+    }
+
+    forward_to = [loki.write.default.receiver]
+}
+
+local.file_match "pods" {
+	path_targets = discovery.relabel.pods.output
+}
+
+loki.source.file "pods" {
+	targets               = local.file_match.pods.targets
+	forward_to            = [loki.process.pods.receiver]
+	legacy_positions_file = "/run/promtail/positions.yaml"
+}
+
+loki.write "default" {
+	external_labels = {
+    {{- range $key, $value := .Values.global.extraLabels }}
+    {{ $key }} = "{{ $value }}",
+    {{- end }}
+	}
+	endpoint {
+    {{- with .Values.global.loki }}
+		url = "{{ .service.protocol }}://{{ .service.url }}:{{ .service.port }}/{{ .service.prefix }}"
+		headers = {
+			"X-Scope-OrgID" = "{{ .orgID }}",
+		}
+    {{- end }}
+	}
+}

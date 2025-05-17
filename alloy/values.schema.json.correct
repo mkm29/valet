@@ -1,0 +1,905 @@
+{
+  "$schema": "http://json-schema.org/schema#",
+  "default": {},
+  "properties": {
+    "alloy": {
+      "default": {},
+      "properties": {
+        "clustering": {
+          "default": {},
+          "properties": {
+            "enabled": {
+              "default": true,
+              "type": "boolean"
+            },
+            "name": {
+              "default": "",
+              "type": "string"
+            },
+            "portName": {
+              "default": "http",
+              "type": "string"
+            }
+          },
+          "required": ["enabled", "name", "portName"],
+          "type": "object"
+        },
+        "configMap": {
+          "default": {},
+          "properties": {
+            "config": {
+              "default": "prometheus.exporter.unix \"default\" { }\nprometheus.exporter.cadvisor \"default\" { }\ndiscovery.kubernetes \"pods\" {\n  role = \"pod\"\n}\n\ndiscovery.kubernetes \"nodes\" {\n  role = \"node\"\n}\n\ndiscovery.kubernetes \"services\" {\n  role = \"service\"\n}\n\ndiscovery.kubernetes \"endpoints\" {\n  role = \"endpoints\"\n}\n\n// discovery.kubernetes \"endpointslices\" {\n//   role = \"endpointslice\"\n// }\n\n// discovery.kubernetes \"ingresses\" {\n//   role = \"ingress\"\n// }\n\nk8s.cadvisor \"scrape\" {\n  forward_to = [prometheus.remote_write.mimir.receiver]\n  clustering = true\n  job_label = \"cadvisor\"\n}\n\nk8s.resources \"scrape\" {\n  forward_to = [prometheus.remote_write.mimir.receiver]\n  clustering = true\n  job_label = \"kube-resources\"\n}\nk8s.apiserver \"scrape\" {\n  forward_to = [prometheus.remote_write.mimir.receiver]\n  clustering = true\n  job_label = \"kube-apiserver\"\n}\nk8s.probes \"scrape\" {\n  forward_to = [prometheus.remote_write.mimir.receiver]\n  clustering = true\n  job_label = \"kube-probes\"\n}\nk8s.kube_dns \"scrape\" {\n  forward_to = [prometheus.remote_write.mimir.receiver]\n  clustering = true\n  job_label = \"kube-dns\"\n}\nk8s.kubelet \"scrape\" {\n  forward_to = [prometheus.remote_write.mimir.receiver]\n  clustering = true\n  job_label = \"kube-kubelet\"\n}\n\nksm.kubernetes \"targets\" {}\n\nksm.scrape \"metrics\" {\n  targets     = ksm.kubernetes.targets.output\n  forward_to  = [prometheus.remote_write.mimir.receiver]\n  clustering = true\n  job_label = \"kube-state-metrics\"\n}\n\nnodes.kubernetes \"targets\" {}\n\nnodes.scrape \"metrics\" {\n  targets = nodes.kubernetes.targets.output\n  forward_to = [prometheus.remote_write.mimir.receiver]\n  clustering = true\n  job_label = \"node-exporter\"\n}\n\ndiscovery.relabel \"pods\" {\n  targets = discovery.kubernetes.pods.targets\n\n  rule {\n    source_labels = [\"__meta_kubernetes_pod_controller_name\"]\n    regex         = \"([0-9a-z-.]+?)(-[0-9a-f]{8,10})?\"\n    target_label  = \"__tmp_controller_name\"\n  }\n\n  rule {\n    source_labels = [\"__meta_kubernetes_pod_label_app_kubernetes_io_name\", \"__meta_kubernetes_pod_label_app\", \"__tmp_controller_name\", \"__meta_kubernetes_pod_name\"]\n    regex         = \"^;*([^;]+)(;.*)?$\"\n    target_label  = \"app\"\n  }\n\n  rule {\n    source_labels = [\"__meta_kubernetes_pod_label_app_kubernetes_io_instance\", \"__meta_kubernetes_pod_label_instance\"]\n    regex         = \"^;*([^;]+)(;.*)?$\"\n    target_label  = \"instance\"\n  }\n\n  rule {\n    source_labels = [\"__meta_kubernetes_pod_label_app_kubernetes_io_component\", \"__meta_kubernetes_pod_label_component\"]\n    regex         = \"^;*([^;]+)(;.*)?$\"\n    target_label  = \"component\"\n  }\n\n  rule {\n    source_labels = [\"__meta_kubernetes_pod_node_name\"]\n    target_label  = \"node_name\"\n  }\n\n  rule {\n    source_labels = [\"__meta_kubernetes_namespace\"]\n    target_label  = \"namespace\"\n  }\n\n  rule {\n    source_labels = [\"namespace\", \"app\"]\n    separator     = \"/\"\n    target_label  = \"job\"\n  }\n\n  rule {\n    source_labels = [\"__meta_kubernetes_pod_name\"]\n    target_label  = \"pod\"\n  }\n\n  rule {\n    source_labels = [\"__meta_kubernetes_pod_container_name\"]\n    target_label  = \"container\"\n  }\n\n  rule {\n    source_labels = [\"__meta_kubernetes_pod_uid\", \"__meta_kubernetes_pod_container_name\"]\n    separator     = \"/\"\n    target_label  = \"__path__\"\n    replacement   = \"/var/log/pods/*$1/*.log\"\n  }\n\n  rule {\n    source_labels = [\"__meta_kubernetes_pod_annotationpresent_kubernetes_io_config_hash\", \"__meta_kubernetes_pod_annotation_kubernetes_io_config_hash\", \"__meta_kubernetes_pod_container_name\"]\n    separator     = \"/\"\n    regex         = \"true/(.*)\"\n    target_label  = \"__path__\"\n    replacement   = \"/var/log/pods/*$1/*.log\"\n  }\n}\n\nlocal.file_match \"pods\" {\n  path_targets = discovery.relabel.pods.output\n}\n\nloki.source.file \"pods\" {\n  targets               = local.file_match.pods.targets\n  forward_to            = [loki.process.pods.receiver]\n  legacy_positions_file = \"/run/promtail/positions.yaml\"\n}\n\nloki.process \"pods\" {\n  forward_to = [loki.write.default.receiver]\n}\n",
+              "type": "string"
+            },
+            "content": {
+              "default": "",
+              "type": "string"
+            },
+            "create": {
+              "default": true,
+              "type": "boolean"
+            },
+            "files": {
+              "default": [],
+              "items": {
+                "default": "k8s.alloy",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "key": {
+              "default": "null",
+              "type": ["string", "null"]
+            },
+            "name": {
+              "default": "null",
+              "type": ["string", "null"]
+            }
+          },
+          "required": ["create"],
+          "type": "object"
+        },
+        "enableReporting": {
+          "default": false,
+          "type": "boolean"
+        },
+        "envFrom": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "extraArgs": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "extraEnv": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "extraPorts": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "hostAliases": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "lifecycle": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "listenAddr": {
+          "default": "0.0.0.0",
+          "type": "string"
+        },
+        "listenPort": {
+          "default": 12345,
+          "type": "integer"
+        },
+        "listenScheme": {
+          "default": "HTTP",
+          "type": "string"
+        },
+        "mounts": {
+          "default": {},
+          "properties": {
+            "dockercontainers": {
+              "default": true,
+              "type": "boolean"
+            },
+            "extra": {
+              "default": [],
+              "items": {},
+              "type": "array"
+            },
+            "varlog": {
+              "default": true,
+              "type": "boolean"
+            }
+          },
+          "required": ["varlog", "dockercontainers", "extra"],
+          "type": "object"
+        },
+        "resources": {
+          "default": {},
+          "properties": {
+            "limits": {
+              "default": {},
+              "properties": {
+                "cpu": {
+                  "default": "2",
+                  "type": "string"
+                },
+                "memory": {
+                  "default": "2Gi",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "requests": {
+              "default": {},
+              "properties": {
+                "cpu": {
+                  "default": "0.5",
+                  "type": "string"
+                },
+                "memory": {
+                  "default": "1Gi",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "securityContext": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "stabilityLevel": {
+          "default": "generally-available",
+          "type": "string"
+        },
+        "storagePath": {
+          "default": "/tmp/alloy",
+          "type": "string"
+        },
+        "uiPathPrefix": {
+          "default": "/",
+          "type": "string"
+        }
+      },
+      "required": [
+        "listenAddr",
+        "envFrom",
+        "mounts",
+        "lifecycle",
+        "configMap",
+        "stabilityLevel",
+        "listenPort",
+        "listenScheme",
+        "extraArgs",
+        "clustering",
+        "storagePath",
+        "uiPathPrefix",
+        "enableReporting",
+        "extraEnv",
+        "securityContext",
+        "resources",
+        "extraPorts",
+        "hostAliases"
+      ],
+      "type": "object"
+    },
+    "cluster": {
+      "default": "deus-ex-machina-mgmt-prod",
+      "type": "string"
+    },
+    "configReloader": {
+      "default": {},
+      "properties": {
+        "customArgs": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "enabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "image": {
+          "default": {},
+          "properties": {
+            "digest": {
+              "default": "sha256:372cfc5b",
+              "type": "string"
+            },
+            "registry": {
+              "default": "registry1.dso.mil",
+              "type": "string"
+            },
+            "repository": {
+              "default": "ironbank/opensource/jimmidyson/configmap-reload",
+              "type": "string"
+            },
+            "tag": {
+              "default": "v0.13.1",
+              "type": "string"
+            }
+          },
+          "required": ["digest", "registry", "repository", "tag"],
+          "type": "object"
+        },
+        "resources": {
+          "default": {},
+          "properties": {
+            "requests": {
+              "default": {},
+              "properties": {
+                "cpu": {
+                  "default": "1m",
+                  "type": "string"
+                },
+                "memory": {
+                  "default": "5Mi",
+                  "type": "string"
+                }
+              },
+              "required": ["cpu", "memory"],
+              "type": "object"
+            }
+          },
+          "required": ["requests"],
+          "type": "object"
+        },
+        "securityContext": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        }
+      },
+      "required": [
+        "customArgs",
+        "resources",
+        "securityContext",
+        "enabled",
+        "image"
+      ],
+      "type": "object"
+    },
+    "controller": {
+      "default": {},
+      "properties": {
+        "affinity": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "autoscaling": {
+          "default": {},
+          "properties": {
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            },
+            "maxReplicas": {
+              "default": 5,
+              "type": "integer"
+            },
+            "minReplicas": {
+              "default": 1,
+              "type": "integer"
+            },
+            "scaleDown": {
+              "default": {},
+              "properties": {
+                "policies": {
+                  "default": [],
+                  "items": {},
+                  "type": "array"
+                },
+                "selectPolicy": {
+                  "default": "Max",
+                  "type": "string"
+                },
+                "stabilizationWindowSeconds": {
+                  "default": 300,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "policies",
+                "selectPolicy",
+                "stabilizationWindowSeconds"
+              ],
+              "type": "object"
+            },
+            "scaleUp": {
+              "default": {},
+              "properties": {
+                "policies": {
+                  "default": [],
+                  "items": {},
+                  "type": "array"
+                },
+                "selectPolicy": {
+                  "default": "Max",
+                  "type": "string"
+                },
+                "stabilizationWindowSeconds": {
+                  "default": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "policies",
+                "selectPolicy",
+                "stabilizationWindowSeconds"
+              ],
+              "type": "object"
+            },
+            "targetCPUUtilizationPercentage": {
+              "default": 0,
+              "type": "integer"
+            },
+            "targetMemoryUtilizationPercentage": {
+              "default": 80,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "maxReplicas",
+            "targetCPUUtilizationPercentage",
+            "targetMemoryUtilizationPercentage",
+            "scaleDown",
+            "scaleUp",
+            "enabled",
+            "minReplicas"
+          ],
+          "type": "object"
+        },
+        "dnsPolicy": {
+          "default": "ClusterFirst",
+          "type": "string"
+        },
+        "enableStatefulSetAutoDeletePVC": {
+          "default": false,
+          "type": "boolean"
+        },
+        "extraAnnotations": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "extraContainers": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "hostNetwork": {
+          "default": false,
+          "type": "boolean"
+        },
+        "hostPID": {
+          "default": false,
+          "type": "boolean"
+        },
+        "initContainers": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "nodeSelector": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "parallelRollout": {
+          "default": true,
+          "type": "boolean"
+        },
+        "persistence": {
+          "default": {},
+          "properties": {
+            "accessModes": {
+              "default": [],
+              "items": {
+                "default": "ReadWriteOnce",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            },
+            "resources": {
+              "default": {},
+              "properties": {
+                "requests": {
+                  "default": {},
+                  "properties": {
+                    "storage": {
+                      "default": "10Gi",
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "storageClass": {
+              "default": "ebs-sc",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "podAnnotations": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "podDisruptionBudget": {
+          "default": {},
+          "properties": {
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            },
+            "maxUnavailable": {
+              "default": "null",
+              "type": ["string", "number", "null"]
+            },
+            "minAvailable": {
+              "default": "null",
+              "type": ["string", "number", "null"]
+            }
+          },
+          "required": ["enabled"],
+          "type": "object"
+        },
+        "podLabels": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "priorityClassName": {
+          "default": "",
+          "type": "string"
+        },
+        "replicas": {
+          "default": 1,
+          "type": "integer"
+        },
+        "terminationGracePeriodSeconds": {
+          "default": "null",
+          "type": ["string", "number", "null"]
+        },
+        "tolerations": {
+          "default": [],
+          "items": {
+            "default": {},
+            "properties": {
+              "effect": {
+                "default": "NoExecute",
+                "type": "string"
+              },
+              "key": {
+                "default": "CriticalAddonsOnly",
+                "type": "string"
+              },
+              "operator": {
+                "default": "Equal",
+                "type": "string"
+              },
+              "value": {
+                "default": "true",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "topologySpreadConstraints": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "type": {
+          "default": "daemonset",
+          "type": "string"
+        },
+        "updateStrategy": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "volumeClaimTemplates": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "volumes": {
+          "default": {},
+          "properties": {
+            "extra": {
+              "default": [],
+              "items": {},
+              "type": "array"
+            }
+          },
+          "required": ["extra"],
+          "type": "object"
+        }
+      },
+      "required": [
+        "type",
+        "replicas",
+        "hostNetwork",
+        "updateStrategy",
+        "dnsPolicy"
+      ],
+      "type": "object"
+    },
+    "crds": {
+      "default": {},
+      "properties": {
+        "create": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "required": ["create"],
+      "type": "object"
+    },
+    "fullnameOverride": {
+      "default": "null",
+      "type": ["string", "null"]
+    },
+    "global": {
+      "default": {},
+      "properties": {
+        "extraLabels": {
+          "default": {},
+          "properties": {
+            "cluster": {
+              "default": "deus-ex-machina-mgmt-prod",
+              "type": "string"
+            },
+            "region": {
+              "default": "us-gov-west-1",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "image": {
+          "default": {},
+          "properties": {
+            "pullSecrets": {
+              "default": [],
+              "items": {},
+              "type": "array"
+            },
+            "registry": {
+              "default": "docker.io",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "loki": {
+          "default": {},
+          "properties": {
+            "orgID": {
+              "default": "1",
+              "type": "string"
+            },
+            "service": {
+              "default": {},
+              "properties": {
+                "port": {
+                  "default": "80",
+                  "type": "string"
+                },
+                "prefix": {
+                  "default": "loki/api/v1/push",
+                  "type": "string"
+                },
+                "protocol": {
+                  "default": "http",
+                  "type": "string"
+                },
+                "url": {
+                  "default": "loki-gateway.logging.svc.cluster.local",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "podSecurityContext": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "prometheus": {
+          "default": {},
+          "properties": {
+            "orgID": {
+              "default": "1",
+              "type": "string"
+            },
+            "service": {
+              "default": {},
+              "properties": {
+                "port": {
+                  "default": "80",
+                  "type": "string"
+                },
+                "prefix": {
+                  "default": "api/v1/push",
+                  "type": "string"
+                },
+                "protocol": {
+                  "default": "http",
+                  "type": "string"
+                },
+                "url": {
+                  "default": "mimir-nginx.monitoring.svc.cluster.local",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "required": ["image", "podSecurityContext"],
+      "type": "object"
+    },
+    "image": {
+      "default": {},
+      "properties": {
+        "pullPolicy": {
+          "default": "IfNotPresent",
+          "type": "string"
+        },
+        "pullSecrets": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "registry": {
+          "default": "docker.io",
+          "type": "string"
+        },
+        "repository": {
+          "default": "grafana/alloy",
+          "type": "string"
+        },
+        "tag": {
+          "default": "v1.5.0",
+          "type": "string"
+        }
+      },
+      "required": [
+        "registry",
+        "repository",
+        "tag",
+        "pullPolicy",
+        "pullSecrets"
+      ],
+      "type": "object"
+    },
+    "ingress": {
+      "default": {},
+      "properties": {
+        "annotations": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "extraPaths": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "faroPort": {
+          "default": 12347,
+          "type": "integer"
+        },
+        "hosts": {
+          "default": [],
+          "items": {
+            "default": "chart-example.local",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "labels": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "path": {
+          "default": "/",
+          "type": "string"
+        },
+        "pathType": {
+          "default": "Prefix",
+          "type": "string"
+        },
+        "tls": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        }
+      },
+      "required": [
+        "annotations",
+        "labels",
+        "path",
+        "enabled",
+        "faroPort",
+        "pathType",
+        "hosts",
+        "extraPaths",
+        "tls"
+      ],
+      "type": "object"
+    },
+    "nameOverride": {
+      "default": "null",
+      "type": ["string", "null"]
+    },
+    "rbac": {
+      "default": {},
+      "properties": {
+        "create": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "required": ["create"],
+      "type": "object"
+    },
+    "service": {
+      "default": {},
+      "properties": {
+        "annotations": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "clusterIP": {
+          "default": "",
+          "type": "string"
+        },
+        "enabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "internalTrafficPolicy": {
+          "default": "Cluster",
+          "type": "string"
+        },
+        "nodePort": {
+          "default": 31128,
+          "type": "integer"
+        },
+        "type": {
+          "default": "ClusterIP",
+          "type": "string"
+        }
+      },
+      "required": [
+        "clusterIP",
+        "internalTrafficPolicy",
+        "annotations",
+        "enabled",
+        "type",
+        "nodePort"
+      ],
+      "type": "object"
+    },
+    "serviceAccount": {
+      "default": {},
+      "properties": {
+        "additionalLabels": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "annotations": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "create": {
+          "default": true,
+          "type": "boolean"
+        },
+        "name": {
+          "default": "null",
+          "type": ["string", "null"]
+        }
+      },
+      "required": ["annotations", "create", "additionalLabels"],
+      "type": "object"
+    },
+    "serviceMonitor": {
+      "default": {},
+      "properties": {
+        "additionalLabels": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        },
+        "enabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "interval": {
+          "default": "",
+          "type": "string"
+        },
+        "metricRelabelings": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "relabelings": {
+          "default": [],
+          "items": {},
+          "type": "array"
+        },
+        "tlsConfig": {
+          "default": {},
+          "properties": {},
+          "type": "object"
+        }
+      },
+      "required": [
+        "enabled",
+        "additionalLabels",
+        "interval",
+        "metricRelabelings",
+        "tlsConfig",
+        "relabelings"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "crds",
+    "alloy",
+    "image",
+    "serviceAccount",
+    "configReloader",
+    "controller",
+    "rbac",
+    "service",
+    "serviceMonitor",
+    "ingress"
+  ],
+  "type": "object"
+}

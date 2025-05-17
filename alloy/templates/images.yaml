@@ -1,0 +1,24 @@
+{{- /*
+  This is a workaround to help 'helm dt wrap' discover image references.
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy-image-references
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    images: |
+      - name: {{ .Values.image.repository }}
+        repository: {{ .Values.image.registry }}
+        tag: {{ .Values.image.tag }}
+        {{- if .Values.image.digest }}
+        digest: {{ .Values.image.digest }}
+        {{- end }}
+      - name: jimmidyson/configmap-reload
+        repository: registry1.dso.mil/ironbank/opensource
+        tag: v0.15.0
+        {{- if .Values.configReloader.image.digest }}
+        digest: {{ .Values.configReloader.image.digest }}
+        {{- end }}
+data:
+  images.txt: list

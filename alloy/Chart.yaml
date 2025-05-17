@@ -1,0 +1,20 @@
+annotations:
+  category: Observability
+  images: |
+    - name: alloy
+      image: docker.io/grafana/alloy:v1.8.3
+    - name: configmap-reload
+      image: registry1.dso.mil/ironbank/opensource/jimmidyson/configmap-reload:v0.15.0
+
+apiVersion: v2
+appVersion: v1.5.0
+dependencies:
+  - condition: crds.create
+    name: crds
+    repository: ""
+    version: 0.0.0
+description: Grafana Alloy
+icon: https://raw.githubusercontent.com/grafana/alloy/main/docs/sources/assets/alloy_icon_orange.svg
+name: alloy
+type: application
+version: 0.10.0

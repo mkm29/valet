@@ -1,0 +1,16 @@
+{{- if .Values.alloy.configMap.files }}
+{{- range .Values.alloy.configMap.files }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "alloy.fullname" $ }}-config-{{ . | lower | replace "." "-" | replace "_" "-" }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "alloy.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: config
+data:
+  {{ . }}: |-
+{{ $.Files.Get (printf "files/%s" .) | indent 4 }}
+{{- end }}
+{{- end }}

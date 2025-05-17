@@ -1,0 +1,229 @@
+/*
+  Example: pods_relabel_and_transform.alloy
+
+  This module:
+   - Receives a list of pre-discovered "Targets" via `argument.targets`.
+   - Applies relabel rules (discovery.relabel) to those targets (like ingest toggles, adding or removing labels).
+   - Uses a logs block to process the relabeled pods.
+   - Chains multiple loki.process stages:
+     1) embed_pod
+     2) decolorize
+     3) trim
+     4) dedup_spaces
+
+  No discovery.kubernetes is defined, so it can be imported into any top-level config that does discovery externally.
+*/
+
+declare "pods_relabel_and_transform" {
+  // ------------------------------------------------------------------------
+  // ARGUMENTS
+  // ------------------------------------------------------------------------
+
+  // 1) The input list of discovered pods (or other targets)
+  argument "targets" {
+    comment = "A list of discovered pod targets from an external discovery block"
+  }
+
+  // 2) Where to send the final logs after transformation
+  argument "forward_to" {
+    comment = "A list(LogsReceiver) for final output, e.g. [loki.write.default.receiver]"
+  }
+
+  // 3) Optional annotation "namespace"
+  argument "annotation" {
+    optional = true
+    default  = "logs.grafana.com"
+    comment  = "Used to build label selectors for transformations, e.g. logs.grafana.com/decolorize"
+  }
+
+  // 4) (Hidden) transform the annotation into a label-safe string
+  argument "__sd_annotation" {
+    optional = true
+    default = string.replace(
+      string.replace(
+        string.replace(
+          coalesce(argument.annotation.value, "logs.grafana.com"),
+          ".",
+          "_"
+        ),
+        "/",
+        "_"
+      ),
+      "-",
+      "_"
+    )
+  }
+
+  // 5) Stage-specific toggles / regex values
+  argument "embed_pod_value" {
+    optional = true
+    default  = "(?i)true"
+    comment  = "Regex controlling if a pod name is embedded in the log lines"
+  }
+  argument "embed_pod_key" {
+    optional = true
+    default  = "__pod"
+    comment  = "The key appended to the line for the embedded pod name"
+  }
+
+  argument "decolorize_value" {
+    optional = true
+    default  = "(?i)true"
+    comment  = "Regex controlling if ANSI color codes are removed"
+  }
+
+  argument "trim_value" {
+    optional = true
+    default  = "(?i)true"
+    comment  = "Regex controlling if leading/trailing whitespace is trimmed"
+  }
+
+  argument "dedup_value" {
+    optional = true
+    default  = "(?i)true"
+    comment  = "Regex controlling if multiple consecutive spaces are collapsed"
+  }
+
+  // ------------------------------------------------------------------------
+  // RELABEL PHASE
+  // ------------------------------------------------------------------------
+  discovery.relabel "pods" {
+    // Input targets from outside
+    targets = argument.targets.value
+
+    // Example rule: keep pods only if logs.grafana.com/ingest is "true" or empty
+    rule {
+      action        = "keep"
+      source_labels = [
+        "__meta_kubernetes_pod_annotation_${__sd_annotation.value}_ingest",
+      ]
+      regex         = "^(true|)$"
+    }
+
+    // Some example relabel rules for standard labeling
+    rule {
+      action       = "replace"
+      source_labels = ["__meta_kubernetes_pod_node_name"]
+      target_label = "instance"
+    }
+
+    rule {
+      action       = "replace"
+      source_labels = ["__meta_kubernetes_namespace"]
+      target_label = "namespace"
+    }
+
+    rule {
+      action       = "replace"
+      source_labels = ["__meta_kubernetes_pod_name"]
+      target_label = "pod"
+    }
+
+    // add more as needed...
+  }
+
+  // ------------------------------------------------------------------------
+  // LOGS PHASE
+  // ------------------------------------------------------------------------
+  logs "pods" {
+    // Use the relabeled targets
+    targets = discovery.relabel.pods.output
+
+    // Start the chain of transforms with embed_pod
+    forward_to = [loki.process.embed_pod.receiver]
+  }
+
+  // ------------------------------------------------------------------------
+  // TRANSFORM STAGES
+  // ------------------------------------------------------------------------
+
+  // 1) embed_pod
+  loki.process "embed_pod" {
+    forward_to = [loki.process.decolorize.receiver]
+
+    stage.match {
+      selector = "{${__sd_annotation.value}_embed_pod=~\"${argument.embed_pod_value.value}\"}"
+
+      // If line is JSON
+      stage.match {
+        selector = "{${__sd_annotation.value}_embed_pod=~\"${argument.embed_pod_value.value}\"} |~ \"^\\s*{(.|\n)+}\\s*$\""
+        stage.replace {
+          expression = "\\}$"
+          replace    = ""
+        }
+        stage.template {
+          source   = "log_line"
+          template = "{{ .Entry }},\"${argument.embed_pod_key.value}\":\"{{ .pod }}\"}"
+        }
+      }
+
+      // If line is plain text
+      stage.match {
+        selector = "{${__sd_annotation.value}_embed_pod=~\"${argument.embed_pod_value.value}\"} !~ \"^\\s*{(.|\n)+}\\s*$\""
+        stage.template {
+          source   = "log_line"
+          template = "{{ .Entry }} ${argument.embed_pod_key.value}={{ .pod }}"
+        }
+      }
+
+      stage.output {
+        source = "log_line"
+      }
+    }
+  }
+
+  // 2) decolorize
+  loki.process "decolorize" {
+    forward_to = [loki.process.trim.receiver]
+
+    stage.match {
+      selector = "{${__sd_annotation.value}_decolorize=~\"${argument.decolorize_value.value}\"}"
+      stage.decolorize {}
+    }
+  }
+
+  // 3) trim
+  loki.process "trim" {
+    forward_to = [loki.process.dedup_spaces.receiver]
+
+    stage.match {
+      selector = "{${__sd_annotation.value}_trim=~\"${argument.trim_value.value}\"}"
+
+      stage.template {
+        source   = "trimmed_line"
+        template = "{{ Trim .Entry }}"
+      }
+
+      stage.output {
+        source = "trimmed_line"
+      }
+    }
+  }
+
+  // 4) dedup_spaces
+  loki.process "dedup_spaces" {
+    // Final stage => argument.forward_to
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{${__sd_annotation.value}_dedup_spaces=~\"${argument.dedup_value.value}\"}"
+      stage.replace {
+        expression = "(\\s{2,})"
+        replace    = " "
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------------
+  // EXPORTS
+  // ------------------------------------------------------------------------
+  // Export the final set of relabeled targets if you need them
+  export "output" {
+    value = discovery.relabel.pods.output
+  }
+
+  // Optionally export the logs block's receiver (if others want to forward logs in)
+  export "logs_receiver" {
+    value = logs.pods.receiver
+  }
+}

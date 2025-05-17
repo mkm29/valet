@@ -1,0 +1,73 @@
+prometheus.exporter.cadvisor "default" { }
+
+discovery.relabel "cadvisor" {
+   targets = prometheus.exporter.cadvisor.default.targets
+
+   // First rule: Whitelist specific metrics we want to keep
+   // This includes:
+   // - Basic availability (up)
+   // - CPU metrics (cfs periods, throttled periods, usage)
+   // - Filesystem metrics (reads/writes and bytes)
+   // - Memory metrics (cache, rss, swap, working set)
+   // - Network metrics (receive/transmit bytes/packets)
+   // - Machine memory total
+   rule {
+       source_labels = ["__name__"]
+       regex = "(up|container_(cpu_(cfs_(periods|throttled_periods)_total|usage_seconds_total)|fs_(reads|writes)(_bytes)?_total|memory_(cache|rss|swap|working_set_bytes)|network_(receive|transmit)_(bytes|packets)(_dropped|_total))|machine_memory_bytes)"
+       action = "keep"
+   }
+
+   // Second rule: Drop high cardinality metrics that could cause performance issues
+   // Specifically drops:
+   // - container_cpu_user_seconds_total: Per-container CPU user time
+   // - container_cpu_cfs_throttled_periods_total: Detailed CPU throttling data
+   // - container_memory_max_usage_bytes: Peak memory usage
+   // - container_memory_failcnt: Memory allocation failures
+   // - container_fs_reads_bytes_total: Detailed filesystem read metrics
+   rule {
+       source_labels = ["__name__"]
+       regex = "container_(cpu_user_seconds_total|cpu_cfs_throttled_periods_total|memory_max_usage_bytes|memory_failcnt|fs_reads_bytes_total)"
+       action = "drop"
+   }
+
+   // Third rule: Drop container labels to reduce cardinality
+   // Drops all labels that start with container_label_
+   // These are often dynamic and can create high cardinality issues
+   rule {
+       regex = "container_label_.*"
+       action = "labeldrop"
+   }
+
+   // Kubernetes metadata label management
+   // These rules maintain important Kubernetes context while keeping
+   // the labels standardized and clean
+
+   // Map Kubernetes pod name to 'pod' label
+   rule {
+       source_labels = ["__meta_kubernetes_pod_name"]
+       target_label = "pod"
+   }
+
+   // Map Kubernetes namespace to 'namespace' label
+   rule {
+       source_labels = ["__meta_kubernetes_pod_namespace"]
+       target_label = "namespace"
+   }
+
+   // Map Kubernetes container name to 'container' label
+   rule {
+       source_labels = ["__meta_kubernetes_pod_container_name"]
+       target_label = "container"
+   }
+}
+
+// Scrape configuration for cAdvisor
+// - Scrapes every 30 seconds
+// - Timeout after 10 seconds
+// - Forwards metrics to Mimir
+prometheus.scrape "cadvisor" {
+   targets = discovery.relabel.cadvisor.output
+   forward_to = [prometheus.remote_write.mimir.receiver]
+   scrape_interval = "30s"
+   scrape_timeout  = "10s"
+}

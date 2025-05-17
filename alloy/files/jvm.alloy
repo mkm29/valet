@@ -1,0 +1,215 @@
+/*
+Module: job-jvm-metrics
+Description: Scrapes JVM metrics from Spring Boot applications, similar to the kube-state-metrics module.
+             This module will discover and scrape JVM metrics from Spring Boot applications running in Kubernetes.
+             If you are also using annotation based scraping, you may want to explicitly disable these pods from being
+             scraped by setting the following annotation:
+             metrics.agent.grafana.com/scrape: "false"
+
+Note: Every argument except for "forward_to" is optional, and does have a defined default value.  However, the values for these
+      arguments are not defined using the default = " ... " argument syntax, but rather using the coalesce(argument.value, " ... ").
+      This is because if the argument passed in from another consuming module is set to null, the default = " ... " syntax will
+      does not override the value passed in, where coalesce() will return the first non-null value.
+*/
+declare "kubernetes" {
+  // arguments for kubernetes discovery
+  argument "namespaces" {
+    comment = "The namespaces to look for targets in (default: [] is all namespaces)"
+    optional = true
+  }
+
+  argument "field_selectors" {
+    comment = "The field selectors to use to find matching targets (default: [])"
+    optional = true
+  }
+
+  argument "label_selectors" {
+    comment = "The label selectors to use to find matching targets (default: [\"app.kubernetes.io/name=spring-boot\"])"
+    optional = true
+  }
+
+  argument "port_name" {
+    comment = "The name of the port to scrape metrics from (default: metrics)"
+    optional = true
+  }
+
+  argument "port" {
+    comment = "The port number to scrape metrics from, if port_name is not specified (default: 8080)"
+    optional = true
+  }
+
+  argument "metrics_path" {
+    comment = "The path to scrape metrics from (default: /actuator/prometheus)"
+    optional = true
+  }
+
+  // Spring Boot application discovery for all of the pods
+  discovery.kubernetes "jvm" {
+    role = "pod"
+
+    selectors {
+      role = "pod"
+      field = join(coalesce(argument.field_selectors.value, []), ",")
+      label = join(coalesce(argument.label_selectors.value, ["app.kubernetes.io/name=spring-boot"]), ",")
+    }
+
+    namespaces {
+      names = coalesce(argument.namespaces.value, [])
+    }
+  }
+
+  // Spring Boot application relabelings (pre-scrape)
+  discovery.relabel "jvm" {
+    targets = discovery.kubernetes.jvm.targets
+
+    // Try to match by port name first if provided
+    rule {
+      source_labels = ["__meta_kubernetes_pod_container_port_name"]
+      regex = coalesce(argument.port_name.value, "metrics")
+      action = "keep"
+      
+      // This is a conditional rule that only applies if port_name is provided
+      // If no ports match, we'll fall back to the port number below
+    }
+
+    // Set the metrics path
+    rule {
+      action = "replace"
+      source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_path"]
+      regex = "(.+)"
+      target_label = "__metrics_path__"
+    }
+
+    // Override with the default metrics path if none specified via annotation
+    rule {
+      action = "replace"
+      source_labels = ["__metrics_path__"]
+      regex = ""
+      replacement = coalesce(argument.metrics_path.value, "/actuator/prometheus")
+      target_label = "__metrics_path__"
+    }
+
+    // set a source label
+    rule {
+      action = "replace"
+      replacement = "jvm"
+      target_label = "source"
+    }
+
+    // Add pod name as instance label
+    rule {
+      action = "replace"
+      source_labels = ["__meta_kubernetes_pod_name"]
+      target_label = "instance"
+    }
+
+    // Add namespace as label
+    rule {
+      action = "replace"
+      source_labels = ["__meta_kubernetes_namespace"]
+      target_label = "namespace"
+    }
+
+    // Add app name from label if it exists
+    rule {
+      action = "replace"
+      source_labels = ["__meta_kubernetes_pod_label_app"]
+      regex = "(.+)"
+      target_label = "app"
+    }
+
+    // Add app name from label if it exists (alternative format)
+    rule {
+      action = "replace"
+      source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+      regex = "(.+)"
+      target_label = "app"
+    }
+  }
+
+  export "targets" {
+    value = discovery.relabel.jvm.output
+  }
+
+  export "output" {
+    value = discovery.relabel.jvm.output
+  }
+}
+
+declare "scrape" {
+  argument "targets" {
+    comment = "Must be a list() of targets"
+  }
+
+  argument "forward_to" {
+    comment = "Must be a list(MetricsReceiver) where collected metrics should be forwarded to"
+  }
+
+  argument "job_label" {
+    comment = "The job label to add for all JVM metrics (default: integrations/kubernetes/jvm-metrics)"
+    optional = true
+  }
+
+  argument "keep_metrics" {
+    comment = "A regular expression of metrics to keep (default: see below)"
+    optional = true
+  }
+
+  argument "drop_metrics" {
+    comment = "A regular expression of metrics to drop (default: see below)"
+    optional = true
+  }
+
+  argument "scrape_interval" {
+    comment = "How often to scrape metrics from the targets (default: 60s)"
+    optional = true
+  }
+
+  argument "scrape_timeout" {
+    comment = "How long before a scrape times out (default: 10s)"
+    optional = true
+  }
+
+  argument "max_cache_size" {
+    comment = "The maximum number of elements to hold in the relabeling cache (default: 100000). This should be at least 2x-5x your largest scrape target or samples appended rate."
+    optional = true
+  }
+
+  argument "clustering" {
+    comment = "Whether or not clustering should be enabled (default: false)"
+    optional = true
+  }
+
+  // JVM metrics scrape job
+  prometheus.scrape "jvm_metrics" {
+    job_name = coalesce(argument.job_label.value, "integrations/kubernetes/jvm-metrics")
+    forward_to = [prometheus.relabel.jvm_metrics.receiver]
+    targets = argument.targets.value
+    scrape_interval = coalesce(argument.scrape_interval.value, "60s")
+    scrape_timeout = coalesce(argument.scrape_timeout.value, "10s")
+
+    clustering {
+      enabled = coalesce(argument.clustering.value, false)
+    }
+  }
+
+  // JVM metrics relabelings (post-scrape)
+  prometheus.relabel "jvm_metrics" {
+    forward_to = argument.forward_to.value
+    max_cache_size = coalesce(argument.max_cache_size.value, 100000)
+
+    // drop metrics that match the drop_metrics regex
+    rule {
+      source_labels = ["__name__"]
+      regex = coalesce(argument.drop_metrics.value, "(tomcat_sessions_alive_max_seconds)")
+      action = "drop"
+    }
+
+    // keep only metrics that match the keep_metrics regex
+    rule {
+      source_labels = ["__name__"]
+      regex = coalesce(argument.keep_metrics.value, "(up|process_.+|jvm_.+|system_.+|hikaricp_.+|tomcat_.+|http_server_requests_.+|logback_events_.+)")
+      action = "keep"
+    }
+  }
+}
