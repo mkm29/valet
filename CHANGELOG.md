@@ -5,7 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [v0.1.1] - 2025-05-17
+
+### Changed
+
+- Enhanced `inferSchema` in `main.go` to better handle `null` defaults and accurately mark required fields
+- Refactored `Generate` function and CLI flag handling for consistent output formatting
 
 ## [0.1.0] - 2025-05-17
 
@@ -23,5 +28,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - GitHub Actions workflow (`.github/workflows/release.yml`) for automated releases with GoReleaser
   - Updated README with release badge and GoReleaser usage instructions
 
-[Unreleased]: https://github.com/mkm29/schemagen/compare/v0.1.0...HEAD
+[v0.1.1]: https://github.com/mkm29/schemagen/releases/tag/v0.1.1
 [0.1.0]: https://github.com/mkm29/schemagen/releases/tag/v0.1.0
