@@ -1,0 +1,5 @@
+# Added by goreleaser init:
+bin/
+.DS_Store
+.vscode
+coverage.out
