@@ -1,4 +1,5 @@
-# valet: JSON Schema Generator for Helm Charts
+# valet: Values YAML Schema Tool
+
 <!-- GitHub Actions release status -->
 [![Release](https://github.com/mkm29/valet/actions/workflows/release.yml/badge.svg)](https://github.com/mkm29/valet/actions/workflows/release.yml)
 [![Coverage](https://github.com/mkm29/valet/actions/workflows/coverage.yml/badge.svg)](https://github.com/mkm29/valet/actions/workflows/coverage.yml)
