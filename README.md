@@ -34,6 +34,8 @@ Generate a JSON Schema from a `values.yaml` in the given `<context-dir>`:
 Flags:
   -overrides string
         path (relative to the context directory) to an overrides YAML file (optional)
+  -version
+        print version information
 ```
 
 The tool writes a `values.schema.json` file in the `<context-dir>`.
@@ -50,6 +52,16 @@ Generate schema merging an override file:
 
 ```bash
   ./schemagen -overrides override.yaml charts/mychart
+```
+
+- Print version/build information:
+
+```bash
+  ./schemagen -version
+```
+Output format:
+```text
+github.com/mkm29/schemagen@v0.1.1 (commit 9153c14b9ffddeaccba93268a0851d5da0ae8cbf)
 ```
 
 ## Example

@@ -1,14 +1,15 @@
 package main
 
 import (
-	"encoding/json"
-	"flag"
-	"fmt"
-	"os"
-	"path/filepath"
-	"reflect"
+   "encoding/json"
+   "flag"
+   "fmt"
+   "os"
+   "path/filepath"
+   "reflect"
+   "debug/buildinfo"
 
-	"gopkg.in/yaml.v3"
+   "gopkg.in/yaml.v3"
 )
 
 // deepMerge merges b into a (recursively for nested maps) and returns a new map.
@@ -181,13 +182,43 @@ func Generate(ctx, overridesFlag string) (string, error) {
 }
 
 func main() {
-	overridesFlag := flag.String("overrides", "", "path (relative to context dir) to overrides YAML (optional)")
+   // version flag prints build information and exits
+   versionFlag := flag.Bool("version", false, "print version information")
+   overridesFlag := flag.String("overrides", "", "path (relative to context dir) to overrides YAML (optional)")
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(),
 			"Usage: %s [flags] <context-dir>\n\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+
+   // if version requested, print build info and exit
+   if *versionFlag {
+       exe, err := os.Executable()
+       if err != nil {
+           fmt.Fprintf(os.Stderr, "error retrieving executable path: %v\n", err)
+           os.Exit(1)
+       }
+       info, err := buildinfo.ReadFile(exe)
+       if err != nil {
+           fmt.Fprintf(os.Stderr, "error reading build info: %v\n", err)
+           os.Exit(1)
+       }
+       // print main module path, version, and VCS revision if available
+       revision := ""
+       for _, setting := range info.Settings {
+           if setting.Key == "vcs.revision" {
+               revision = setting.Value
+               break
+           }
+       }
+       if revision != "" {
+           fmt.Printf("%s@%s (commit %s)\n", info.Main.Path, info.Main.Version, revision)
+       } else {
+           fmt.Printf("%s@%s\n", info.Main.Path, info.Main.Version)
+       }
+       os.Exit(0)
+   }
 
 	args := flag.Args()
 	if len(args) != 1 {
