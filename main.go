@@ -47,9 +47,19 @@ func inferSchema(val, defaultVal any) map[string]any {
 			"default":    map[string]any{},
 		}
 		var required []string
-		for k := range defMap {
+		for k, vDefault := range defMap {
+			// Only add to required if key exists, default is NOT nil and NOT null (in Go or YAML)
 			if _, exists := v[k]; exists {
-				required = append(required, k)
+				isNil := vDefault == nil
+				isNullString := false
+				switch vDefault := vDefault.(type) {
+				case string:
+					// YAML nulls sometimes decode as string "null" or as empty string
+					isNullString = vDefault == "null"
+				}
+				if !isNil && !isNullString {
+					required = append(required, k)
+				}
 			}
 		}
 		if len(required) > 0 {
@@ -135,39 +145,39 @@ func loadYAML(path string) (map[string]any, error) {
 // optionally merging an overrides YAML file relative to ctx.
 // It writes the schema to values.schema.json and returns a status message.
 func Generate(ctx, overridesFlag string) (string, error) {
-   valuesPath := filepath.Join(ctx, "values.yaml")
-   var overridesPath string
-   if overridesFlag != "" {
-       overridesPath = filepath.Join(ctx, overridesFlag)
-   }
-   yaml1, err := loadYAML(valuesPath)
-   if err != nil {
-       return "", fmt.Errorf("error loading %s: %w", valuesPath, err)
-   }
-   var merged map[string]any
-   if overridesPath != "" {
-       yaml2, err := loadYAML(overridesPath)
-       if err != nil {
-           return "", fmt.Errorf("error loading %s: %w", overridesPath, err)
-       }
-       merged = deepMerge(yaml1, yaml2)
-   } else {
-       merged = yaml1
-   }
-   schema := inferSchema(merged, yaml1)
-   schema["$schema"] = "http://json-schema.org/schema#"
-   outPath := filepath.Join(ctx, "values.schema.json")
-   data, err := json.MarshalIndent(schema, "", "  ")
-   if err != nil {
-       return "", fmt.Errorf("error marshaling JSON: %w", err)
-   }
-   if err := os.WriteFile(outPath, data, 0644); err != nil {
-       return "", fmt.Errorf("error writing %s: %w", outPath, err)
-   }
-   if overridesPath != "" {
-       return fmt.Sprintf("Generated %s by merging %s into values.yaml", outPath, overridesFlag), nil
-   }
-   return fmt.Sprintf("Generated %s from values.yaml", outPath), nil
+	valuesPath := filepath.Join(ctx, "values.yaml")
+	var overridesPath string
+	if overridesFlag != "" {
+		overridesPath = filepath.Join(ctx, overridesFlag)
+	}
+	yaml1, err := loadYAML(valuesPath)
+	if err != nil {
+		return "", fmt.Errorf("error loading %s: %w", valuesPath, err)
+	}
+	var merged map[string]any
+	if overridesPath != "" {
+		yaml2, err := loadYAML(overridesPath)
+		if err != nil {
+			return "", fmt.Errorf("error loading %s: %w", overridesPath, err)
+		}
+		merged = deepMerge(yaml1, yaml2)
+	} else {
+		merged = yaml1
+	}
+	schema := inferSchema(merged, yaml1)
+	schema["$schema"] = "http://json-schema.org/schema#"
+	outPath := filepath.Join(ctx, "values.schema.json")
+	data, err := json.MarshalIndent(schema, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("error marshaling JSON: %w", err)
+	}
+	if err := os.WriteFile(outPath, data, 0644); err != nil {
+		return "", fmt.Errorf("error writing %s: %w", outPath, err)
+	}
+	if overridesPath != "" {
+		return fmt.Sprintf("Generated %s by merging %s into values.yaml", outPath, overridesFlag), nil
+	}
+	return fmt.Sprintf("Generated %s from values.yaml", outPath), nil
 }
 
 func main() {
@@ -177,19 +187,19 @@ func main() {
 			"Usage: %s [flags] <context-dir>\n\n", os.Args[0])
 		flag.PrintDefaults()
 	}
-   flag.Parse()
+	flag.Parse()
 
-   args := flag.Args()
-   if len(args) != 1 {
-       flag.Usage()
-       os.Exit(1)
-   }
-   ctx := args[0]
+	args := flag.Args()
+	if len(args) != 1 {
+		flag.Usage()
+		os.Exit(1)
+	}
+	ctx := args[0]
 
-   msg, err := Generate(ctx, *overridesFlag)
-   if err != nil {
-       fmt.Fprintf(os.Stderr, "%v\n", err)
-       os.Exit(1)
-   }
-   fmt.Println(msg)
+	msg, err := Generate(ctx, *overridesFlag)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println(msg)
 }
