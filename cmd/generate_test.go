@@ -1,13 +1,13 @@
 package cmd
 
 import (
-	"bytes"
-	"encoding/json"
-	"os"
-	"path/filepath"
-	"reflect"
-	"strings"
-	"testing"
+   "bytes"
+   "encoding/json"
+   "os"
+   "path/filepath"
+   "reflect"
+   "strings"
+   "testing"
 )
 
 func TestNewGenerateCmd(t *testing.T) {
@@ -21,6 +21,22 @@ func TestNewGenerateCmd(t *testing.T) {
 	if cmd.Args == nil {
 		t.Error("expected Args validator to be set")
 	}
+}
+
+// TestGenerateCmd_OverrideFileNotFound ensures error if overrides flag points to non-existent file
+func TestGenerateCmd_OverrideFileNotFound(t *testing.T) {
+   tmp := t.TempDir()
+   // Create values.yaml to pass values check
+   os.WriteFile(filepath.Join(tmp, "values.yaml"), []byte("x: 1\n"), 0644)
+   cmd := NewGenerateCmd()
+   cmd.SetOut(new(bytes.Buffer))
+   cmd.SetErr(new(bytes.Buffer))
+   // Set overrides flag to non-existent file
+   cmd.SetArgs([]string{"--overrides", "nofile.yaml", tmp})
+   err := cmd.Execute()
+   if err == nil || !strings.Contains(err.Error(), "overrides file nofile.yaml not found") {
+       t.Errorf("expected overrides-not-found error, got %v", err)
+   }
 }
 
 // TestGenerateCmd_NoValues tests generate fails when no values file present

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mkm29/valet/cmd"
+   "github.com/mkm29/schemagen/cmd"
 )
 
 // exitFunc allows testing exit behavior.

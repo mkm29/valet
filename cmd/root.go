@@ -1,22 +1,22 @@
 package cmd
 
 import (
-   "fmt"
-   "log"
-   "os"
-   "path/filepath"
+	"fmt"
+	"log"
 
-   "github.com/mkm29/valet/internal/config"
-   "github.com/spf13/cobra"
+	"github.com/mkm29/schemagen/internal/config"
+	"github.com/spf13/cobra"
 )
 
 var cfg *config.Config
 
 func NewRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "valet",
+		Use:   "schemagen",
 		Short: "JSON Schema Generator",
 		Long:  `A JSON Schema Generator for Helm charts and other YAML files.`,
+		// Do not print usage on error; just show the error message
+		SilenceUsage: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			if cfg == nil {
 				c, err := initializeConfig(cmd)
@@ -27,8 +27,8 @@ func NewRootCmd() *cobra.Command {
 			}
 			return nil
 		},
-       RunE: func(cmd *cobra.Command, args []string) error {
-			// Default action: generate schema
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Default action: delegate to Generate
 			ctx := cfg.Context
 			if len(args) > 0 && args[0] != "" {
 				ctx = args[0]
@@ -36,16 +36,7 @@ func NewRootCmd() *cobra.Command {
 			if ctx == "" {
 				return cmd.Help()
 			}
-           // Ensure a values file exists
-           pathYml := filepath.Join(ctx, "values.yaml")
-           if _, err := os.Stat(pathYml); err != nil {
-               // try .yml
-               pathYml2 := filepath.Join(ctx, "values.yml")
-               if _, err2 := os.Stat(pathYml2); err2 != nil {
-                   return fmt.Errorf("no values.yaml or values.yml found in %s", ctx)
-               }
-           }
-           msg, err := Generate(ctx, cfg.Overrides)
+			msg, err := Generate(ctx, cfg.Overrides)
 			if err != nil {
 				return err
 			}
@@ -71,19 +62,19 @@ func NewRootCmd() *cobra.Command {
 
 // initializeConfig loads configuration from file and applies CLI flags
 func initializeConfig(cmd *cobra.Command) (*config.Config, error) {
-   // Only read config file if flag explicitly set
-   var c *config.Config
-   var err error
-   if cmd.PersistentFlags().Changed("config-file") {
-       cfgFile, _ := cmd.PersistentFlags().GetString("config-file")
-       c, err = config.LoadConfig(cfgFile)
-       if err != nil {
-           return nil, err
-       }
-   } else {
-       // No config file: start with empty config
-       c = &config.Config{}
-   }
+	// Only read config file if flag explicitly set
+	var c *config.Config
+	var err error
+	if cmd.PersistentFlags().Changed("config-file") {
+		cfgFile, _ := cmd.PersistentFlags().GetString("config-file")
+		c, err = config.LoadConfig(cfgFile)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// No config file: start with empty config
+		c = &config.Config{}
+	}
 	// Override with CLI flags or defaults
 	// Context: default to value or override
 	// Context flag override

@@ -147,7 +147,15 @@ func loadYAML(path string) (map[string]any, error) {
 // optionally merging an overrides YAML file relative to ctx.
 // It writes the schema to values.schema.json and returns a status message.
 func Generate(ctx, overridesFlag string) (string, error) {
-	valuesPath := filepath.Join(ctx, "values.yaml")
+   // Locate values file (values.yaml or values.yml)
+   valuesPath := filepath.Join(ctx, "values.yaml")
+   if _, err := os.Stat(valuesPath); os.IsNotExist(err) {
+       alt := filepath.Join(ctx, "values.yml")
+       if _, err2 := os.Stat(alt); os.IsNotExist(err2) {
+           return "", fmt.Errorf("no values.yaml or values.yml found in %s", ctx)
+       }
+       valuesPath = alt
+   }
 	var overridesPath string
 	if overridesFlag != "" {
 		overridesPath = filepath.Join(ctx, overridesFlag)
@@ -183,26 +191,26 @@ func Generate(ctx, overridesFlag string) (string, error) {
 }
 
 func NewGenerateCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "generate <context-dir>",
-		Short: "Generate JSON Schema from values.yaml",
-		Long:  `Generate JSON Schema from values.yaml, optionally merging an overrides YAML file.`,
-		Args:  cobra.ExactArgs(1),
+   cmd := &cobra.Command{
+       Use:   "generate <context-dir>",
+       Short: "Generate JSON Schema from values.yaml",
+       Long:  `Generate JSON Schema from values.yaml, optionally merging an overrides YAML file.`,
+       Args:  cobra.ExactArgs(1),
+       // Do not print usage on error; just show the error message
+       SilenceUsage: true,
        RunE: func(cmd *cobra.Command, args []string) error {
            ctx := args[0]
-           // Ensure a values file exists
-           pathYml := filepath.Join(ctx, "values.yaml")
-           if _, err := os.Stat(pathYml); err != nil {
-               // try .yml
-               pathYml2 := filepath.Join(ctx, "values.yml")
-               if _, err2 := os.Stat(pathYml2); err2 != nil {
-                   return fmt.Errorf("no values.yaml or values.yml found in %s", ctx)
-               }
-           }
-			overridesFlag, err := cmd.Flags().GetString("overrides")
+           // Validate overrides file if provided
+           overridesFlag, err := cmd.Flags().GetString("overrides")
 			if err != nil {
 				return err
 			}
+           if overridesFlag != "" {
+               overridePath := filepath.Join(ctx, overridesFlag)
+               if _, err := os.Stat(overridePath); err != nil {
+                   return fmt.Errorf("overrides file %s not found in %s", overridesFlag, ctx)
+               }
+           }
 			msg, err := Generate(ctx, overridesFlag)
 			if err != nil {
 				return err

@@ -14,7 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Added `--config-file` flag to specify a configuration file path (default: `.schemagen.yaml`)
 - Added `--debug` flag for enabling verbose debug logging
 - Defaulted `--context` flag to the current directory (`.`)
-- Added validation to ensure a values.yaml or values.yml file exists in the context directory, with an error if missing
+- Added central existence checks in the `Generate` function for:
+  - presence of `values.yaml` or `values.yml` in the context directory
+  - existence of the specified overrides YAML file when using `--overrides`
 
 ### Changed
 
