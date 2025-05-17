@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Workflow runs on all `pull_request` events
 - Documentation: Added Makefile section in README.md with common development tasks
 - Documentation: Enhanced Testing & Coverage section in README.md to include `make test` and `make check-coverage`
+- Abstracted exit handling in `main.go` (using `exit` variable) to enable testing of CLI exit paths
+- Added CLI entrypoint tests (`TestMain_VersionFlag`, `TestMain_MissingArgs`) covering `-version` flag and missing args, boosting coverage above thresholds
 
 ### Changed
 
