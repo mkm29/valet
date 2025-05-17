@@ -1,10 +1,8 @@
 package config
 
 import (
-	"fmt"
-	"log"
-
-	"github.com/spf13/viper"
+   "fmt"
+   "github.com/spf13/viper"
 )
 
 // Config holds the configuration for the application
@@ -17,12 +15,13 @@ type Config struct {
 
 // LoadConfig reads configuration from file or environment variables.
 func LoadConfig(v *viper.Viper) (*Config, error) {
-	v.AddConfigPath(".schemagen")
-	v.SetConfigName("config")
-	if err := v.ReadInConfig(); err != nil {
-		log.Fatalf("Error reading config file, %s", err)
-		return nil, err
-	}
+   // Read config from file if present; file path set by caller via v.SetConfigFile()
+   if err := v.ReadInConfig(); err != nil {
+       // ignore missing config file; fail on other errors
+       if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+           return nil, err
+       }
+   }
 
 	v.AutomaticEnv()
 

@@ -1,7 +1,8 @@
-# schemagen: JSON Schema Generator for Helm Charts
+# valet: Values YAML Schema Tool
+
 <!-- GitHub Actions release status -->
-[![Release](https://github.com/mkm29/schemagen/actions/workflows/release.yml/badge.svg)](https://github.com/mkm29/schemagen/actions/workflows/release.yml)
-[![Coverage](https://github.com/mkm29/schemagen/actions/workflows/coverage.yml/badge.svg)](https://github.com/mkm29/schemagen/actions/workflows/coverage.yml)
+[![Release](https://github.com/mkm29/valet/actions/workflows/release.yml/badge.svg)](https://github.com/mkm29/valet/actions/workflows/release.yml)
+[![Coverage](https://github.com/mkm29/valet/actions/workflows/coverage.yml/badge.svg)](https://github.com/mkm29/valet/actions/workflows/coverage.yml)
 
 A command-line tool to generate a JSON Schema from a YAML `values.yaml` file, optionally merging an overrides file. Useful for Helm chart values and other YAML-based configurations.
 
@@ -14,67 +15,79 @@ A command-line tool to generate a JSON Schema from a YAML `values.yaml` file, op
 Clone the repository and build:
 
   ```bash
-  git clone https://github.com/mkm29/schemagen.git
-  cd schemagen
-  go build -o bin/schemagen main.go
+  git clone https://github.com/mkm29/valet.git
+  cd valet
+  go build -o bin/valet main.go
   ```
 
 Alternatively, install it directly (requires Go modules support):
 
 ```bash
-  go install github.com/mkm29/schemagen@latest
+  go install github.com/mkm29/valet@latest
 ```
+## Configuration
+
+The CLI supports a YAML configuration file (default: `.valet.yaml`) in the current directory. Use the `--config-file` flag to specify a custom path. The following keys are supported:
+
+- `context`: directory containing `values.yaml`
+- `overrides`: path to an overrides YAML file
+- `output`: name of the output schema file (default: `values.schema.json`)
+- `debug`: enable debug logging (boolean)
+
+Values can also be set via environment variables (`valet_CONTEXT`, `valet_OVERRIDES`, etc.) and are overridden by CLI flags.
 
 ## Makefile
 
 A Makefile is provided with common development tasks:
 
 - `make help`: Show available commands (default when running `make`).
-- `make build`: Build the CLI (outputs `bin/schemagen`).
+- `make build`: Build the CLI (outputs `bin/valet`).
 - `make test`: Run tests, generate `cover.out` and `cover.html`.
 - `make check-coverage`: Install and run `go-test-coverage` to enforce coverage thresholds defined in `.testcoverage.yml`.
-- `make clean`: Remove build artifacts (`bin/` and `schemagen`).
+- `make clean`: Remove build artifacts (`bin/` and `valet`).
 
 Make sure you have [GNU Make](https://www.gnu.org/software/make/) installed.
 
 ## Usage
 
-Generate a JSON Schema from a `values.yaml` in the given `<context-dir>`:
+Generate a JSON Schema from a `values.yaml` in the given `<context-dir>` using the `generate` command:
 
 ```console
-  schemagen [flags] <context-dir>
+  valet [global options] generate [flags] <context-dir>
 
-Flags:
-  -overrides string
-        path (relative to the context directory) to an overrides YAML file (optional)
-  -version
-        print version information
+Global options:
+  --config-file string   config file path (default: .valet.yaml)
+  -d, --debug            enable debug logging
+
+Generate flags:
+  -f, --overrides string   path (relative to context dir) to an overrides YAML file (optional)
+  -o, --output string      output file (default: values.schema.json)
 ```
 
-The tool writes a `values.schema.json` file in the `<context-dir>`.
+The tool writes a `values.schema.json` (or custom output file) in the `<context-dir>`.
 
 ### Examples
 
 Generate schema from a directory containing `values.yaml`:
 
 ```bash
-  ./bin/schemagen charts/mychart
+  ./bin/valet generate charts/mychart
 ```
 
 Generate schema merging an override file:
 
 ```bash
-  ./schemagen -overrides override.yaml charts/mychart
+  ./bin/valet generate --overrides override.yaml charts/mychart
 ```
 
-- Print version/build information:
+Print version/build information:
 
 ```bash
-  ./schemagen -version
+  ./bin/valet version
 ```
 Output format:
 ```text
-github.com/mkm29/schemagen@v0.1.1 (commit 9153c14b9ffddeaccba93268a0851d5da0ae8cbf)
+github.com/mkm29/valet@v0.1.1 (commit 9153c14b9ffddeaccba93268a0851d5da0ae8cbf)
 ```
 
 ## Example
@@ -91,10 +104,10 @@ env:
     value: debug
 ```
 
-Run:
+Run the `generate` command:
 
 ```bash
-./bin/schemagen .
+./bin/valet generate .
 ```
 
 Produces `values.schema.json` with contents:
@@ -147,10 +160,11 @@ Produces `values.schema.json` with contents:
 
 ## How it works
 
-1. Load `values.yaml` in the specified directory
-2. Merge an overrides YAML if `-overrides` is provided
-3. Recursively infer JSON Schema types and defaults
-4. Write `values.schema.json` in the same directory
+1. Load configuration from the file specified by `--config-file` (default: `.valet.yaml`), environment variables, and CLI flags
+2. Load `values.yaml` in the specified directory
+3. Merge an overrides YAML if the `--overrides` flag is provided
+4. Recursively infer JSON Schema types and defaults
+5. Write `values.schema.json` (or custom output file) in the same directory
  
 ## Release
 

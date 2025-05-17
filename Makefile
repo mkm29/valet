@@ -12,12 +12,12 @@ GOBIN ?= $$(go env GOPATH)/bin
 
 .PHONY: build
 build: ## Build the project
-	go build -o bin/schemagen main.go
+	go build -o bin/valet main.go
 
 .PHONY: clean
 clean: ## Clean the project
 	rm -rf bin
-	rm -rf schemagen
+	rm -rf valet
 
 .PHONY: test
 test: ## Run the tests

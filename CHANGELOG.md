@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [v0.2.0] - 2025-05-17
+
+### Added
+
+Integrated [Cobra](https://github.com/spf13/cobra) for CLI command framework
+Introduced `generate` and `version` subcommands for schema generation and build info
+Added `--config-file` flag to specify a configuration file path (default: `.valet.yaml`)
+Added `--debug` flag for enabling verbose debug logging
+
+### Changed
+
+Replaced the previous flag-based CLI interface in `main.go` with Cobra-based commands
+Enhanced configuration loading: root command now reads from config file and environment variables, with CLI flags taking precedence
+
 ## [v0.1.2] - 2025-05-17
 
 ### Added
@@ -29,7 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - `-version` flag to print embedded build information (module path, version, and commit hash)
 - Integration with Go `debug/buildinfo` package to read build metadata from the binary
-- CLI prints build info upon `schemagen -version`
+- CLI prints build info upon `valet -version`
 
 ### Changed
 
@@ -53,5 +67,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - GitHub Actions workflow (`.github/workflows/release.yml`) for automated releases with GoReleaser
   - Updated README with release badge and GoReleaser usage instructions
 
-[v0.1.1]: https://github.com/mkm29/schemagen/releases/tag/v0.1.1
-[0.1.0]: https://github.com/mkm29/schemagen/releases/tag/v0.1.0
+[v0.1.1]: https://github.com/mkm29/valet/releases/tag/v0.1.1
+[0.1.0]: https://github.com/mkm29/valet/releases/tag/v0.1.0
+[v0.2.0]: https://github.com/mkm29/valet/releases/tag/v0.2.0
