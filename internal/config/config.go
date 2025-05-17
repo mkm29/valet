@@ -2,7 +2,8 @@ package config
 
 import (
    "fmt"
-   "github.com/spf13/viper"
+   "os"
+   "gopkg.in/yaml.v2"
 )
 
 // Config holds the configuration for the application
@@ -13,22 +14,19 @@ type Config struct {
 	Output    string `mapstructure:"output"`
 }
 
-// LoadConfig reads configuration from file or environment variables.
-func LoadConfig(v *viper.Viper) (*Config, error) {
-   // Read config from file if present; file path set by caller via v.SetConfigFile()
-   if err := v.ReadInConfig(); err != nil {
-       // ignore missing config file; fail on other errors
-       if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-           return nil, err
+// LoadConfig reads configuration from a YAML file (if it exists).
+// If the file is not found, returns an empty Config without error.
+func LoadConfig(path string) (*Config, error) {
+   data, err := os.ReadFile(path)
+   if err != nil {
+       if os.IsNotExist(err) {
+           return &Config{}, nil
        }
+       return nil, err
    }
-
-	v.AutomaticEnv()
-
-	var config Config
-	if err := v.Unmarshal(&config); err != nil {
-		fmt.Println(err)
-		return nil, err
-	}
-	return &config, nil
+   var cfg Config
+   if err := yaml.Unmarshal(data, &cfg); err != nil {
+       return nil, fmt.Errorf("failed to parse config: %w", err)
+   }
+   return &cfg, nil
 }

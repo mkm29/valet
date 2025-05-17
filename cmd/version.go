@@ -9,7 +9,10 @@ import (
 )
 
 // version subcommand
-var exit = os.Exit
+var (
+   exit          = os.Exit
+   readBuildInfo = buildinfo.ReadFile
+)
 
 func showVersion() {
 	exe, err := os.Executable()
@@ -17,7 +20,7 @@ func showVersion() {
 		fmt.Fprintf(os.Stderr, "error retrieving executable path: %v\n", err)
 		exit(1)
 	}
-	info, err := buildinfo.ReadFile(exe)
+	info, err := readBuildInfo(exe)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error reading build info: %v\n", err)
 		exit(1)

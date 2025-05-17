@@ -1,5 +1,7 @@
 # Valet: Values YAML Schema Tool
 
+![Valet Logo](./images/logo.png)
+
 <!-- GitHub Actions release status -->
 [![Release](https://github.com/mkm29/valet/actions/workflows/release.yml/badge.svg)](https://github.com/mkm29/valet/actions/workflows/release.yml)
 [![Coverage](https://github.com/mkm29/valet/actions/workflows/coverage.yml/badge.svg)](https://github.com/mkm29/valet/actions/workflows/coverage.yml)

@@ -11,13 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Integrated [Cobra](https://github.com/spf13/cobra) for CLI command framework
 Introduced `generate` and `version` subcommands for schema generation and build info
-Added `--config-file` flag to specify a configuration file path (default: `.valet.yaml`)
+Added `--config-file` flag to specify a configuration file path (default: `.schemagen.yaml`)
 Added `--debug` flag for enabling verbose debug logging
+Defaulted `--context` flag to the current directory (`.`)
 
 ### Changed
 
 Replaced the previous flag-based CLI interface in `main.go` with Cobra-based commands
-Enhanced configuration loading: root command now reads from config file and environment variables, with CLI flags taking precedence
+Renamed root command from `valet` to `schemagen`
+Simplified configuration loading: removed Viper dependency and environment-variable support
+Now reads YAML config via `--config-file` and applies CLI flags (`--context`, `--overrides`, `--output`, `--debug`) as overrides
 
 ## [v0.1.2] - 2025-05-17
 

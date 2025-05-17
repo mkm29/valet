@@ -6,13 +6,9 @@ import (
 
 	"github.com/mkm29/valet/internal/config"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
-var (
-	v   *viper.Viper
-	cfg *config.Config
-)
+var cfg *config.Config
 
 func NewRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -48,36 +44,33 @@ func NewRootCmd() *cobra.Command {
 	}
 
 	// Support CLI flags for configuration (config file, context, overrides, output, debug)
-	cmd.PersistentFlags().String("config-file", ".valet.yaml", "config file path (default is .valet.yaml)")
+	// Config file path (default: .valet.yaml)
+	cmd.PersistentFlags().String("config-file", ".valet.yaml", "config file path (default: .valet.yaml)")
 	cmd.PersistentFlags().StringP("context", "c", ".", "context directory containing values.yaml (optional)")
 	cmd.PersistentFlags().StringP("overrides", "f", "", "overrides file (optional)")
 	cmd.PersistentFlags().StringP("output", "o", "values.schema.json", "output file (default: values.schema.json)")
 	cmd.PersistentFlags().BoolP("debug", "d", false, "enable debug logging")
 
-	// add subcommands for explicit operations
+	// add subcommands
 	cmd.AddCommand(NewVersionCmd())
 	cmd.AddCommand(NewGenerateCmd())
 
 	return cmd
 }
 
-// initializeConfig loads configuration from file/environment and applies CLI flags
+// initializeConfig loads configuration from file and applies CLI flags
 func initializeConfig(cmd *cobra.Command) (*config.Config, error) {
-	// Setup viper and read config file (if exists) via config-file flag
-	v = viper.New()
+	// Read config file
 	cfgFile, _ := cmd.Flags().GetString("config-file")
-	if cfgFile != "" {
-		v.SetConfigFile(cfgFile)
-	}
-	// Load config (reads file and environment variables)
-	c, err := config.LoadConfig(v)
+	c, err := config.LoadConfig(cfgFile)
 	if err != nil {
 		return nil, err
 	}
-	// Override config with CLI flags if set
-	if cmd.Flags().Changed("context") {
-		ctx, _ := cmd.Flags().GetString("context")
-		c.Context = ctx
+	// Override with CLI flags or defaults
+	// Context: default to value or override
+	cliCtx, _ := cmd.Flags().GetString("context")
+	if cmd.Flags().Changed("context") || c.Context == "" {
+		c.Context = cliCtx
 	}
 	if cmd.Flags().Changed("overrides") {
 		ov, _ := cmd.Flags().GetString("overrides")
