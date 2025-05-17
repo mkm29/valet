@@ -7,10 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [v0.1.1] - 2025-05-17
 
+### Added
+
+- `-version` flag to print embedded build information (module path, version, and commit hash)
+- Integration with Go `debug/buildinfo` package to read build metadata from the binary
+- CLI prints build info upon `schemagen -version`
+
 ### Changed
 
 - Enhanced `inferSchema` in `main.go` to better handle `null` defaults and accurately mark required fields
 - Refactored `Generate` function and CLI flag handling for consistent output formatting
+- Documentation updated to include the `-version` flag in usage examples
 
 ## [0.1.0] - 2025-05-17
 
