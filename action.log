@@ -1,9 +1,5 @@
 Current runner version: '2.324.0'
 Runner Image Provisioner
-  Hosted Compute Agent
-  Version: 20250508.323
-  Commit: 81b259f29879f73b4213d199e42d8c3465dae986
-  Build Date: 2025-05-08T19:40:08Z
 Operating System
   Ubuntu
   24.04.2
@@ -14,6 +10,7 @@ Runner Image
   Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20250511.1/images/ubuntu/Ubuntu2404-Readme.md
   Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20250511.1
 GITHUB_TOKEN Permissions
+  Actions: write
   Contents: read
   Metadata: read
   Packages: read
