@@ -24,9 +24,10 @@ Clone the repository and build:
 
 Alternatively, install it directly (requires Go modules support):
 
-```bash
+  ```bash
   go install github.com/mkm29/valet@latest
-```
+  ```
+
 ## Configuration
 
 The CLI supports a YAML configuration file (default: `.valet.yaml`) in the current directory. Use the `--config-file` flag to specify a custom path. The following keys are supported:
@@ -55,7 +56,7 @@ Make sure you have [GNU Make](https://www.gnu.org/software/make/) installed.
 Generate a JSON Schema from a `values.yaml` in the given `<context-dir>` using the `generate` command:
 
 ```console
-  valet [global options] generate [flags] <context-dir>
+valet [global options] generate [flags] <context-dir>
 
 Global options:
   --config-file string   config file path (default: .valet.yaml)
@@ -72,93 +73,101 @@ The tool writes a `values.schema.json` (or custom output file) in the `<context-
 
 Generate schema from a directory containing `values.yaml`:
 
-```bash
+  ```bash
   ./bin/valet generate charts/mychart
-```
+  ```
 
 Generate schema merging an override file:
 
-```bash
+  ```bash
   ./bin/valet generate --overrides override.yaml charts/mychart
-```
+  ```
 
 Print version/build information:
 
-```bash
+  ```bash
   ./bin/valet version
-```
+  ```
+
 Output format:
-```text
-github.com/mkm29/valet@v0.1.1 (commit 9153c14b9ffddeaccba93268a0851d5da0ae8cbf)
-```
+
+  ```text
+  github.com/mkm29/valet@v0.1.1 (commit 9153c14b9ffddeaccba93268a0851d5da0ae8cbf)
+  ```
 
 ## Example
 
 Given a `values.yaml`:
 
-```yaml
-replicaCount: 3
-image:
-  repository: nginx
-  tag: stable
-env:
-  - name: LOG_LEVEL
-    value: debug
-```
+  ```yaml
+  replicaCount: 3
+  image:
+    repository: nginx
+    tag: stable
+  env:
+    - name: LOG_LEVEL
+      value: debug
+  ```
 
 Run the `generate` command:
 
-```bash
-./bin/valet generate .
-```
+  ```bash
+  ./bin/valet generate .
+  ```
 
 Produces `values.schema.json` with contents:
 
-```json
-{
-  "$schema": "http://json-schema.org/schema#",
-  "type": "object",
-  "properties": {
-    "replicaCount": {
-      "type": "integer",
-      "default": 3
-    },
-    "image": {
-      "type": "object",
-      "properties": {
-        "repository": {
-          "type": "string",
-          "default": "nginx"
-        },
-        "tag": {
-          "type": "string",
-          "default": "stable"
-        }
+  ```bash
+  ./bin/valet generate .
+  ```
+
+Produces `values.schema.json` with contents:
+
+  ```json
+  {
+    "$schema": "http://json-schema.org/schema#",
+    "type": "object",
+    "properties": {
+      "replicaCount": {
+        "type": "integer",
+        "default": 3
       },
-      "default": {}
-    },
-    "env": {
-      "type": "array",
-      "items": {
+      "image": {
         "type": "object",
         "properties": {
-          "name": {
+          "repository": {
             "type": "string",
-            "default": "LOG_LEVEL"
+            "default": "nginx"
           },
-          "value": {
+          "tag": {
             "type": "string",
-            "default": "debug"
+            "default": "stable"
           }
         },
         "default": {}
       },
-      "default": []
-    }
-  },
-  "required": ["replicaCount", "image", "env"]
-}
-```
+      "env": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "default": "LOG_LEVEL"
+            },
+            "value": {
+              "type": "string",
+              "default": "debug"
+            }
+          },
+          "default": {}
+        },
+        "default": []
+      }
+    },
+    "required": ["replicaCount", "image", "env"]
+  }
+  ```
 
 ## How it works
 
@@ -185,10 +194,10 @@ This project uses [GoReleaser](https://goreleaser.com) to automate builds and re
 
 You can also use the Makefile to run tests and check coverage:
 
-```bash
-make test
-make check-coverage
-```
+  ```bash
+  make test
+  make check-coverage
+  ```
 
 To run the test suite:
 
@@ -198,16 +207,16 @@ To run the test suite:
 
 To generate a coverage report:
 
-```bash
+  ```bash
   go test -coverprofile=coverage.out ./...
   go tool cover -func=coverage.out
-```
+  ```
 
 To view an HTML coverage report:
 
-```bash
+  ```bash
   go tool cover -html=coverage.out
-```
+  ```
 
 ## Contributing
 

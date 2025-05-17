@@ -7,11 +7,12 @@ import (
 )
 
 // Config holds the configuration for the application
+// Config holds the configuration for the application
 type Config struct {
-	Debug     bool   `mapstructure:"debug"`
-	Context   string `mapstructure:"context"`
-	Overrides string `mapstructure:"overrides"`
-	Output    string `mapstructure:"output"`
+   Debug     bool   `yaml:"debug"`
+   Context   string `yaml:"context"`
+   Overrides string `yaml:"overrides"`
+   Output    string `yaml:"output"`
 }
 
 // LoadConfig reads configuration from a YAML file (if it exists).

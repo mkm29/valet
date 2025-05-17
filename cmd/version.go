@@ -10,12 +10,16 @@ import (
 
 // version subcommand
 var (
-   exit          = os.Exit
+   // exit is used to terminate the process; override for testing
+   exit = os.Exit
+   // exePath returns the path of the current executable; override for testing
+   exePath = os.Executable
+   // readBuildInfo reads embedded build info; override for testing
    readBuildInfo = buildinfo.ReadFile
 )
 
 func showVersion() {
-	exe, err := os.Executable()
+	exe, err := exePath()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error retrieving executable path: %v\n", err)
 		exit(1)

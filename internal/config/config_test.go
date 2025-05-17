@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mkm29/valet/internal/config"
@@ -56,5 +57,19 @@ func TestLoadConfig_FromFile(t *testing.T) {
 	}
 	if !cfg.Debug {
 		t.Error("expected Debug=true from config file")
+	}
+}
+
+// TestLoadConfig_BadYAML ensures parse errors are returned
+func TestLoadConfig_BadYAML(t *testing.T) {
+	tmp := t.TempDir()
+	cfgFile := filepath.Join(tmp, "bad.yaml")
+	// Write invalid YAML
+	if err := os.WriteFile(cfgFile, []byte("not: [bad_yaml"), 0644); err != nil {
+		t.Fatalf("failed to write bad YAML: %v", err)
+	}
+	_, err := config.LoadConfig(cfgFile)
+	if err == nil || !strings.Contains(err.Error(), "failed to parse config") {
+		t.Errorf("expected parse error, got %v", err)
 	}
 }

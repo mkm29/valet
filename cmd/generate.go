@@ -188,8 +188,17 @@ func NewGenerateCmd() *cobra.Command {
 		Short: "Generate JSON Schema from values.yaml",
 		Long:  `Generate JSON Schema from values.yaml, optionally merging an overrides YAML file.`,
 		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := args[0]
+       RunE: func(cmd *cobra.Command, args []string) error {
+           ctx := args[0]
+           // Ensure a values file exists
+           pathYml := filepath.Join(ctx, "values.yaml")
+           if _, err := os.Stat(pathYml); err != nil {
+               // try .yml
+               pathYml2 := filepath.Join(ctx, "values.yml")
+               if _, err2 := os.Stat(pathYml2); err2 != nil {
+                   return fmt.Errorf("no values.yaml or values.yml found in %s", ctx)
+               }
+           }
 			overridesFlag, err := cmd.Flags().GetString("overrides")
 			if err != nil {
 				return err
