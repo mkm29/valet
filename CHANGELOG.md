@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [v0.2.0] - 2025-05-17
+
+### Added
+
+- Integrated [Cobra](https://github.com/spf13/cobra) for CLI command framework
+- Introduced `generate` and `version` subcommands for schema generation and build info
+- Added `--config-file` flag to specify a configuration file path (default: `.schemagen.yaml`)
+- Added `--debug` flag for enabling verbose debug logging
+- Defaulted `--context` flag to the current directory (`.`)
+- Added central existence checks in the `Generate` function for:
+  - presence of `values.yaml` or `values.yml` in the context directory
+  - existence of the specified overrides YAML file when using `--overrides`
+
+### Changed
+
+- Replaced the previous flag-based CLI interface in `main.go` with Cobra-based commands
+- Renamed root command from `valet` to `schemagen`
+- Simplified configuration loading: removed Viper dependency and environment-variable support
+- Now reads YAML config via `--config-file` and applies CLI flags (`--context`, `--overrides`, `--output`, `--debug`) as overrides
+- Default behavior now uses CLI flags; config file is only loaded when the `--config-file` flag is explicitly set
+
 ## [v0.1.2] - 2025-05-17
 
 ### Added
@@ -53,5 +74,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - GitHub Actions workflow (`.github/workflows/release.yml`) for automated releases with GoReleaser
   - Updated README with release badge and GoReleaser usage instructions
 
-[v0.1.1]: https://github.com/mkm29/valet/releases/tag/v0.1.1
-[0.1.0]: https://github.com/mkm29/valet/releases/tag/v0.1.0
+
+[v0.2.0]: https://github.com/mkm29/valet/releases/tag/v0.2.0
+[v0.1.2]: https://github.com/mkm29/valet/releases/tag/v0.1.2

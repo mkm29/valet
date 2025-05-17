@@ -2,6 +2,6 @@
 bin/
 .DS_Store
 .vscode
-cover.out
+*.out
 dist/
 *.log
