@@ -11,6 +11,9 @@ import (
 
    "gopkg.in/yaml.v3"
 )
+// exit is used to exit the program, abstracted for testing.
+var exit = os.Exit
+//
 
 // deepMerge merges b into a (recursively for nested maps) and returns a new map.
 func deepMerge(a, b map[string]any) map[string]any {
@@ -197,12 +200,12 @@ func main() {
        exe, err := os.Executable()
        if err != nil {
            fmt.Fprintf(os.Stderr, "error retrieving executable path: %v\n", err)
-           os.Exit(1)
+           exit(1)
        }
        info, err := buildinfo.ReadFile(exe)
        if err != nil {
            fmt.Fprintf(os.Stderr, "error reading build info: %v\n", err)
-           os.Exit(1)
+           exit(1)
        }
        // print main module path, version, and VCS revision if available
        revision := ""
@@ -217,20 +220,20 @@ func main() {
        } else {
            fmt.Printf("%s@%s\n", info.Main.Path, info.Main.Version)
        }
-       os.Exit(0)
+       exit(0)
    }
 
 	args := flag.Args()
 	if len(args) != 1 {
 		flag.Usage()
-		os.Exit(1)
+       exit(1)
 	}
 	ctx := args[0]
 
 	msg, err := Generate(ctx, *overridesFlag)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
+       exit(1)
 	}
 	fmt.Println(msg)
 }
