@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/mkm29/schemagen/internal/config"
+	"github.com/mkm29/valet/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -12,7 +12,7 @@ var cfg *config.Config
 
 func NewRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "schemagen",
+		Use:   "valet",
 		Short: "JSON Schema Generator",
 		Long:  `A JSON Schema Generator for Helm charts and other YAML files.`,
 		// Do not print usage on error; just show the error message
