@@ -1,4 +1,4 @@
-module github.com/mkm29/schemagen
+module github.com/mkm29/valet
 
 go 1.20
 

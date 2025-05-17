@@ -74,7 +74,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - GitHub Actions workflow (`.github/workflows/release.yml`) for automated releases with GoReleaser
   - Updated README with release badge and GoReleaser usage instructions
 
+
 [v0.2.0]: https://github.com/mkm29/valet/releases/tag/v0.2.0
 [v0.1.2]: https://github.com/mkm29/valet/releases/tag/v0.1.2
-[v0.1.1]: https://github.com/mkm29/valet/releases/tag/v0.1.1
-[0.1.0]: https://github.com/mkm29/valet/releases/tag/v0.1.0
