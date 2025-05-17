@@ -3,7 +3,6 @@ permissions:
   contents: read
   actions: write
   packages: read
-  metadata: read
 on:
   push:
     branches:
