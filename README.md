@@ -1,6 +1,8 @@
-# Valet: Values YAML Schema Tool
+# Valet: Helm Values to JSON Schema
 
-![Valet Logo](./images/logo.png)
+<img src="./images/logo.png" width="350px"> 
+
+## Fast. Flexible. Clean.
 
 <!-- GitHub Actions release status -->
 [![Release](https://github.com/mkm29/valet/actions/workflows/release.yml/badge.svg)](https://github.com/mkm29/valet/actions/workflows/release.yml)
