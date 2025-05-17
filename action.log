@@ -1,0 +1,41 @@
+Downloading https://github.com/goreleaser/goreleaser/releases/download/v2.9.0/goreleaser_Linux_x86_64.tar.gz
+Extracting GoReleaser
+/usr/bin/tar xz --warning=no-unknown-keyword --overwrite -C /home/runner/work/_temp/f03edc88-020d-4020-8d45-9776a7b0f5f1 -f /home/runner/work/_temp/de7832ef-f415-4800-94d2-ac6683094ab2
+GoReleaser latest installed successfully
+v0.1.2 tag found for commit '8a2569b'
+/opt/hostedtoolcache/goreleaser-action/2.9.0/x64/goreleaser release --clean
+  • cleaning distribution directory
+  • loading environment variables
+    • using token from $GITHUB_TOKEN
+  • getting and validating git state
+    • couldn't find any tags before "v0.1.2"
+    • git state                                      commit=8a2569bb9113142cec47c7fd134f44f84633341c branch=HEAD current_tag=v0.1.2 previous_tag=<unknown> dirty=false
+    • running against a shallow clone - check your CI documentation at https://goreleaser.com/ci
+  • parsing tag
+  • setting defaults
+  • running before hooks
+    • running                                        hook=go mod tidy
+    • running                                        hook=go generate ./...
+  • ensuring distribution directory
+  • setting up metadata
+  • writing release metadata
+  • loading go mod information
+  • build prerequisites
+  • building binaries
+    • building                                       binary=dist/schemagen_darwin_arm64_v8.0/schemagen
+    • building                                       binary=dist/schemagen_linux_arm64_v8.0/schemagen
+    • building                                       binary=dist/schemagen_linux_amd64_v1/schemagen
+    • building                                       binary=dist/schemagen_darwin_amd64_v1/schemagen
+    • took: 19s
+  • generating changelog
+  • archives
+    • archiving                                      name=dist/schemagen_Darwin_x86_64.tar.gz
+    • archiving                                      name=dist/schemagen_Linux_arm64.tar.gz
+    • archiving                                      name=dist/schemagen_Linux_x86_64.tar.gz
+    • archiving                                      name=dist/schemagen_Darwin_arm64.tar.gz
+  • calculating checksums
+  • publishing
+    • scm releases
+      • releasing                                    tag=v0.1.2 repo=mkm29/schemagen
+  ⨯ release failed after 20s                 error=scm releases: failed to publish artifacts: could not release: POST https://api.github.com/repos/mkm29/schemagen/releases: 403 Resource not accessible by integration []
+Error: The process '/opt/hostedtoolcache/goreleaser-action/2.9.0/x64/goreleaser' failed with exit code 1
