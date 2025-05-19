@@ -1,6 +1,6 @@
 # Valet: Helm Values to JSON Schema
 
-<img src="./images/logo.png" width="350px"> 
+<img src="./images/logov2.png" width="350px"> 
 
 ## Fast. Flexible. Clean.
 
