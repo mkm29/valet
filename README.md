@@ -177,7 +177,20 @@ Produces `values.schema.json` with contents:
 2. Load `values.yaml` in the specified directory
 3. Merge an overrides YAML if the `--overrides` flag is provided
 4. Recursively infer JSON Schema types and defaults
-5. Write `values.schema.json` (or custom output file) in the same directory
+5. Post-process the schema to intelligently handle:
+   - Components with `enabled: false` field (skipping required fields)
+   - Empty default values (strings, arrays, maps)
+   - Nested component structures
+6. Write `values.schema.json` (or custom output file) in the same directory
+
+### Schema Generation Intelligence
+
+The tool includes several smart features:
+
+- **Component detection**: Automatically detects components with an `enabled` field and handles their required fields intelligently 
+- **Empty value handling**: Fields with empty default values aren't marked as required
+- **Type conversion**: Maps and complex types are properly represented in the schema
+- **Nested processing**: Recursively processes properties at all levels of nesting
  
 ## Release
 
@@ -219,6 +232,13 @@ To view an HTML coverage report:
   ```bash
   go tool cover -html=coverage.out
   ```
+
+The project maintains high test coverage standards:
+- 70% minimum coverage for each file
+- 80% minimum coverage for each package
+- 85% minimum total coverage
+
+These thresholds are enforced in CI via the coverage workflow.
 
 ## Contributing
 
