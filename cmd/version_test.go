@@ -52,7 +52,7 @@ func TestShowVersion_Success(t *testing.T) {
 	}()
 	<-done
 	// Verify output
-	expected := "mod/path@vX.Y.Z (commit abcdef)\n"
+	expected := "vX.Y.Z\n"
 	if output.String() != expected {
 		t.Errorf("expected %q, got %q", expected, output.String())
 	}
