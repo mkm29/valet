@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [v0.2.1] - 2025-05-21
+
+### Added
+
+- Enhanced test coverage to meet strict standards:
+  - 70% minimum file coverage
+  - 80% minimum package coverage
+  - 85% minimum total coverage
+- Added comprehensive tests for all core functions:
+  - Extensive testing for `inferSchema` covering all data types and edge cases
+  - Thorough tests for `isEmptyValue` with pointers, maps, and slices
+  - Added tests for `processProperties` with various component structures
+  - Complete test coverage for `convertToStringKeyMap` with nested structures
+
+### Fixed
+
+- Fixed schema generation for components with `enabled: false` flag
+- Improved handling of empty default values (strings, arrays, maps) in required fields
+- Added safety checks for nil config in debug output
+- Ensured proper schema representation for map types and nested objects
+
+### Changed
+
+- Updated debug output to use generic terms instead of hardcoded component names
+- Enhanced schema validation to handle empty YAML files 
+- Refactored code to improve maintainability and readability
+- Updated documentation with detailed information about schema generation capabilities
+
 ## [v0.2.0] - 2025-05-17
 
 ### Added
@@ -75,5 +103,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Updated README with release badge and GoReleaser usage instructions
 
 
+[v0.2.1]: https://github.com/mkm29/valet/releases/tag/v0.2.1
 [v0.2.0]: https://github.com/mkm29/valet/releases/tag/v0.2.0
 [v0.1.2]: https://github.com/mkm29/valet/releases/tag/v0.1.2
