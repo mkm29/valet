@@ -4,54 +4,109 @@
 
 ## Fast. Flexible. Clean.
 
-<!-- GitHub Actions release status -->
 [![Release](https://github.com/mkm29/valet/actions/workflows/release.yml/badge.svg)](https://github.com/mkm29/valet/actions/workflows/release.yml)
 [![Coverage](https://github.com/mkm29/valet/actions/workflows/coverage.yml/badge.svg)](https://github.com/mkm29/valet/actions/workflows/coverage.yml)
 
 A command-line tool to generate a JSON Schema from a YAML `values.yaml` file, optionally merging an overrides file. Useful for Helm chart values and other YAML-based configurations.
 
-## Requirements
+## Table of Contents
 
-- Go 1.23 or later
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Installation](#installation)
+- [Usage](#usage)
+  - [Configuration](#configuration)
+  - [Examples](#examples)
+- [How it works](#how-it-works)
+- [Development](#development)
+  - [Requirements](#requirements)
+  - [Makefile](#makefile)
+  - [Testing & Coverage](#testing--coverage)
+  - [Release](#release)
+- [Contributing](#contributing)
+
+## Overview
+
+Valet automatically generates JSON Schema definitions from Helm chart `values.yaml` files:
+
+- **Infers types** from YAML values
+- **Preserves defaults** from your values files
+- **Handles components** with enabled flags intelligently
+- **Supports overrides** via separate YAML files
+- **Speeds up development** by providing schema validation for Helm charts
+
+## Architecture
+
+```mermaid
+%%{
+  init: {
+    'theme': 'dark',
+    'themeVariables': {
+      'primaryColor': '#3e4451',
+      'primaryTextColor': '#abb2bf',
+      'primaryBorderColor': '#56b6c2',
+      'lineColor': '#61afef',
+      'secondaryColor': '#2c313c',
+      'tertiaryColor': '#3b4048'
+    }
+  }
+}%%
+graph TD
+    Main[main.go] --> |entry point| Cmd[cmd package]
+    Cmd --> RootCmd[cmd/root.go]
+    RootCmd --> GenerateCmd[cmd/generate.go]
+    RootCmd --> VersionCmd[cmd/version.go]
+    GenerateCmd --> Config[internal/config]
+    GenerateCmd --> |schema generation| SchemaGen[Schema Generator]
+    Config --> |config loading| YAML[YAML Config Files]
+    
+    subgraph "Core Functionality"
+        SchemaGen --> TypeInference[Type Inference]
+        SchemaGen --> ComponentHandling[Component Processing]
+        SchemaGen --> OverrideMerging[Override Merging]
+    end
+    
+    subgraph "CLI Interface"
+        Main
+        Cmd
+        RootCmd
+        GenerateCmd
+        VersionCmd
+    end
+    
+    subgraph "Configuration"
+        Config
+        YAML
+    end
+    
+    classDef core fill:#c678dd,stroke:#61afef,stroke-width:1px,color:#efefef;
+    classDef cli fill:#61afef,stroke:#56b6c2,stroke-width:1px,color:#efefef;
+    classDef config fill:#98c379,stroke:#56b6c2,stroke-width:1px,color:#282c34;
+    
+    class SchemaGen,TypeInference,ComponentHandling,OverrideMerging core;
+    class Main,Cmd,RootCmd,GenerateCmd,VersionCmd cli;
+    class Config,YAML config;
+```
 
 ## Installation
 
+### From Source
+
 Clone the repository and build:
 
-  ```bash
-  git clone https://github.com/mkm29/valet.git
-  cd valet
-  go build -o bin/valet main.go
-  ```
+```bash
+git clone https://github.com/mkm29/valet.git
+cd valet
+go build -o bin/valet main.go
+```
 
-Alternatively, install it directly (requires Go modules support):
+### Using Go Install
 
-  ```bash
-  go install github.com/mkm29/valet@latest
-  ```
+Install directly using Go modules:
 
-## Configuration
-
-The CLI supports a YAML configuration file (default: `.valet.yaml`) in the current directory. Use the `--config-file` flag to specify a custom path. The following keys are supported:
-
-- `context`: directory containing `values.yaml`
-- `overrides`: path to an overrides YAML file
-- `output`: name of the output schema file (default: `values.schema.json`)
-- `debug`: enable debug logging (boolean)
-
-Values can also be set via environment variables (`valet_CONTEXT`, `valet_OVERRIDES`, etc.) and are overridden by CLI flags.
-
-## Makefile
-
-A Makefile is provided with common development tasks:
-
-- `make help`: Show available commands (default when running `make`).
-- `make build`: Build the CLI (outputs `bin/valet`).
-- `make test`: Run tests, generate `cover.out` and `cover.html`.
-- `make check-coverage`: Install and run `go-test-coverage` to enforce coverage thresholds defined in `.testcoverage.yml`.
-- `make clean`: Remove build artifacts (`bin/` and `valet`).
-
-Make sure you have [GNU Make](https://www.gnu.org/software/make/) installed.
+```bash
+go install github.com/mkm29/valet@latest
+```
 
 ## Usage
 
@@ -71,105 +126,124 @@ Generate flags:
 
 The tool writes a `values.schema.json` (or custom output file) in the `<context-dir>`.
 
+### Configuration
+
+Valet supports configuration through multiple sources, with precedence in the following order:
+1. CLI flags (highest priority)
+2. Environment variables
+3. Configuration file
+4. Default values (lowest priority)
+
+#### Configuration File
+
+The CLI supports a YAML configuration file (default: `.valet.yaml`) in the current directory. Use the `--config-file` flag to specify a custom path. The following keys are supported:
+
+- `context`: directory containing `values.yaml`
+- `overrides`: path to an overrides YAML file
+- `output`: name of the output schema file (default: `values.schema.json`)
+- `debug`: enable debug logging (boolean)
+
+#### Environment Variables
+
+Configuration can also be set via environment variables:
+- `VALET_CONTEXT`
+- `VALET_OVERRIDES`
+- `VALET_OUTPUT`
+- `VALET_DEBUG`
+
 ### Examples
 
 Generate schema from a directory containing `values.yaml`:
 
-  ```bash
-  ./bin/valet generate charts/mychart
-  ```
+```bash
+./bin/valet generate charts/mychart
+```
 
 Generate schema merging an override file:
 
-  ```bash
-  ./bin/valet generate --overrides override.yaml charts/mychart
-  ```
+```bash
+./bin/valet generate --overrides override.yaml charts/mychart
+```
 
 Print version/build information:
 
-  ```bash
-  ./bin/valet version
-  ```
+```bash
+./bin/valet version
+```
 
 Output format:
 
-  ```text
-  github.com/mkm29/valet@v0.1.1 (commit 9153c14b9ffddeaccba93268a0851d5da0ae8cbf)
-  ```
+```text
+github.com/mkm29/valet@v0.1.1 (commit 9153c14b9ffddeaccba93268a0851d5da0ae8cbf)
+```
 
-## Example
+#### Example Input/Output
 
 Given a `values.yaml`:
 
-  ```yaml
-  replicaCount: 3
-  image:
-    repository: nginx
-    tag: stable
-  env:
-    - name: LOG_LEVEL
-      value: debug
-  ```
+```yaml
+replicaCount: 3
+image:
+  repository: nginx
+  tag: stable
+env:
+  - name: LOG_LEVEL
+    value: debug
+```
 
-Run the `generate` command:
+Running the `generate` command:
 
-  ```bash
-  ./bin/valet generate .
-  ```
-
-Produces `values.schema.json` with contents:
-
-  ```bash
-  ./bin/valet generate .
-  ```
+```bash
+./bin/valet generate .
+```
 
 Produces `values.schema.json` with contents:
 
-  ```json
-  {
-    "$schema": "http://json-schema.org/schema#",
-    "type": "object",
-    "properties": {
-      "replicaCount": {
-        "type": "integer",
-        "default": 3
+```json
+{
+  "$schema": "http://json-schema.org/schema#",
+  "type": "object",
+  "properties": {
+    "replicaCount": {
+      "type": "integer",
+      "default": 3
+    },
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "default": "nginx"
+        },
+        "tag": {
+          "type": "string",
+          "default": "stable"
+        }
       },
-      "image": {
+      "default": {}
+    },
+    "env": {
+      "type": "array",
+      "items": {
         "type": "object",
         "properties": {
-          "repository": {
+          "name": {
             "type": "string",
-            "default": "nginx"
+            "default": "LOG_LEVEL"
           },
-          "tag": {
+          "value": {
             "type": "string",
-            "default": "stable"
+            "default": "debug"
           }
         },
         "default": {}
       },
-      "env": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "name": {
-              "type": "string",
-              "default": "LOG_LEVEL"
-            },
-            "value": {
-              "type": "string",
-              "default": "debug"
-            }
-          },
-          "default": {}
-        },
-        "default": []
-      }
-    },
-    "required": ["replicaCount", "image", "env"]
-  }
-  ```
+      "default": []
+    }
+  },
+  "required": ["replicaCount", "image", "env"]
+}
+```
 
 ## How it works
 
@@ -191,8 +265,61 @@ The tool includes several smart features:
 - **Empty value handling**: Fields with empty default values aren't marked as required
 - **Type conversion**: Maps and complex types are properly represented in the schema
 - **Nested processing**: Recursively processes properties at all levels of nesting
- 
-## Release
+
+## Development
+
+### Requirements
+
+- Go 1.23 or later
+
+### Makefile
+
+A Makefile is provided with common development tasks:
+
+- `make help`: Show available commands (default when running `make`).
+- `make build`: Build the CLI (outputs `bin/valet`).
+- `make test`: Run tests, generate `cover.out` and `cover.html`.
+- `make check-coverage`: Install and run `go-test-coverage` to enforce coverage thresholds defined in `.testcoverage.yml`.
+- `make clean`: Remove build artifacts (`bin/` and `valet`).
+
+Make sure you have [GNU Make](https://www.gnu.org/software/make/) installed.
+
+### Testing & Coverage
+
+You can use the Makefile to run tests and check coverage:
+
+```bash
+make test
+make check-coverage
+```
+
+To run the test suite:
+
+```bash
+go test ./...
+```
+
+To generate a coverage report:
+
+```bash
+go test -coverprofile=coverage.out ./...
+go tool cover -func=coverage.out
+```
+
+To view an HTML coverage report:
+
+```bash
+go tool cover -html=coverage.out
+```
+
+The project maintains high test coverage standards:
+- 70% minimum coverage for each file
+- 80% minimum coverage for each package
+- 85% minimum total coverage
+
+These thresholds are enforced in CI via the coverage workflow.
+
+### Release
 
 This project uses [GoReleaser](https://goreleaser.com) to automate builds and releases. Binaries for Linux and macOS (amd64 and arm64) are built when tags (e.g., `v0.1.0`) are pushed.
 
@@ -204,41 +331,6 @@ This project uses [GoReleaser](https://goreleaser.com) to automate builds and re
   go install github.com/goreleaser/goreleaser@latest
   goreleaser release --rm-dist
   ```
-
-## Testing & Coverage
-
-You can also use the Makefile to run tests and check coverage:
-
-  ```bash
-  make test
-  make check-coverage
-  ```
-
-To run the test suite:
-
-```bash
-  go test ./...
-```
-
-To generate a coverage report:
-
-  ```bash
-  go test -coverprofile=coverage.out ./...
-  go tool cover -func=coverage.out
-  ```
-
-To view an HTML coverage report:
-
-  ```bash
-  go tool cover -html=coverage.out
-  ```
-
-The project maintains high test coverage standards:
-- 70% minimum coverage for each file
-- 80% minimum coverage for each package
-- 85% minimum total coverage
-
-These thresholds are enforced in CI via the coverage workflow.
 
 ## Contributing
 
