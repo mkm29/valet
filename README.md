@@ -38,6 +38,19 @@ Valet automatically generates JSON Schema definitions from Helm chart `values.ya
 ## Architecture
 
 ```mermaid
+%%{
+  init: {
+    'theme': 'dark',
+    'themeVariables': {
+      'primaryColor': '#3e4451',
+      'primaryTextColor': '#abb2bf',
+      'primaryBorderColor': '#56b6c2',
+      'lineColor': '#61afef',
+      'secondaryColor': '#2c313c',
+      'tertiaryColor': '#3b4048'
+    }
+  }
+}%%
 graph TD
     Main[main.go] --> |entry point| Cmd[cmd package]
     Cmd --> RootCmd[cmd/root.go]
@@ -66,9 +79,9 @@ graph TD
         YAML
     end
     
-    classDef core fill:#f9f,stroke:#333,stroke-width:2px;
-    classDef cli fill:#bbf,stroke:#333,stroke-width:1px;
-    classDef config fill:#bfb,stroke:#333,stroke-width:1px;
+    classDef core fill:#c678dd,stroke:#61afef,stroke-width:1px,color:#efefef;
+    classDef cli fill:#61afef,stroke:#56b6c2,stroke-width:1px,color:#efefef;
+    classDef config fill:#98c379,stroke:#56b6c2,stroke-width:1px,color:#282c34;
     
     class SchemaGen,TypeInference,ComponentHandling,OverrideMerging core;
     class Main,Cmd,RootCmd,GenerateCmd,VersionCmd cli;
