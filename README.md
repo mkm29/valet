@@ -290,7 +290,7 @@ Make sure you have [GNU Make](https://www.gnu.org/software/make/) installed.
 
 ### Testing & Coverage
 
-The project uses [Testify](https://github.com/stretchr/testify) as its testing framework, with all tests organized in the `tests` directory using the `ValetTestSuite` test suite.
+The project uses [Testify](https://github.com/stretchr/testify) as its testing framework, with a comprehensive test suite that includes unit tests, integration tests, and benchmarks.
 
 You can use the Makefile to run tests and check coverage:
 
@@ -326,17 +326,29 @@ go tool cover -html=coverage.out
 
 #### Test Organization
 
-All tests are located in the `tests` directory and use the `ValetTestSuite` struct which provides:
-- Setup and teardown functionality
+The test suite is organized across multiple locations:
+
+**Public API Tests** (`tests/` directory):
+- Uses the `ValetTestSuite` struct based on `testify/suite`
+- Tests for commands, configuration, and public APIs
+- Integration tests for end-to-end workflows
 - Helper methods like `CopyDir` for test fixtures
-- Consistent assertion methods via Testify
+
+**Internal Tests** (package-level `*_internal_test.go` files):
+- `cmd/generate_internal_test.go` - Tests for unexported functions like `inferSchema`, `isEmptyValue`, and `processProperties`
+- `cmd/version_internal_test.go` - Tests for the `showVersion` function with mocked dependencies
+- `cmd/benchmark_test.go` - Performance benchmarks for critical functions
+
+**Integration Tests**:
+- `tests/integration_test.go` - End-to-end tests for YAML/JSON to schema conversion
+- `main_test.go` - Tests for the main CLI execution using subprocess
 
 The project maintains high test coverage standards:
 - 70% minimum coverage for each file
 - 80% minimum coverage for each package
 - 85% minimum total coverage
 
-These thresholds are enforced in CI via the coverage workflow.
+These thresholds are enforced in CI via the coverage workflow. Current coverage is approximately 62.7% and continues to improve.
 
 ### Release
 
