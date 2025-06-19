@@ -2,7 +2,7 @@
 
 ![Valet Logo](./images/logov2.png)
 
-## Fast. Flexible. Clean.
+## Fast. Flexible. Clean. Beautiful.
 
 [![Release](https://github.com/mkm29/valet/actions/workflows/release.yml/badge.svg)](https://github.com/mkm29/valet/actions/workflows/release.yml)
 [![Coverage](https://github.com/mkm29/valet/actions/workflows/coverage.yml/badge.svg)](https://github.com/mkm29/valet/actions/workflows/coverage.yml)
@@ -34,6 +34,7 @@ Valet automatically generates JSON Schema definitions from Helm chart `values.ya
 - **Handles components** with enabled flags intelligently
 - **Supports overrides** via separate YAML files
 - **Speeds up development** by providing schema validation for Helm charts
+- **Beautiful CLI experience** powered by [Charm](https://charm.sh/)'s [Fang](https://github.com/charmbracelet/fang) library
 
 ## Architecture
 
@@ -67,7 +68,8 @@ graph TD
     end
     
     subgraph "CLI Interface"
-        Main
+        Main --> |wrapped by| Fang[Fang CLI Framework]
+        Fang --> Cmd
         Cmd
         RootCmd
         GenerateCmd
@@ -82,10 +84,12 @@ graph TD
     classDef core fill:#c678dd,stroke:#61afef,stroke-width:1px,color:#efefef;
     classDef cli fill:#61afef,stroke:#56b6c2,stroke-width:1px,color:#efefef;
     classDef config fill:#98c379,stroke:#56b6c2,stroke-width:1px,color:#282c34;
+    classDef fang fill:#e06c75,stroke:#56b6c2,stroke-width:2px,color:#efefef;
     
     class SchemaGen,TypeInference,ComponentHandling,OverrideMerging core;
     class Main,Cmd,RootCmd,GenerateCmd,VersionCmd cli;
     class Config,YAML config;
+    class Fang fang;
 ```
 
 ## Installation
