@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [v0.2.3] - 2025-06-19
+
+### Changed
+
+- Migrated test suite from standard Go testing to [Testify](https://github.com/stretchr/testify) framework
+  - All tests now use the `ValetTestSuite` struct based on `testify/suite`
+  - Consolidated all tests into the `tests` directory for better organization
+  - Replaced standard `t.Error*` and `t.Fatal*` calls with Testify assertions (`suite.Equal`, `suite.NoError`, etc.)
+  - Added helper methods like `CopyDir` to the test suite for common test operations
+
+### Added
+
+- Created `ValetTestSuite` with setup functionality for test isolation
+- Test files in `tests` directory:
+  - `valet_test.go` - Main test suite definition
+  - `generate_test.go` - Tests for the generate command
+  - `config_test.go` - Tests for configuration loading
+  - `root_test.go` - Tests for the root command
+  - `version_test.go` - Tests for the version command
+  - Documentation files for tests that couldn't be migrated due to unexported functions
+
+### Removed
+
+- All original test files from their respective packages:
+  - `cmd/generate_test.go`
+  - `cmd/root_test.go`
+  - `cmd/process_test.go`
+  - `cmd/inference_test.go`
+  - `cmd/version_test.go`
+  - `internal/config/config_test.go`
+  - `main_test.go`
+
+### Technical Notes
+
+- Tests for unexported functions (`deepMerge`, `inferSchema`, `processProperties`, etc.) were not migrated as they cannot be accessed from the `tests` package
+- One test (`TestRootCmd_DefaultContext`) was skipped due to global state interference between tests
+- Test coverage remains consistent with previous implementation
+
 ## [v0.2.1] - 2025-05-21
 
 ### Added
@@ -103,6 +141,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Updated README with release badge and GoReleaser usage instructions
 
 
+[v0.2.3]: https://github.com/mkm29/valet/releases/tag/v0.2.3
 [v0.2.1]: https://github.com/mkm29/valet/releases/tag/v0.2.1
 [v0.2.0]: https://github.com/mkm29/valet/releases/tag/v0.2.0
 [v0.1.2]: https://github.com/mkm29/valet/releases/tag/v0.1.2

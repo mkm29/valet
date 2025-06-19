@@ -286,6 +286,8 @@ Make sure you have [GNU Make](https://www.gnu.org/software/make/) installed.
 
 ### Testing & Coverage
 
+The project uses [Testify](https://github.com/stretchr/testify) as its testing framework, with all tests organized in the `tests` directory using the `ValetTestSuite` test suite.
+
 You can use the Makefile to run tests and check coverage:
 
 ```bash
@@ -297,6 +299,12 @@ To run the test suite:
 
 ```bash
 go test ./...
+```
+
+To run tests with verbose output:
+
+```bash
+go test ./tests/... -v
 ```
 
 To generate a coverage report:
@@ -311,6 +319,13 @@ To view an HTML coverage report:
 ```bash
 go tool cover -html=coverage.out
 ```
+
+#### Test Organization
+
+All tests are located in the `tests` directory and use the `ValetTestSuite` struct which provides:
+- Setup and teardown functionality
+- Helper methods like `CopyDir` for test fixtures
+- Consistent assertion methods via Testify
 
 The project maintains high test coverage standards:
 - 70% minimum coverage for each file

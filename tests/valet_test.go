@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -51,34 +50,8 @@ func (ts *ValetTestSuite) CopyDir(src, dst string) error {
 // SetupSuite is called before the suite starts running
 func (suite *ValetTestSuite) SetupSuite() {
 	suite.T().Log("Setting up Valet test suite")
-
-	var cwd, _ = os.Getwd()
-
-	// 1. Create a test directory
-	tempDir := suite.T().TempDir()
-	suite.T().Logf("Using temporary directory: %s", tempDir)
-
-	configContent := fmt.Sprintf(`context: %s
-overrides: %s
-output: %s
-debug: %t
-`, tempDir, filepath.Join(tempDir, "overrides.yaml"), filepath.Join(tempDir, "values.schema.json"), true)
-
-	// 2. Create a .valet.yaml file in the test directory
-	valetConfig := []byte(configContent)
-	if err := os.WriteFile(filepath.Join(tempDir, ".valet.yaml"), valetConfig, 0644); err != nil {
-		suite.T().Fatalf("Failed to create .valet.yaml file: %v", err)
-	}
-	// 3. Create a sample Helm chart to use for testing
-	chartDir := filepath.Join(tempDir, "mychart")
-	if err := os.MkdirAll(chartDir, 0755); err != nil {
-		suite.T().Fatalf("Failed to create chart directory: %v", err)
-	}
-	// 4. Copy mychart from ./testdata to the test directory
-	if err := suite.CopyDir(filepath.Join(cwd, "..", "testdata", "mychart"), chartDir); err != nil {
-		suite.T().Fatalf("Failed to copy mychart: %v", err)
-	}
-
+	// Note: We don't create a global config file or test directory here
+	// to avoid interfering with individual tests that need specific setups.
 }
 
 func TestValet(t *testing.T) {
