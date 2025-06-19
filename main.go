@@ -8,9 +8,6 @@ import (
 	"github.com/mkm29/valet/cmd"
 )
 
-// exitFunc allows testing exit behavior.
-var exitFunc = os.Exit
-
 func main() {
 	// Create root command
 	cmd := cmd.NewRootCmd()
