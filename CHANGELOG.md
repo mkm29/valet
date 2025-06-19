@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [v0.2.2] - 2025-06-19
+
+### Added
+
+- Integrated [Fang](https://github.com/charmbracelet/fang) CLI framework for enhanced terminal UI experience
+- Beautiful command output with improved colors, styling, and formatting
+- Better error handling and display with styled error messages
+- Enhanced help text formatting and command descriptions
+
+### Changed
+
+- Wrapped Cobra CLI execution with Fang for improved appearance
+- Updated architecture diagram to show Fang integration in the CLI interface layer
+
 ## [v0.2.1] - 2025-05-21
 
 ### Added
@@ -103,6 +117,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Updated README with release badge and GoReleaser usage instructions
 
 
+[v0.2.2]: https://github.com/mkm29/valet/releases/tag/v0.2.2
 [v0.2.1]: https://github.com/mkm29/valet/releases/tag/v0.2.1
 [v0.2.0]: https://github.com/mkm29/valet/releases/tag/v0.2.0
 [v0.1.2]: https://github.com/mkm29/valet/releases/tag/v0.1.2
