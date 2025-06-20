@@ -21,12 +21,12 @@ processors:
       - key: deployment.environment
         value: local
         action: upsert
-  
+
   # Batch telemetry data to reduce API calls
   batch:
     timeout: 1s
     send_batch_size: 1024
-  
+
   # Memory limiter prevents OOM situations
   memory_limiter:
     check_interval: 1s
@@ -72,7 +72,7 @@ extensions:
 service:
   # Enable extensions
   extensions: [health_check, pprof, zpages]
-  
+
   # Enable telemetry for the collector itself
   telemetry:
     logs:
@@ -80,7 +80,7 @@ service:
     metrics:
       level: detailed
       address: 0.0.0.0:8888
-  
+
   # Define pipelines
   pipelines:
     # Traces pipeline
@@ -88,13 +88,13 @@ service:
       receivers: [otlp]
       processors: [memory_limiter, resource, batch]
       exporters: [logging, jaeger]
-    
+
     # Metrics pipeline
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, resource, batch]
       exporters: [logging, prometheus]
-    
+
     # Logs pipeline (if Valet starts exporting logs via OTLP)
     logs:
       receivers: [otlp]

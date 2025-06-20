@@ -259,7 +259,6 @@ Telemetry can be configured via:
 telemetry:
   enabled: true
   serviceName: valet
-  serviceVersion: 0.1.0
   exporterType: otlp
   otlpEndpoint: localhost:4317
   insecure: false

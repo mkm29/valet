@@ -17,17 +17,14 @@ output: "values.schema.json"
 telemetry:
   # Enable or disable telemetry
   enabled: true
-  
+
   # Service name for identification in telemetry data
   serviceName: "valet"
-  
-  # Service version
-  serviceVersion: "1.0.0"
-  
+
   # Tracing configuration
   tracing:
     enabled: true
-    # Exporter type: "stdout", "otlp", or "none"
+    # Exporter type: "stdout" or "otlp"
     exporter: "otlp"
     # Sampling rate (0.0 to 1.0)
     samplingRate: 1.0
@@ -35,7 +32,7 @@ telemetry:
     endpoint: "localhost:4317"
     # Use insecure connection (for development)
     insecure: true
-  
+
   # Metrics configuration
   metrics:
     enabled: true
@@ -47,7 +44,7 @@ telemetry:
     endpoint: "localhost:4317"
     # Use insecure connection (for development)
     insecure: true
-  
+
   # Logging configuration (controlled by debug flag)
   # When debug is true, log level is set to DEBUG
   # When debug is false, log level is set to INFO
