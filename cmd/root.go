@@ -93,7 +93,7 @@ func NewRootCmd() *cobra.Command {
 	cmd.PersistentFlags().BoolP("debug", "d", false, "enable debug logging")
 
 	// Telemetry flags
-	cmd.PersistentFlags().Bool("telemetry", false, "enable telemetry")
+	cmd.PersistentFlags().Bool("telemetry-enabled", false, "enable telemetry")
 	cmd.PersistentFlags().String("telemetry-exporter", "none", "telemetry exporter type (none, stdout, otlp)")
 	cmd.PersistentFlags().String("telemetry-endpoint", "localhost:4317", "OTLP endpoint for telemetry")
 	cmd.PersistentFlags().Bool("telemetry-insecure", true, "use insecure connection for OTLP")
