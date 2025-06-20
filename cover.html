@@ -1,0 +1,1986 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>cmd: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/mkm29/valet/cmd/generate.go (53.7%)</option>
+				
+				<option value="file1">github.com/mkm29/valet/cmd/root.go (68.5%)</option>
+				
+				<option value="file2">github.com/mkm29/valet/cmd/version.go (50.0%)</option>
+				
+				<option value="file3">github.com/mkm29/valet/internal/config/config.go (91.7%)</option>
+				
+				<option value="file4">github.com/mkm29/valet/internal/telemetry/helpers.go (16.5%)</option>
+				
+				<option value="file5">github.com/mkm29/valet/internal/telemetry/logger.go (0.0%)</option>
+				
+				<option value="file6">github.com/mkm29/valet/internal/telemetry/telemetry.go (9.6%)</option>
+				
+				<option value="file7">github.com/mkm29/valet/main.go (0.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">no coverage</span>
+				<span class="cov1">low coverage</span>
+				<span class="cov2">*</span>
+				<span class="cov3">*</span>
+				<span class="cov4">*</span>
+				<span class="cov5">*</span>
+				<span class="cov6">*</span>
+				<span class="cov7">*</span>
+				<span class="cov8">*</span>
+				<span class="cov9">*</span>
+				<span class="cov10">high coverage</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package cmd
+
+import (
+        "context"
+        "encoding/json"
+        "fmt"
+        "os"
+        "path/filepath"
+        "reflect"
+        "time"
+
+        "github.com/mkm29/valet/internal/telemetry"
+        "github.com/spf13/cobra"
+        "go.opentelemetry.io/otel/attribute"
+        "go.opentelemetry.io/otel/codes"
+        "go.opentelemetry.io/otel/trace"
+        "go.uber.org/zap"
+        "gopkg.in/yaml.v2"
+)
+
+// generate subcommand
+
+// deepMerge merges b into a (recursively for nested maps) and returns a new map.
+func deepMerge(a, b map[string]any) map[string]any <span class="cov1" title="1">{
+        out := make(map[string]any, len(a))
+        for k, v := range a </span><span class="cov3" title="2">{
+                out[k] = v
+        }</span>
+        <span class="cov1" title="1">for k, vb := range b </span><span class="cov3" title="2">{
+                if va, ok := out[k]; ok </span><span class="cov1" title="1">{
+                        ma, maOK := va.(map[string]any)
+                        mb, mbOK := vb.(map[string]any)
+                        if maOK &amp;&amp; mbOK </span><span class="cov0" title="0">{
+                                out[k] = deepMerge(ma, mb)
+                                continue</span>
+                        }
+                }
+                <span class="cov3" title="2">out[k] = vb</span>
+        }
+        <span class="cov1" title="1">return out</span>
+}
+
+// inferSchema builds a JSON‐Schema fragment for val, using defaultVal
+// to determine which object keys are "required".
+func inferSchema(val, defaultVal any) map[string]any <span class="cov9" title="18">{
+        switch v := val.(type) </span>{
+        case map[string]any:<span class="cov6" title="7">
+                defMap, _ := defaultVal.(map[string]any)
+                props := make(map[string]any, len(v))
+                for key, sub := range v </span><span class="cov7" title="11">{
+                        // Ensure we pass the correct default value for the subfield
+                        var defSubVal any
+                        if defMap != nil </span><span class="cov7" title="11">{
+                                defSubVal = defMap[key]
+                        }</span>
+                        <span class="cov7" title="11">props[key] = inferSchema(sub, defSubVal)</span>
+                }
+
+                // Build default object with actual values from the YAML
+                <span class="cov6" title="7">defaults := make(map[string]any, len(v))
+                for key, val := range v </span><span class="cov7" title="11">{
+                        // Skip null values in defaults
+                        if val == nil </span><span class="cov0" title="0">{
+                                continue</span>
+                        }
+
+                        // Process map values correctly for defaults
+                        <span class="cov7" title="11">mapVal, isMap := val.(map[string]any)
+                        if isMap </span><span class="cov0" title="0">{
+                                // For maps, process the defaults recursively
+                                nestedDefaults := make(map[string]any)
+                                for k, v := range mapVal </span><span class="cov0" title="0">{
+                                        if v != nil </span><span class="cov0" title="0">{
+                                                nestedDefaults[k] = v
+                                        }</span>
+                                }
+                                <span class="cov0" title="0">if len(nestedDefaults) &gt; 0 </span><span class="cov0" title="0">{
+                                        defaults[key] = nestedDefaults
+                                }</span>
+                        } else<span class="cov7" title="11"> {
+                                // For non-maps, include the value directly
+                                defaults[key] = val
+                        }</span>
+                }
+
+                <span class="cov6" title="7">schema := map[string]any{
+                        "type":       "object",
+                        "properties": props,
+                        "default":    defaults,
+                }
+
+                var required []string
+                for k, vDefault := range defMap </span><span class="cov7" title="10">{
+                        // Only add to required if key exists, default is NOT nil and NOT null (in Go or YAML)
+                        if _, exists := v[k]; exists </span><span class="cov7" title="10">{
+                                isNil := vDefault == nil
+                                isNullString := false
+                                switch vDefault := vDefault.(type) </span>{
+                                case string:<span class="cov6" title="6">
+                                        // YAML nulls sometimes decode as string "null" or as empty string
+                                        isNullString = vDefault == "null" || vDefault == ""</span>
+                                }
+
+                                // Special handling for components that can be enabled/disabled
+                                <span class="cov7" title="10">if !isNil &amp;&amp; !isNullString </span><span class="cov7" title="10">{
+                                        // Check for empty values (empty strings, arrays, objects)
+                                        // Skip fields with empty default values using the helper function
+                                        if isEmptyValue(vDefault) </span><span class="cov0" title="0">{
+                                                isDebug := cfg != nil &amp;&amp; cfg.Debug
+                                                if isDebug </span><span class="cov0" title="0">{
+                                                        zap.L().Debug("Skipping field because it has an empty default value",
+                                                                zap.String("field", k),
+                                                                zap.String("type", fmt.Sprintf("%T", vDefault)))
+                                                }</span>
+                                                <span class="cov0" title="0">continue</span>
+                                        }
+
+                                        // Check if this is a component that can be enabled/disabled
+                                        <span class="cov7" title="10">component, isComponent := v[k].(map[string]any)
+                                        if isComponent </span><span class="cov0" title="0">{
+                                                // Check if this component has an 'enabled' field
+                                                if enabled, exists := component["enabled"]; exists </span><span class="cov0" title="0">{
+                                                        // Only add fields as required if the component is enabled by default
+                                                        if enabledBool, isBool := enabled.(bool); isBool &amp;&amp; !enabledBool </span><span class="cov0" title="0">{
+                                                                // Component is disabled by default, don't add to required
+                                                                continue</span>
+                                                        }
+                                                }
+
+                                                // Check if this is a property of a parent component with an enabled field
+                                                <span class="cov0" title="0">if parent, ok := v["enabled"]; ok </span><span class="cov0" title="0">{
+                                                        if parentEnabled, ok := parent.(bool); ok &amp;&amp; !parentEnabled </span><span class="cov0" title="0">{
+                                                                // Parent component is disabled, don't mark this as required
+                                                                continue</span>
+                                                        }
+                                                }
+                                        }
+
+                                        // Normal fields and enabled components are added as required
+                                        <span class="cov7" title="10">required = append(required, k)</span>
+                                }
+                        }
+                }
+                <span class="cov6" title="7">if len(required) &gt; 0 </span><span class="cov6" title="6">{
+                        schema["required"] = required
+                }</span>
+                <span class="cov6" title="7">return schema</span>
+
+        case []any:<span class="cov0" title="0">
+                var defItem any
+                if defArr, ok := defaultVal.([]any); ok &amp;&amp; len(defArr) &gt; 0 </span><span class="cov0" title="0">{
+                        defItem = defArr[0]
+                }</span>
+                <span class="cov0" title="0">var itemsSchema map[string]any
+                if len(v) &gt; 0 </span><span class="cov0" title="0">{
+                        itemsSchema = inferSchema(v[0], defItem)
+                }</span> else<span class="cov0" title="0"> {
+                        itemsSchema = map[string]any{}
+                }</span>
+                <span class="cov0" title="0">return map[string]any{
+                        "type":    "array",
+                        "items":   itemsSchema,
+                        "default": v,
+                }</span>
+
+        case bool:<span class="cov3" title="2">
+                return map[string]any{
+                        "type":    "boolean",
+                        "default": v,
+                }</span>
+
+        case int, int64:<span class="cov3" title="2">
+                return map[string]any{
+                        "type":    "integer",
+                        "default": v,
+                }</span>
+
+        case float64:<span class="cov0" title="0">
+                if float64(int64(v)) == v </span><span class="cov0" title="0">{
+                        return map[string]any{
+                                "type":    "integer",
+                                "default": int64(v),
+                        }
+                }</span>
+                <span class="cov0" title="0">return map[string]any{
+                        "type":    "number",
+                        "default": v,
+                }</span>
+
+        case string:<span class="cov6" title="7">
+                // Handle null strings specially
+                if v == "null" || v == "&lt;nil&gt;" || v == "" </span><span class="cov0" title="0">{
+                        typeArray := []string{"string", "null"}
+                        return map[string]any{
+                                "type":    typeArray,
+                                "default": nil,
+                        }
+                }</span>
+                <span class="cov6" title="7">return map[string]any{
+                        "type":    "string",
+                        "default": v,
+                }</span>
+
+        default:<span class="cov0" title="0">
+                // Handle unknown types more intelligently using reflection
+                rv := reflect.ValueOf(v)
+
+                // Handle nil values
+                if !rv.IsValid() || (rv.Kind() == reflect.Ptr &amp;&amp; rv.IsNil()) </span><span class="cov0" title="0">{
+                        typeArray := []string{"string", "null"}
+                        return map[string]any{
+                                "type":    typeArray,
+                                "default": nil,
+                        }
+                }</span>
+
+                // Get the underlying value if it's a pointer
+                <span class="cov0" title="0">if rv.Kind() == reflect.Ptr </span><span class="cov0" title="0">{
+                        rv = rv.Elem()
+                }</span>
+
+                <span class="cov0" title="0">if rv.Kind() == reflect.Map </span><span class="cov0" title="0">{
+                        // Convert maps to proper JSON objects
+                        defMap := make(map[string]any)
+                        for _, k := range rv.MapKeys() </span><span class="cov0" title="0">{
+                                if k.Kind() == reflect.String </span><span class="cov0" title="0">{
+                                        mv := rv.MapIndex(k).Interface()
+                                        // Skip nil values
+                                        if mv != nil </span><span class="cov0" title="0">{
+                                                defMap[k.String()] = mv
+                                        }</span>
+                                }
+                        }
+
+                        // Recursively process properties
+                        <span class="cov0" title="0">props := make(map[string]any)
+                        for k, sub := range defMap </span><span class="cov0" title="0">{
+                                // Get corresponding default value if available
+                                var defVal any
+                                if defaultMap, ok := defaultVal.(map[string]any); ok </span><span class="cov0" title="0">{
+                                        defVal = defaultMap[k]
+                                }</span>
+                                <span class="cov0" title="0">props[k] = inferSchema(sub, defVal)</span>
+                        }
+
+                        <span class="cov0" title="0">return map[string]any{
+                                "type":       "object",
+                                "properties": props,
+                                "default":    defMap,
+                        }</span>
+                } else<span class="cov0" title="0"> if rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array </span><span class="cov0" title="0">{
+                        // Convert slices to proper arrays
+                        var items []any
+                        for i := 0; i &lt; rv.Len(); i++ </span><span class="cov0" title="0">{
+                                item := rv.Index(i).Interface()
+                                if item != nil </span><span class="cov0" title="0">{
+                                        items = append(items, item)
+                                }</span>
+                        }
+
+                        <span class="cov0" title="0">var itemsSchema map[string]any
+                        if len(items) &gt; 0 </span><span class="cov0" title="0">{
+                                // Use first item to infer schema
+                                var defItem any
+                                if defArr, ok := defaultVal.([]any); ok &amp;&amp; len(defArr) &gt; 0 </span><span class="cov0" title="0">{
+                                        defItem = defArr[0]
+                                }</span>
+                                <span class="cov0" title="0">itemsSchema = inferSchema(items[0], defItem)</span>
+                        } else<span class="cov0" title="0"> {
+                                itemsSchema = map[string]any{}
+                        }</span>
+
+                        <span class="cov0" title="0">return map[string]any{
+                                "type":    "array",
+                                "items":   itemsSchema,
+                                "default": items,
+                        }</span>
+                } else<span class="cov0" title="0"> if rv.Kind() == reflect.Bool </span><span class="cov0" title="0">{
+                        return map[string]any{
+                                "type":    "boolean",
+                                "default": rv.Bool(),
+                        }
+                }</span> else<span class="cov0" title="0"> if rv.Kind() == reflect.Int || rv.Kind() == reflect.Int8 ||
+                        rv.Kind() == reflect.Int16 || rv.Kind() == reflect.Int32 ||
+                        rv.Kind() == reflect.Int64 </span><span class="cov0" title="0">{
+                        return map[string]any{
+                                "type":    "integer",
+                                "default": rv.Int(),
+                        }
+                }</span> else<span class="cov0" title="0"> if rv.Kind() == reflect.Uint || rv.Kind() == reflect.Uint8 ||
+                        rv.Kind() == reflect.Uint16 || rv.Kind() == reflect.Uint32 ||
+                        rv.Kind() == reflect.Uint64 </span><span class="cov0" title="0">{
+                        return map[string]any{
+                                "type":    "integer",
+                                "default": rv.Uint(),
+                        }
+                }</span> else<span class="cov0" title="0"> if rv.Kind() == reflect.Float32 || rv.Kind() == reflect.Float64 </span><span class="cov0" title="0">{
+                        floatVal := rv.Float()
+                        // Check if it's actually an integer
+                        if floatVal == float64(int64(floatVal)) </span><span class="cov0" title="0">{
+                                return map[string]any{
+                                        "type":    "integer",
+                                        "default": int64(floatVal),
+                                }
+                        }</span>
+                        <span class="cov0" title="0">return map[string]any{
+                                "type":    "number",
+                                "default": floatVal,
+                        }</span>
+                } else<span class="cov0" title="0"> if rv.Kind() == reflect.String </span><span class="cov0" title="0">{
+                        strVal := rv.String()
+                        // Handle "null" string representations
+                        if strVal == "null" || strVal == "&lt;nil&gt;" </span><span class="cov0" title="0">{
+                                typeArray := []string{"string", "null"}
+                                return map[string]any{
+                                        "type":    typeArray,
+                                        "default": nil,
+                                }
+                        }</span>
+                        <span class="cov0" title="0">return map[string]any{
+                                "type":    "string",
+                                "default": strVal,
+                        }</span>
+                } else<span class="cov0" title="0"> {
+                        // Fall back to string representation for other types
+                        return map[string]any{
+                                "type":    "string",
+                                "default": fmt.Sprintf("%v", v),
+                        }
+                }</span>
+        }
+}
+
+// convertToStringKeyMap recursively converts map[interface{}]interface{} to map[string]interface{}
+func convertToStringKeyMap(m interface{}) interface{} <span class="cov10" title="22">{
+        switch x := m.(type) </span>{
+        case map[interface{}]interface{}:<span class="cov7" title="9">
+                result := make(map[string]interface{})
+                for k, v := range x </span><span class="cov8" title="13">{
+                        result[fmt.Sprintf("%v", k)] = convertToStringKeyMap(v)
+                }</span>
+                <span class="cov7" title="9">return result</span>
+        case []interface{}:<span class="cov0" title="0">
+                for i, v := range x </span><span class="cov0" title="0">{
+                        x[i] = convertToStringKeyMap(v)
+                }</span>
+        }
+        <span class="cov8" title="13">return m</span>
+}
+
+// loadYAML reads a YAML file into map[string]any (empty if missing)
+func loadYAML(path string) (map[string]any, error) <span class="cov7" title="11">{
+        data, err := os.ReadFile(path)
+        if err != nil </span><span class="cov0" title="0">{
+                if os.IsNotExist(err) </span><span class="cov0" title="0">{
+                        return map[string]any{}, nil
+                }</span>
+                <span class="cov0" title="0">return nil, err</span>
+        }
+        <span class="cov7" title="11">var m map[interface{}]interface{}
+        if err := yaml.Unmarshal(data, &amp;m); err != nil </span><span class="cov3" title="2">{
+                return nil, err
+        }</span>
+        <span class="cov7" title="9">if m == nil </span><span class="cov0" title="0">{
+                return map[string]any{}, nil
+        }</span>
+
+        // Convert to map[string]any
+        <span class="cov7" title="9">result := convertToStringKeyMap(m).(map[string]interface{})
+        return result, nil</span>
+}
+
+// Generate a JSON Schema for the values.yaml in ctx directory,
+// optionally merging an overrides YAML file relative to ctx.
+// It writes the schema to values.schema.json and returns a status message.
+func Generate(ctxDir, overridesFlag string) (string, error) <span class="cov7" title="11">{
+        // Create context for tracing
+        ctx := context.Background()
+        tel := GetTelemetry()
+
+        // Start main span
+        start := time.Now()
+        ctx, span := tel.StartSpan(ctx, "generate.command",
+                trace.WithAttributes(
+                        attribute.String("context_dir", ctxDir),
+                        attribute.Bool("has_overrides", overridesFlag != ""),
+                ),
+        )
+        defer span.End()
+
+        // Function to execute the actual generation
+        executeGenerate := func() (string, error) </span><span class="cov7" title="11">{
+                return generateInternal(ctx, tel, ctxDir, overridesFlag)
+        }</span>
+
+        // Execute with telemetry wrapper if enabled
+        <span class="cov7" title="11">if tel.IsEnabled() </span><span class="cov0" title="0">{
+                result, err := executeGenerate()
+                duration := time.Since(start)
+
+                // Record command metrics
+                if cmdMetrics, metricsErr := tel.NewCommandMetrics(); metricsErr == nil </span><span class="cov0" title="0">{
+                        cmdMetrics.RecordCommandExecution(ctx, "generate", duration, err)
+                }</span>
+
+                // Set span status
+                <span class="cov0" title="0">if err != nil </span><span class="cov0" title="0">{
+                        span.RecordError(err)
+                        span.SetStatus(codes.Error, err.Error())
+                }</span> else<span class="cov0" title="0"> {
+                        span.SetStatus(codes.Ok, "Schema generated successfully")
+                }</span>
+
+                <span class="cov0" title="0">return result, err</span>
+        }
+
+        // Execute without telemetry
+        <span class="cov7" title="11">return executeGenerate()</span>
+}
+
+// generateInternal contains the actual generation logic
+func generateInternal(ctx context.Context, tel *telemetry.Telemetry, ctxDir, overridesFlag string) (string, error) <span class="cov7" title="11">{
+        // Locate values file (values.yaml or values.yml)
+        valuesPath := filepath.Join(ctxDir, "values.yaml")
+        if _, err := os.Stat(valuesPath); os.IsNotExist(err) </span><span class="cov4" title="3">{
+                alt := filepath.Join(ctxDir, "values.yml")
+                if _, err2 := os.Stat(alt); os.IsNotExist(err2) </span><span class="cov3" title="2">{
+                        return "", fmt.Errorf("no values.yaml or values.yml found in %s", ctxDir)
+                }</span>
+                <span class="cov1" title="1">valuesPath = alt</span>
+        }
+        <span class="cov7" title="9">var overridesPath string
+        if overridesFlag != "" </span><span class="cov3" title="2">{
+                overridesPath = filepath.Join(ctxDir, overridesFlag)
+        }</span>
+        // Load main values file with tracing
+        <span class="cov7" title="9">ctx, loadSpan := tel.StartSpan(ctx, "load.values_yaml",
+                trace.WithAttributes(attribute.String("file", valuesPath)),
+        )
+        yaml1, err := loadYAML(valuesPath)
+        loadSpan.End()
+        if err != nil </span><span class="cov1" title="1">{
+                telemetry.RecordError(ctx, err)
+                return "", fmt.Errorf("error loading %s: %w", valuesPath, err)
+        }</span>
+
+        // Record file metrics
+        <span class="cov7" title="8">if fileMetrics, metricsErr := tel.NewFileOperationMetrics(); metricsErr == nil </span><span class="cov7" title="8">{
+                if fi, statErr := os.Stat(valuesPath); statErr == nil </span><span class="cov7" title="8">{
+                        fileMetrics.RecordFileRead(ctx, valuesPath, fi.Size(), nil)
+                }</span>
+        }
+
+        // Log some of the top-level default values to help with debugging
+        // Use safe debugging to handle cases when cfg is nil (testing environment)
+        <span class="cov7" title="8">isDebug := cfg != nil &amp;&amp; cfg.Debug
+        if isDebug &amp;&amp; tel.IsEnabled() </span><span class="cov0" title="0">{
+                logger := tel.Logger()
+                logger.Debug(ctx, "Original YAML values loaded",
+                        zap.String("file", valuesPath),
+                        zap.Int("top_level_keys", len(yaml1)),
+                )
+
+                // Count components with enabled field
+                enabledComponentCount := 0
+                disabledComponentCount := 0
+                for key, compVal := range yaml1 </span><span class="cov0" title="0">{
+                        if compMap, isMap := compVal.(map[string]any); isMap </span><span class="cov0" title="0">{
+                                // Log components with enabled field
+                                if enabled, hasEnabled := compMap["enabled"]; hasEnabled </span><span class="cov0" title="0">{
+                                        if enabledBool, isBool := enabled.(bool); isBool </span><span class="cov0" title="0">{
+                                                if enabledBool </span><span class="cov0" title="0">{
+                                                        enabledComponentCount++
+                                                }</span> else<span class="cov0" title="0"> {
+                                                        disabledComponentCount++
+                                                }</span>
+                                                <span class="cov0" title="0">logger.Debug(ctx, "Component status",
+                                                        zap.String("component", key),
+                                                        zap.Bool("enabled", enabledBool),
+                                                )</span>
+                                        }
+                                }
+                        }
+                }
+                <span class="cov0" title="0">logger.Debug(ctx, "Component summary",
+                        zap.Int("enabled_count", enabledComponentCount),
+                        zap.Int("disabled_count", disabledComponentCount),
+                )</span>
+        }
+
+        <span class="cov7" title="8">var merged map[string]any
+        if overridesPath != "" </span><span class="cov3" title="2">{
+                // Load overrides file with tracing
+                ctx, overrideSpan := tel.StartSpan(ctx, "load.overrides_yaml",
+                        trace.WithAttributes(attribute.String("file", overridesPath)),
+                )
+                yaml2, err := loadYAML(overridesPath)
+                overrideSpan.End()
+                if err != nil </span><span class="cov1" title="1">{
+                        telemetry.RecordError(ctx, err)
+                        return "", fmt.Errorf("error loading %s: %w", overridesPath, err)
+                }</span>
+
+                // Merge with tracing
+                <span class="cov1" title="1">ctx, mergeSpan := tel.StartSpan(ctx, "merge.yaml_files")
+                merged = deepMerge(yaml1, yaml2)
+                mergeSpan.End()</span>
+        } else<span class="cov6" title="6"> {
+                merged = yaml1
+        }</span>
+
+        // Generate schema with tracing
+        <span class="cov6" title="7">ctx, schemaSpan := tel.StartSpan(ctx, "generate.schema")
+        schemaStart := time.Now()
+        schema := inferSchema(merged, yaml1)
+        schema["$schema"] = "http://json-schema.org/schema#"
+
+        // Post-process the schema to ensure no empty fields are in the required lists
+        cleanupRequiredFields(schema, yaml1)
+        schemaSpan.End()
+
+        // Record schema generation metrics
+        if schemaMetrics, metricsErr := tel.NewSchemaGenerationMetrics(); metricsErr == nil </span><span class="cov6" title="7">{
+                fieldCount := countSchemaFields(schema)
+                schemaMetrics.RecordSchemaGeneration(ctx, int64(fieldCount), time.Since(schemaStart), nil)
+        }</span>
+
+        <span class="cov6" title="7">outPath := filepath.Join(ctxDir, "values.schema.json")
+
+        // Marshal JSON with tracing
+        ctx, marshalSpan := tel.StartSpan(ctx, "marshal.json")
+        data, err := json.MarshalIndent(schema, "", "  ")
+        marshalSpan.End()
+        if err != nil </span><span class="cov0" title="0">{
+                telemetry.RecordError(ctx, err)
+                return "", fmt.Errorf("error marshaling JSON: %w", err)
+        }</span>
+
+        // Write file with tracing
+        <span class="cov6" title="7">ctx, writeSpan := tel.StartSpan(ctx, "write.schema_file",
+                trace.WithAttributes(
+                        attribute.String("file", outPath),
+                        attribute.Int("size", len(data)),
+                ),
+        )
+        if err := os.WriteFile(outPath, data, 0644); err != nil </span><span class="cov0" title="0">{
+                writeSpan.End()
+                telemetry.RecordError(ctx, err)
+                return "", fmt.Errorf("error writing %s: %w", outPath, err)
+        }</span>
+        <span class="cov6" title="7">writeSpan.End()
+
+        // Record file write metrics
+        if fileMetrics, metricsErr := tel.NewFileOperationMetrics(); metricsErr == nil </span><span class="cov6" title="7">{
+                fileMetrics.RecordFileWrite(ctx, outPath, int64(len(data)), nil)
+        }</span>
+
+        <span class="cov6" title="7">if overridesPath != "" </span><span class="cov1" title="1">{
+                return fmt.Sprintf("Generated %s by merging %s into values.yaml", outPath, overridesFlag), nil
+        }</span>
+        <span class="cov6" title="6">return fmt.Sprintf("Generated %s from values.yaml", outPath), nil</span>
+}
+
+// countSchemaFields counts the number of fields in a schema recursively
+func countSchemaFields(schema map[string]any) int <span class="cov9" title="18">{
+        count := 0
+        if props, ok := schema["properties"].(map[string]any); ok </span><span class="cov6" title="7">{
+                count += len(props)
+                for _, prop := range props </span><span class="cov7" title="11">{
+                        if propMap, ok := prop.(map[string]any); ok </span><span class="cov7" title="11">{
+                                count += countSchemaFields(propMap)
+                        }</span>
+                }
+        }
+        <span class="cov9" title="18">return count</span>
+}
+
+// isEmptyValue checks if a value represents an empty value (empty string, array, map)
+func isEmptyValue(val any) bool <span class="cov9" title="20">{
+        if val == nil </span><span class="cov0" title="0">{
+                return true
+        }</span>
+
+        <span class="cov9" title="20">switch v := val.(type) </span>{
+        case string:<span class="cov8" title="12">
+                return v == ""</span>
+        case []any:<span class="cov0" title="0">
+                return len(v) == 0</span>
+        case map[string]any:<span class="cov0" title="0">
+                return len(v) == 0</span>
+        case map[interface{}]interface{}:<span class="cov0" title="0">
+                return len(v) == 0</span>
+        }
+
+        // Use reflection for other types
+        <span class="cov7" title="8">rv := reflect.ValueOf(val)
+
+        // Handle nil values
+        if !rv.IsValid() || (rv.Kind() == reflect.Ptr &amp;&amp; rv.IsNil()) </span><span class="cov0" title="0">{
+                return true
+        }</span>
+
+        // Get the underlying value if it's a pointer
+        <span class="cov7" title="8">if rv.Kind() == reflect.Ptr </span><span class="cov0" title="0">{
+                rv = rv.Elem()
+        }</span>
+
+        <span class="cov7" title="8">if rv.Kind() == reflect.Map </span><span class="cov0" title="0">{
+                return rv.Len() == 0
+        }</span> else<span class="cov7" title="8"> if rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array </span><span class="cov0" title="0">{
+                return rv.Len() == 0
+        }</span>
+
+        <span class="cov7" title="8">return false</span>
+}
+
+// cleanupRequiredFields processes the generated schema to ensure no empty values are in required lists
+func cleanupRequiredFields(schema map[string]any, defaults map[string]any) <span class="cov6" title="7">{
+        // Process the top-level schema
+        processProperties(schema, defaults)
+}</span>
+
+// processProperties handles each property in the schema, recursing into nested objects
+func processProperties(schema map[string]any, defaults map[string]any) <span class="cov6" title="7">{
+        // Check if this is an object with properties
+        properties, hasProps := schema["properties"].(map[string]any)
+        if !hasProps </span><span class="cov0" title="0">{
+                return
+        }</span>
+
+        // Get the required fields list
+        <span class="cov6" title="7">required, hasRequired := schema["required"].([]string)
+        if !hasRequired </span><span class="cov1" title="1">{
+                return
+        }</span>
+
+        // Check if this object itself has an 'enabled' key that is false
+        <span class="cov6" title="6">if enabled, hasEnabled := defaults["enabled"]; hasEnabled </span><span class="cov0" title="0">{
+                if enabledBool, isBool := enabled.(bool); isBool &amp;&amp; !enabledBool </span><span class="cov0" title="0">{
+                        isDebug := cfg != nil &amp;&amp; cfg.Debug
+                        if isDebug </span><span class="cov0" title="0">{
+                                zap.L().Debug("Post-processing: Removing required fields from component because it has enabled=false")
+                        }</span>
+                        <span class="cov0" title="0">delete(schema, "required")
+                        return</span>
+                }
+        }
+
+        // Go through each property and check if it has an empty default value
+        <span class="cov6" title="6">var newRequired []string
+        for _, fieldName := range required </span><span class="cov7" title="10">{
+                // Get the default value for this field
+                defVal, hasDef := defaults[fieldName]
+
+                // If the default value is empty, don't include it in required
+                if hasDef &amp;&amp; isEmptyValue(defVal) </span><span class="cov0" title="0">{
+                        isDebug := cfg != nil &amp;&amp; cfg.Debug
+                        if isDebug </span><span class="cov0" title="0">{
+                                zap.L().Debug("Post-processing: Removing field from required list because it has an empty default value",
+                                        zap.String("field", fieldName))
+                        }</span>
+                        <span class="cov0" title="0">continue</span>
+                }
+
+                // Check if this is a component that can be enabled/disabled
+                <span class="cov7" title="10">propObj, isObj := defaults[fieldName].(map[string]any)
+                if isObj </span><span class="cov0" title="0">{
+                        // Check if this component has an 'enabled' field
+                        if enabled, hasEnabled := propObj["enabled"]; hasEnabled </span><span class="cov0" title="0">{
+                                if enabledBool, isBool := enabled.(bool); isBool &amp;&amp; !enabledBool </span><span class="cov0" title="0">{
+                                        isDebug := cfg != nil &amp;&amp; cfg.Debug
+                                        if isDebug </span><span class="cov0" title="0">{
+                                                zap.L().Debug("Post-processing: Removing field from required list because it is disabled",
+                                                        zap.String("field", fieldName))
+                                        }</span>
+                                        <span class="cov0" title="0">continue</span>
+                                }
+                        }
+
+                        // Also check if the component has a nil value by default
+                        <span class="cov0" title="0">if isEmptyValue(propObj) </span><span class="cov0" title="0">{
+                                isDebug := cfg != nil &amp;&amp; cfg.Debug
+                                if isDebug </span><span class="cov0" title="0">{
+                                        zap.L().Debug("Post-processing: Removing field from required list because it has a nil default value",
+                                                zap.String("field", fieldName))
+                                }</span>
+                                <span class="cov0" title="0">continue</span>
+                        }
+                }
+
+                // If we reach here, keep the field in the required list
+                <span class="cov7" title="10">newRequired = append(newRequired, fieldName)</span>
+        }
+
+        // Replace the required list with our filtered one
+        <span class="cov6" title="6">if len(newRequired) &gt; 0 </span><span class="cov6" title="6">{
+                schema["required"] = newRequired
+        }</span> else<span class="cov0" title="0"> {
+                delete(schema, "required")
+        }</span>
+
+        // Process each property recursively
+        <span class="cov6" title="6">for name, prop := range properties </span><span class="cov7" title="11">{
+                propObj, isObj := prop.(map[string]any)
+                if !isObj </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+
+                <span class="cov7" title="11">defVal, hasDef := defaults[name]
+                if hasDef </span><span class="cov7" title="10">{
+                        defMap, isMap := defVal.(map[string]any)
+                        if isMap </span><span class="cov0" title="0">{
+                                processProperties(propObj, defMap)
+                        }</span>
+                }
+        }
+}
+
+func NewGenerateCmd() *cobra.Command <span class="cov7" title="10">{
+        cmd := &amp;cobra.Command{
+                Use:   "generate &lt;context-dir&gt;",
+                Short: "Generate JSON Schema from values.yaml",
+                Long:  `Generate JSON Schema from values.yaml, optionally merging an overrides YAML file.`,
+                Args:  cobra.ExactArgs(1),
+                // Do not print usage on error; just show the error message
+                SilenceUsage: true,
+                RunE: func(cmd *cobra.Command, args []string) error </span><span class="cov4" title="3">{
+                        ctx := args[0]
+                        // Validate overrides file if provided
+                        overridesFlag, err := cmd.Flags().GetString("overrides")
+                        if err != nil </span><span class="cov0" title="0">{
+                                return err
+                        }</span>
+                        <span class="cov4" title="3">if overridesFlag != "" </span><span class="cov1" title="1">{
+                                overridePath := filepath.Join(ctx, overridesFlag)
+                                if _, err := os.Stat(overridePath); err != nil </span><span class="cov1" title="1">{
+                                        return fmt.Errorf("overrides file %s not found in %s", overridesFlag, ctx)
+                                }</span>
+                        }
+                        <span class="cov3" title="2">msg, err := Generate(ctx, overridesFlag)
+                        if err != nil </span><span class="cov1" title="1">{
+                                return err
+                        }</span>
+                        <span class="cov1" title="1">fmt.Println(msg)
+                        return nil</span>
+                },
+        }
+        <span class="cov7" title="10">cmd.Flags().StringP("overrides", "f", "", "path (relative to context dir) to overrides YAML (optional)")
+        return cmd</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package cmd
+
+import (
+        "context"
+        "fmt"
+        "os"
+        "os/signal"
+        "syscall"
+        "time"
+
+        "github.com/mkm29/valet/internal/config"
+        "github.com/mkm29/valet/internal/telemetry"
+        "github.com/spf13/cobra"
+        "go.uber.org/zap"
+)
+
+var (
+        cfg *config.Config
+        tel *telemetry.Telemetry
+)
+
+func NewRootCmd() *cobra.Command <span class="cov6" title="4">{
+        cmd := &amp;cobra.Command{
+                Use:   "valet",
+                Short: "JSON Schema Generator",
+                Long:  `A JSON Schema Generator for Helm charts and other YAML files.`,
+                // Do not print usage on error; just show the error message
+                SilenceUsage: true,
+                PersistentPreRunE: func(cmd *cobra.Command, args []string) error </span><span class="cov5" title="3">{
+                        if cfg == nil </span><span class="cov1" title="1">{
+                                c, err := initializeConfig(cmd)
+                                if err != nil </span><span class="cov0" title="0">{
+                                        return err
+                                }</span>
+                                <span class="cov1" title="1">cfg = c</span>
+                        }
+
+                        // Initialize telemetry if not already initialized
+                        <span class="cov5" title="3">if tel == nil &amp;&amp; cfg.Telemetry != nil </span><span class="cov1" title="1">{
+                                ctx := context.Background()
+                                t, err := telemetry.Initialize(ctx, cfg.Telemetry)
+                                if err != nil </span><span class="cov0" title="0">{
+                                        // Log error but don't fail - telemetry is optional
+                                        if cfg.Debug </span><span class="cov0" title="0">{
+                                                zap.L().Debug("Failed to initialize telemetry", zap.Error(err))
+                                        }</span>
+                                } else<span class="cov1" title="1"> {
+                                        tel = t
+
+                                        // Set up graceful shutdown
+                                        go func() </span><span class="cov1" title="1">{
+                                                sigChan := make(chan os.Signal, 1)
+                                                signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+                                                &lt;-sigChan
+
+                                                shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+                                                defer cancel()
+
+                                                if err := tel.Shutdown(shutdownCtx); err != nil </span><span class="cov0" title="0">{
+                                                        zap.L().Error("Error shutting down telemetry", zap.Error(err))
+                                                }</span>
+                                                <span class="cov0" title="0">os.Exit(0)</span>
+                                        }()
+                                }
+                        }
+
+                        <span class="cov5" title="3">return nil</span>
+                },
+                RunE: func(cmd *cobra.Command, args []string) error <span class="cov5" title="3">{
+                        // Default action: delegate to Generate
+                        ctx := cfg.Context
+                        if len(args) &gt; 0 &amp;&amp; args[0] != "" </span><span class="cov0" title="0">{
+                                ctx = args[0]
+                        }</span>
+                        <span class="cov5" title="3">if ctx == "" </span><span class="cov0" title="0">{
+                                return cmd.Help()
+                        }</span>
+                        <span class="cov5" title="3">msg, err := Generate(ctx, cfg.Overrides)
+                        if err != nil </span><span class="cov1" title="1">{
+                                return err
+                        }</span>
+                        <span class="cov3" title="2">fmt.Println(msg)
+                        return nil</span>
+                },
+        }
+
+        // Support CLI flags for configuration (config file, context, overrides, output, debug)
+        // Config file path (default: .valet.yaml)
+        <span class="cov6" title="4">cmd.PersistentFlags().String("config-file", ".valet.yaml", "config file path (default: .valet.yaml)")
+        cmd.PersistentFlags().StringP("context", "c", ".", "context directory containing values.yaml (optional)")
+        cmd.PersistentFlags().StringP("overrides", "f", "", "overrides file (optional)")
+        cmd.PersistentFlags().StringP("output", "o", "values.schema.json", "output file (default: values.schema.json)")
+        cmd.PersistentFlags().BoolP("debug", "d", false, "enable debug logging")
+
+        // Telemetry flags
+        cmd.PersistentFlags().Bool("telemetry-enabled", false, "enable telemetry")
+        cmd.PersistentFlags().String("telemetry-exporter", "none", "telemetry exporter type (none, stdout, otlp)")
+        cmd.PersistentFlags().String("telemetry-endpoint", "localhost:4317", "OTLP endpoint for telemetry")
+        cmd.PersistentFlags().Bool("telemetry-insecure", true, "use insecure connection for OTLP")
+        cmd.PersistentFlags().Float64("telemetry-sample-rate", 1.0, "trace sampling rate (0.0 to 1.0)")
+
+        // add subcommands
+        cmd.AddCommand(NewVersionCmd())
+        cmd.AddCommand(NewGenerateCmd())
+
+        return cmd</span>
+}
+
+// initializeConfig loads configuration from file and applies CLI flags
+func initializeConfig(cmd *cobra.Command) (*config.Config, error) <span class="cov1" title="1">{
+        // Only read config file if flag explicitly set
+        var c *config.Config
+        var err error
+        if cmd.PersistentFlags().Changed("config-file") </span><span class="cov1" title="1">{
+                cfgFile, _ := cmd.PersistentFlags().GetString("config-file")
+                c, err = config.LoadConfig(cfgFile)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+        } else<span class="cov0" title="0"> {
+                // No config file: start with empty config
+                c = &amp;config.Config{
+                        Telemetry: config.NewTelemetryConfig(),
+                }
+        }</span>
+        
+        // Always set the service version from build info, regardless of config source
+        <span class="cov1" title="1">if c.Telemetry != nil </span><span class="cov1" title="1">{
+                c.Telemetry.ServiceVersion = GetBuildVersion()
+        }</span>
+        // Override with CLI flags or defaults
+        // Context: default to value or override
+        // Context flag override
+        <span class="cov1" title="1">cliCtx, _ := cmd.PersistentFlags().GetString("context")
+        if cmd.PersistentFlags().Changed("context") || c.Context == "" </span><span class="cov0" title="0">{
+                c.Context = cliCtx
+        }</span>
+        <span class="cov1" title="1">if cmd.PersistentFlags().Changed("overrides") </span><span class="cov0" title="0">{
+                ov, _ := cmd.PersistentFlags().GetString("overrides")
+                c.Overrides = ov
+        }</span>
+        <span class="cov1" title="1">if cmd.PersistentFlags().Changed("output") </span><span class="cov0" title="0">{
+                out, _ := cmd.PersistentFlags().GetString("output")
+                c.Output = out
+        }</span>
+        <span class="cov1" title="1">if cmd.PersistentFlags().Changed("debug") </span><span class="cov0" title="0">{
+                dbg, _ := cmd.PersistentFlags().GetBool("debug")
+                c.Debug = dbg
+        }</span>
+
+        // Handle telemetry flags
+        <span class="cov1" title="1">if c.Telemetry == nil </span><span class="cov0" title="0">{
+                c.Telemetry = config.NewTelemetryConfig()
+        }</span>
+        
+        <span class="cov1" title="1">if cmd.PersistentFlags().Changed("telemetry") </span><span class="cov0" title="0">{
+                enabled, _ := cmd.PersistentFlags().GetBool("telemetry")
+                c.Telemetry.Enabled = enabled
+        }</span>
+        <span class="cov1" title="1">if cmd.PersistentFlags().Changed("telemetry-exporter") </span><span class="cov0" title="0">{
+                exporter, _ := cmd.PersistentFlags().GetString("telemetry-exporter")
+                c.Telemetry.ExporterType = exporter
+        }</span>
+        <span class="cov1" title="1">if cmd.PersistentFlags().Changed("telemetry-endpoint") </span><span class="cov0" title="0">{
+                endpoint, _ := cmd.PersistentFlags().GetString("telemetry-endpoint")
+                c.Telemetry.OTLPEndpoint = endpoint
+        }</span>
+        <span class="cov1" title="1">if cmd.PersistentFlags().Changed("telemetry-insecure") </span><span class="cov0" title="0">{
+                insecure, _ := cmd.PersistentFlags().GetBool("telemetry-insecure")
+                c.Telemetry.Insecure = insecure
+        }</span>
+        <span class="cov1" title="1">if cmd.PersistentFlags().Changed("telemetry-sample-rate") </span><span class="cov0" title="0">{
+                rate, _ := cmd.PersistentFlags().GetFloat64("telemetry-sample-rate")
+                c.Telemetry.SampleRate = rate
+        }</span>
+
+        <span class="cov1" title="1">if c.Debug </span><span class="cov0" title="0">{
+                zap.L().Debug("Config loaded", zap.Any("config", c))
+        }</span>
+        <span class="cov1" title="1">return c, nil</span>
+}
+
+// GetTelemetry returns the global telemetry instance
+func GetTelemetry() *telemetry.Telemetry <span class="cov10" title="11">{
+        return tel
+}</span>
+
+// (bindFlags removed; flags now override config file values directly)
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package cmd
+
+import (
+        "debug/buildinfo"
+        "fmt"
+        "os"
+
+        "github.com/spf13/cobra"
+)
+
+// version subcommand
+var (
+        // exit is used to terminate the process; override for testing
+        exit = os.Exit
+        // exePath returns the path of the current executable; override for testing
+        exePath = os.Executable
+        // readBuildInfo reads embedded build info; override for testing
+        readBuildInfo = buildinfo.ReadFile
+)
+
+// GetBuildVersion returns the build version information from the embedded build info
+// Returns "development" if the version cannot be determined
+func GetBuildVersion() string <span class="cov3" title="3">{
+        exe, err := exePath()
+        if err != nil </span><span class="cov0" title="0">{
+                return "development"
+        }</span>
+        <span class="cov3" title="3">info, err := readBuildInfo(exe)
+        if err != nil </span><span class="cov0" title="0">{
+                return "development"
+        }</span>
+        
+        // If we have a proper version, use it
+        <span class="cov3" title="3">if info.Main.Version != "" &amp;&amp; info.Main.Version != "(devel)" </span><span class="cov0" title="0">{
+                return info.Main.Version
+        }</span>
+        
+        // Otherwise, try to use the VCS revision
+        <span class="cov3" title="3">for _, setting := range info.Settings </span><span class="cov10" title="36">{
+                if setting.Key == "vcs.revision" &amp;&amp; setting.Value != "" </span><span class="cov0" title="0">{
+                        // Return the first 8 characters of the commit hash
+                        if len(setting.Value) &gt; 8 </span><span class="cov0" title="0">{
+                                return setting.Value[:8]
+                        }</span>
+                        <span class="cov0" title="0">return setting.Value</span>
+                }
+        }
+        
+        <span class="cov3" title="3">return "development"</span>
+}
+
+func showVersion() <span class="cov0" title="0">{
+        version := GetBuildVersion()
+        fmt.Println(version)
+        exit(0)
+}</span>
+
+func NewVersionCmd() *cobra.Command <span class="cov5" title="5">{
+        cmd := &amp;cobra.Command{
+                Use:   "version",
+                Short: "Print version information",
+                Long:  `Print version information`,
+                Run: func(cmd *cobra.Command, args []string) </span><span class="cov0" title="0">{
+                        showVersion()
+                }</span>,
+        }
+        <span class="cov5" title="5">return cmd</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package config
+
+import (
+        "fmt"
+        "os"
+
+        "gopkg.in/yaml.v2"
+)
+
+// Config holds the configuration for the application
+type Config struct {
+        Debug     bool             `yaml:"debug"`
+        Context   string           `yaml:"context"`
+        Overrides string           `yaml:"overrides"`
+        Output    string           `yaml:"output"`
+        Telemetry *TelemetryConfig `yaml:"telemetry"`
+}
+
+// TelemetryConfig holds the telemetry configuration
+type TelemetryConfig struct {
+        // Enabled determines if telemetry is enabled
+        Enabled bool `yaml:"enabled"`
+        // ServiceName overrides the default service name
+        ServiceName string `yaml:"serviceName"`
+        // ServiceVersion overrides the default service version
+        ServiceVersion string `yaml:"serviceVersion"`
+        // ExporterType determines the exporter type (otlp, stdout, none)
+        ExporterType string `yaml:"exporterType"`
+        // OTLPEndpoint is the OTLP endpoint for traces and metrics
+        OTLPEndpoint string `yaml:"otlpEndpoint"`
+        // Insecure determines if the OTLP connection should be insecure
+        Insecure bool `yaml:"insecure"`
+        // Headers are additional headers to send with OTLP requests
+        Headers map[string]string `yaml:"headers"`
+        // SampleRate is the trace sampling rate (0.0 to 1.0)
+        SampleRate float64 `yaml:"sampleRate"`
+}
+
+// NewTelemetryConfig returns the default telemetry configuration
+func NewTelemetryConfig() *TelemetryConfig <span class="cov10" title="8">{
+        return &amp;TelemetryConfig{
+                Enabled:        false,
+                ServiceName:    "valet",
+                ServiceVersion: "0.1.0",
+                ExporterType:   "none",
+                OTLPEndpoint:   "localhost:4317",
+                Insecure:       true,
+                Headers:        make(map[string]string),
+                SampleRate:     1.0,
+        }
+}</span>
+
+// LoadConfig reads configuration from a YAML file (if it exists).
+// If the file is not found, returns an empty Config without error.
+func LoadConfig(path string) (*Config, error) <span class="cov10" title="8">{
+        cfg := &amp;Config{
+                Telemetry: NewTelemetryConfig(),
+        }
+
+        data, err := os.ReadFile(path)
+        if err != nil </span><span class="cov4" title="2">{
+                if os.IsNotExist(err) </span><span class="cov1" title="1">{
+                        return cfg, nil
+                }</span>
+                <span class="cov1" title="1">return nil, err</span>
+        }
+
+        <span class="cov8" title="6">if err := yaml.Unmarshal(data, cfg); err != nil </span><span class="cov1" title="1">{
+                return nil, fmt.Errorf("failed to parse config: %w", err)
+        }</span>
+
+        // Ensure telemetry config is not nil
+        <span class="cov7" title="5">if cfg.Telemetry == nil </span><span class="cov0" title="0">{
+                cfg.Telemetry = NewTelemetryConfig()
+        }</span>
+
+        <span class="cov7" title="5">return cfg, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package telemetry
+
+import (
+        "context"
+        "time"
+
+        "go.opentelemetry.io/otel/attribute"
+        "go.opentelemetry.io/otel/codes"
+        "go.opentelemetry.io/otel/metric"
+        "go.opentelemetry.io/otel/trace"
+)
+
+// CommandMetrics holds metrics for command execution
+type CommandMetrics struct {
+        ExecutionCounter  metric.Int64Counter
+        DurationHistogram metric.Float64Histogram
+        ErrorCounter      metric.Int64Counter
+}
+
+// NewCommandMetrics creates metrics for command execution
+func (t *Telemetry) NewCommandMetrics() (*CommandMetrics, error) <span class="cov0" title="0">{
+        if t == nil || !t.IsEnabled() </span><span class="cov0" title="0">{
+                return &amp;CommandMetrics{}, nil
+        }</span>
+
+        <span class="cov0" title="0">meter := t.Meter()
+
+        executionCounter, err := meter.Int64Counter(
+                "valet.command.executions",
+                metric.WithDescription("Total number of command executions"),
+                metric.WithUnit("1"),
+        )
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov0" title="0">durationHistogram, err := meter.Float64Histogram(
+                "valet.command.duration",
+                metric.WithDescription("Command execution duration"),
+                metric.WithUnit("s"),
+        )
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov0" title="0">errorCounter, err := meter.Int64Counter(
+                "valet.command.errors",
+                metric.WithDescription("Total number of command errors"),
+                metric.WithUnit("1"),
+        )
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov0" title="0">return &amp;CommandMetrics{
+                ExecutionCounter:  executionCounter,
+                DurationHistogram: durationHistogram,
+                ErrorCounter:      errorCounter,
+        }, nil</span>
+}
+
+// RecordCommandExecution records command execution metrics
+func (m *CommandMetrics) RecordCommandExecution(ctx context.Context, command string, duration time.Duration, err error) <span class="cov0" title="0">{
+        if m == nil </span><span class="cov0" title="0">{
+                return
+        }</span>
+
+        <span class="cov0" title="0">attrs := []attribute.KeyValue{
+                attribute.String("command", command),
+                attribute.Bool("error", err != nil),
+        }
+
+        if m.ExecutionCounter != nil </span><span class="cov0" title="0">{
+                m.ExecutionCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
+        }</span>
+
+        <span class="cov0" title="0">if m.DurationHistogram != nil </span><span class="cov0" title="0">{
+                m.DurationHistogram.Record(ctx, duration.Seconds(), metric.WithAttributes(attrs...))
+        }</span>
+
+        <span class="cov0" title="0">if err != nil &amp;&amp; m.ErrorCounter != nil </span><span class="cov0" title="0">{
+                errorAttrs := append(attrs, attribute.String("error.type", errorType(err)))
+                m.ErrorCounter.Add(ctx, 1, metric.WithAttributes(errorAttrs...))
+        }</span>
+}
+
+// errorType returns a simplified error type for metrics
+func errorType(err error) string <span class="cov0" title="0">{
+        if err == nil </span><span class="cov0" title="0">{
+                return ""
+        }</span>
+        // You can add more specific error type detection here
+        <span class="cov0" title="0">return "generic"</span>
+}
+
+// WithCommandSpan wraps a command execution with a span and metrics
+func WithCommandSpan(ctx context.Context, t *Telemetry, command string, fn func(context.Context) error) error <span class="cov0" title="0">{
+        start := time.Now()
+
+        // Start span
+        ctx, span := t.StartSpan(ctx, "command."+command,
+                trace.WithAttributes(
+                        attribute.String("command", command),
+                ),
+        )
+        defer span.End()
+
+        // Execute the function
+        err := fn(ctx)
+
+        // Record duration
+        duration := time.Since(start)
+
+        // Set span status and attributes
+        if err != nil </span><span class="cov0" title="0">{
+                span.RecordError(err)
+                span.SetStatus(codes.Error, err.Error())
+        }</span> else<span class="cov0" title="0"> {
+                span.SetStatus(codes.Ok, "")
+        }</span>
+
+        <span class="cov0" title="0">span.SetAttributes(
+                attribute.Float64("duration.seconds", duration.Seconds()),
+        )
+
+        return err</span>
+}
+
+// FileOperationMetrics holds metrics for file operations
+type FileOperationMetrics struct {
+        ReadCounter   metric.Int64Counter
+        WriteCounter  metric.Int64Counter
+        SizeHistogram metric.Int64Histogram
+}
+
+// NewFileOperationMetrics creates metrics for file operations
+func (t *Telemetry) NewFileOperationMetrics() (*FileOperationMetrics, error) <span class="cov10" title="15">{
+        if t == nil || !t.IsEnabled() </span><span class="cov10" title="15">{
+                return &amp;FileOperationMetrics{}, nil
+        }</span>
+
+        <span class="cov0" title="0">meter := t.Meter()
+
+        readCounter, err := meter.Int64Counter(
+                "valet.file.reads",
+                metric.WithDescription("Total number of file read operations"),
+                metric.WithUnit("1"),
+        )
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov0" title="0">writeCounter, err := meter.Int64Counter(
+                "valet.file.writes",
+                metric.WithDescription("Total number of file write operations"),
+                metric.WithUnit("1"),
+        )
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov0" title="0">sizeHistogram, err := meter.Int64Histogram(
+                "valet.file.size",
+                metric.WithDescription("File size distribution"),
+                metric.WithUnit("By"),
+        )
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov0" title="0">return &amp;FileOperationMetrics{
+                ReadCounter:   readCounter,
+                WriteCounter:  writeCounter,
+                SizeHistogram: sizeHistogram,
+        }, nil</span>
+}
+
+// RecordFileRead records a file read operation
+func (m *FileOperationMetrics) RecordFileRead(ctx context.Context, path string, size int64, err error) <span class="cov7" title="8">{
+        if m == nil || m.ReadCounter == nil </span><span class="cov7" title="8">{
+                return
+        }</span>
+
+        <span class="cov0" title="0">attrs := []attribute.KeyValue{
+                attribute.String("path", path),
+                attribute.Bool("error", err != nil),
+        }
+
+        m.ReadCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
+
+        if err == nil &amp;&amp; m.SizeHistogram != nil </span><span class="cov0" title="0">{
+                m.SizeHistogram.Record(ctx, size, metric.WithAttributes(attrs...))
+        }</span>
+}
+
+// RecordFileWrite records a file write operation
+func (m *FileOperationMetrics) RecordFileWrite(ctx context.Context, path string, size int64, err error) <span class="cov7" title="7">{
+        if m == nil || m.WriteCounter == nil </span><span class="cov7" title="7">{
+                return
+        }</span>
+
+        <span class="cov0" title="0">attrs := []attribute.KeyValue{
+                attribute.String("path", path),
+                attribute.Bool("error", err != nil),
+        }
+
+        m.WriteCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
+
+        if err == nil &amp;&amp; m.SizeHistogram != nil </span><span class="cov0" title="0">{
+                m.SizeHistogram.Record(ctx, size, metric.WithAttributes(attrs...))
+        }</span>
+}
+
+// SchemaGenerationMetrics holds metrics for schema generation
+type SchemaGenerationMetrics struct {
+        GenerationCounter metric.Int64Counter
+        FieldCounter      metric.Int64Histogram
+        DurationHistogram metric.Float64Histogram
+}
+
+// NewSchemaGenerationMetrics creates metrics for schema generation
+func (t *Telemetry) NewSchemaGenerationMetrics() (*SchemaGenerationMetrics, error) <span class="cov7" title="7">{
+        if t == nil || !t.IsEnabled() </span><span class="cov7" title="7">{
+                return &amp;SchemaGenerationMetrics{}, nil
+        }</span>
+
+        <span class="cov0" title="0">meter := t.Meter()
+
+        generationCounter, err := meter.Int64Counter(
+                "valet.schema.generations",
+                metric.WithDescription("Total number of schema generations"),
+                metric.WithUnit("1"),
+        )
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov0" title="0">fieldCounter, err := meter.Int64Histogram(
+                "valet.schema.fields",
+                metric.WithDescription("Number of fields in generated schemas"),
+                metric.WithUnit("1"),
+        )
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov0" title="0">durationHistogram, err := meter.Float64Histogram(
+                "valet.schema.generation_duration",
+                metric.WithDescription("Schema generation duration"),
+                metric.WithUnit("s"),
+        )
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov0" title="0">return &amp;SchemaGenerationMetrics{
+                GenerationCounter: generationCounter,
+                FieldCounter:      fieldCounter,
+                DurationHistogram: durationHistogram,
+        }, nil</span>
+}
+
+// RecordSchemaGeneration records schema generation metrics
+func (m *SchemaGenerationMetrics) RecordSchemaGeneration(ctx context.Context, fields int64, duration time.Duration, err error) <span class="cov7" title="7">{
+        if m == nil </span><span class="cov0" title="0">{
+                return
+        }</span>
+
+        <span class="cov7" title="7">attrs := []attribute.KeyValue{
+                attribute.Bool("error", err != nil),
+        }
+
+        if m.GenerationCounter != nil </span><span class="cov0" title="0">{
+                m.GenerationCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
+        }</span>
+
+        <span class="cov7" title="7">if err == nil </span><span class="cov7" title="7">{
+                if m.FieldCounter != nil </span><span class="cov0" title="0">{
+                        m.FieldCounter.Record(ctx, fields, metric.WithAttributes(attrs...))
+                }</span>
+                <span class="cov7" title="7">if m.DurationHistogram != nil </span><span class="cov0" title="0">{
+                        m.DurationHistogram.Record(ctx, duration.Seconds(), metric.WithAttributes(attrs...))
+                }</span>
+        }
+}
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">package telemetry
+
+import (
+        "context"
+
+        "go.opentelemetry.io/otel/attribute"
+        "go.opentelemetry.io/otel/trace"
+        "go.uber.org/zap"
+        "go.uber.org/zap/zapcore"
+)
+
+// Logger wraps zap logger with OpenTelemetry integration
+type Logger struct {
+        *zap.Logger
+}
+
+// NewLogger creates a new zap logger with OpenTelemetry integration
+func NewLogger(debug bool) (*Logger, error) <span class="cov0" title="0">{
+        config := zap.NewProductionConfig()
+
+        // Set log level based on debug flag
+        if debug </span><span class="cov0" title="0">{
+                config.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
+        }</span> else<span class="cov0" title="0"> {
+                config.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
+        }</span>
+
+        // Use JSON encoding for structured logs
+        <span class="cov0" title="0">config.Encoding = "json"
+
+        // Add caller information
+        config.EncoderConfig.TimeKey = "timestamp"
+        config.EncoderConfig.LevelKey = "level"
+        config.EncoderConfig.NameKey = "logger"
+        config.EncoderConfig.CallerKey = "caller"
+        config.EncoderConfig.FunctionKey = zapcore.OmitKey
+        config.EncoderConfig.MessageKey = "message"
+        config.EncoderConfig.StacktraceKey = "stacktrace"
+        config.EncoderConfig.LineEnding = zapcore.DefaultLineEnding
+        config.EncoderConfig.EncodeLevel = zapcore.LowercaseLevelEncoder
+        config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+        config.EncoderConfig.EncodeDuration = zapcore.SecondsDurationEncoder
+        config.EncoderConfig.EncodeCaller = zapcore.ShortCallerEncoder
+
+        // Build the logger
+        logger, err := config.Build()
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov0" title="0">return &amp;Logger{Logger: logger}, nil</span>
+}
+
+// SetDefault sets this logger as the global zap logger
+func (l *Logger) SetDefault() <span class="cov0" title="0">{
+        zap.ReplaceGlobals(l.Logger)
+}</span>
+
+// WithContext returns a logger with trace information from the context
+func (l *Logger) WithContext(ctx context.Context) *zap.Logger <span class="cov0" title="0">{
+        span := trace.SpanFromContext(ctx)
+        if !span.IsRecording() </span><span class="cov0" title="0">{
+                return l.Logger
+        }</span>
+
+        <span class="cov0" title="0">spanCtx := span.SpanContext()
+        if !spanCtx.HasTraceID() </span><span class="cov0" title="0">{
+                return l.Logger
+        }</span>
+
+        <span class="cov0" title="0">return l.Logger.With(
+                zap.String("trace_id", spanCtx.TraceID().String()),
+                zap.String("span_id", spanCtx.SpanID().String()),
+        )</span>
+}
+
+// Debug logs a debug message with OpenTelemetry context
+func (l *Logger) Debug(ctx context.Context, msg string, fields ...zap.Field) <span class="cov0" title="0">{
+        logger := l.WithContext(ctx)
+        logger.Debug(msg, fields...)
+        l.addSpanEvent(ctx, zap.DebugLevel, msg, fields...)
+}</span>
+
+// Info logs an info message with OpenTelemetry context
+func (l *Logger) Info(ctx context.Context, msg string, fields ...zap.Field) <span class="cov0" title="0">{
+        logger := l.WithContext(ctx)
+        logger.Info(msg, fields...)
+        l.addSpanEvent(ctx, zap.InfoLevel, msg, fields...)
+}</span>
+
+// Warn logs a warning message with OpenTelemetry context
+func (l *Logger) Warn(ctx context.Context, msg string, fields ...zap.Field) <span class="cov0" title="0">{
+        logger := l.WithContext(ctx)
+        logger.Warn(msg, fields...)
+        l.addSpanEvent(ctx, zap.WarnLevel, msg, fields...)
+}</span>
+
+// Error logs an error message with OpenTelemetry context
+func (l *Logger) Error(ctx context.Context, msg string, fields ...zap.Field) <span class="cov0" title="0">{
+        logger := l.WithContext(ctx)
+        logger.Error(msg, fields...)
+        l.addSpanEvent(ctx, zap.ErrorLevel, msg, fields...)
+}</span>
+
+// DPanic logs a message at DPanicLevel with OpenTelemetry context
+func (l *Logger) DPanic(ctx context.Context, msg string, fields ...zap.Field) <span class="cov0" title="0">{
+        logger := l.WithContext(ctx)
+        logger.DPanic(msg, fields...)
+        l.addSpanEvent(ctx, zap.DPanicLevel, msg, fields...)
+}</span>
+
+// Panic logs a message at PanicLevel with OpenTelemetry context
+func (l *Logger) Panic(ctx context.Context, msg string, fields ...zap.Field) <span class="cov0" title="0">{
+        logger := l.WithContext(ctx)
+        logger.Panic(msg, fields...)
+        l.addSpanEvent(ctx, zap.PanicLevel, msg, fields...)
+}</span>
+
+// Fatal logs a message at FatalLevel with OpenTelemetry context
+func (l *Logger) Fatal(ctx context.Context, msg string, fields ...zap.Field) <span class="cov0" title="0">{
+        logger := l.WithContext(ctx)
+        logger.Fatal(msg, fields...)
+        l.addSpanEvent(ctx, zap.FatalLevel, msg, fields...)
+}</span>
+
+// addSpanEvent adds a log event to the current span
+func (l *Logger) addSpanEvent(ctx context.Context, level zapcore.Level, msg string, fields ...zap.Field) <span class="cov0" title="0">{
+        span := trace.SpanFromContext(ctx)
+        if !span.IsRecording() </span><span class="cov0" title="0">{
+                return
+        }</span>
+
+        // Convert zap fields to OpenTelemetry attributes
+        <span class="cov0" title="0">attrs := []attribute.KeyValue{
+                attribute.String("log.severity", level.String()),
+                attribute.String("log.message", msg),
+        }
+
+        for _, field := range fields </span><span class="cov0" title="0">{
+                // Convert zap field to attribute
+                // This is a simplified conversion - you might want to handle more types
+                switch field.Type </span>{
+                case zapcore.StringType:<span class="cov0" title="0">
+                        attrs = append(attrs, attribute.String("log."+field.Key, field.String))</span>
+                case zapcore.Int64Type, zapcore.Int32Type, zapcore.Int16Type, zapcore.Int8Type:<span class="cov0" title="0">
+                        attrs = append(attrs, attribute.Int64("log."+field.Key, field.Integer))</span>
+                case zapcore.Float64Type, zapcore.Float32Type:<span class="cov0" title="0">
+                        attrs = append(attrs, attribute.Float64("log."+field.Key, float64(field.Integer)))</span>
+                case zapcore.BoolType:<span class="cov0" title="0">
+                        attrs = append(attrs, attribute.Bool("log."+field.Key, field.Integer == 1))</span>
+                case zapcore.ErrorType:<span class="cov0" title="0">
+                        if err, ok := field.Interface.(error); ok </span><span class="cov0" title="0">{
+                                attrs = append(attrs, attribute.String("log."+field.Key, err.Error()))
+                        }</span>
+                default:<span class="cov0" title="0">
+                        // For complex types, use string representation
+                        attrs = append(attrs, attribute.String("log."+field.Key, field.String))</span>
+                }
+        }
+
+        <span class="cov0" title="0">span.AddEvent("log", trace.WithAttributes(attrs...))</span>
+}
+
+// WithError returns a logger with an error field
+func (l *Logger) WithError(err error) *zap.Logger <span class="cov0" title="0">{
+        if err == nil </span><span class="cov0" title="0">{
+                return l.Logger
+        }</span>
+        <span class="cov0" title="0">return l.With(zap.Error(err))</span>
+}
+
+// Sync flushes any buffered log entries
+func (l *Logger) Sync() error <span class="cov0" title="0">{
+        return l.Logger.Sync()
+}</span>
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">package telemetry
+
+import (
+        "context"
+        "fmt"
+        "os"
+        "time"
+
+        "github.com/mkm29/valet/internal/config"
+        "go.opentelemetry.io/otel"
+        "go.opentelemetry.io/otel/attribute"
+        "go.opentelemetry.io/otel/codes"
+        "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+        "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+        "go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
+        "go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
+        "go.opentelemetry.io/otel/metric"
+        "go.opentelemetry.io/otel/propagation"
+        sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+        "go.opentelemetry.io/otel/sdk/resource"
+        sdktrace "go.opentelemetry.io/otel/sdk/trace"
+        semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+        oteltrace "go.opentelemetry.io/otel/trace"
+)
+
+// Telemetry holds the telemetry providers and instruments
+type Telemetry struct {
+        config         *config.TelemetryConfig
+        tracerProvider *sdktrace.TracerProvider
+        meterProvider  *sdkmetric.MeterProvider
+        tracer         oteltrace.Tracer
+        meter          metric.Meter
+        logger         *Logger
+}
+
+// Initialize initializes the telemetry providers
+func Initialize(ctx context.Context, cfg *config.TelemetryConfig) (*Telemetry, error) <span class="cov1" title="1">{
+        if cfg == nil </span><span class="cov0" title="0">{
+                cfg = config.NewTelemetryConfig()
+        }</span>
+
+        <span class="cov1" title="1">if !cfg.Enabled </span><span class="cov1" title="1">{
+                return &amp;Telemetry{config: cfg}, nil
+        }</span>
+
+        // Create resource
+        <span class="cov0" title="0">res, err := newResource(cfg)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create resource: %w", err)
+        }</span>
+
+        // Initialize tracer provider
+        <span class="cov0" title="0">tracerProvider, err := initTracerProvider(ctx, cfg, res)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to initialize tracer provider: %w", err)
+        }</span>
+
+        // Initialize meter provider
+        <span class="cov0" title="0">meterProvider, err := initMeterProvider(ctx, cfg, res)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to initialize meter provider: %w", err)
+        }</span>
+
+        // Set global providers
+        <span class="cov0" title="0">otel.SetTracerProvider(tracerProvider)
+        otel.SetMeterProvider(meterProvider)
+        otel.SetTextMapPropagator(propagation.TraceContext{})
+
+        // Create structured logger
+        logger, err := NewLogger(false) // Debug will be controlled by the caller
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create logger: %w", err)
+        }</span>
+        <span class="cov0" title="0">logger.SetDefault()
+
+        // Create telemetry instance
+        t := &amp;Telemetry{
+                config:         cfg,
+                tracerProvider: tracerProvider,
+                meterProvider:  meterProvider,
+                tracer:         tracerProvider.Tracer(cfg.ServiceName),
+                meter:          meterProvider.Meter(cfg.ServiceName),
+                logger:         logger,
+        }
+
+        return t, nil</span>
+}
+
+// Shutdown shuts down the telemetry providers
+func (t *Telemetry) Shutdown(ctx context.Context) error <span class="cov0" title="0">{
+        if t == nil || !t.config.Enabled </span><span class="cov0" title="0">{
+                return nil
+        }</span>
+
+        <span class="cov0" title="0">var errs []error
+
+        if t.tracerProvider != nil </span><span class="cov0" title="0">{
+                if err := t.tracerProvider.Shutdown(ctx); err != nil </span><span class="cov0" title="0">{
+                        errs = append(errs, fmt.Errorf("failed to shutdown tracer provider: %w", err))
+                }</span>
+        }
+
+        <span class="cov0" title="0">if t.meterProvider != nil </span><span class="cov0" title="0">{
+                if err := t.meterProvider.Shutdown(ctx); err != nil </span><span class="cov0" title="0">{
+                        errs = append(errs, fmt.Errorf("failed to shutdown meter provider: %w", err))
+                }</span>
+        }
+
+        // Sync logger
+        <span class="cov0" title="0">if t.logger != nil </span><span class="cov0" title="0">{
+                if err := t.logger.Sync(); err != nil </span><span class="cov0" title="0">{
+                        errs = append(errs, fmt.Errorf("failed to sync logger: %w", err))
+                }</span>
+        }
+
+        <span class="cov0" title="0">if len(errs) &gt; 0 </span><span class="cov0" title="0">{
+                return fmt.Errorf("errors during shutdown: %v", errs)
+        }</span>
+
+        <span class="cov0" title="0">return nil</span>
+}
+
+// Tracer returns the tracer
+func (t *Telemetry) Tracer() oteltrace.Tracer <span class="cov0" title="0">{
+        if t == nil || t.tracer == nil </span><span class="cov0" title="0">{
+                return otel.Tracer("valet")
+        }</span>
+        <span class="cov0" title="0">return t.tracer</span>
+}
+
+// Meter returns the meter
+func (t *Telemetry) Meter() metric.Meter <span class="cov0" title="0">{
+        if t == nil || t.meter == nil </span><span class="cov0" title="0">{
+                return otel.Meter("valet")
+        }</span>
+        <span class="cov0" title="0">return t.meter</span>
+}
+
+// IsEnabled returns true if telemetry is enabled
+func (t *Telemetry) IsEnabled() bool <span class="cov8" title="28">{
+        return t != nil &amp;&amp; t.config != nil &amp;&amp; t.config.Enabled
+}</span>
+
+// Logger returns the structured logger
+func (t *Telemetry) Logger() *Logger <span class="cov0" title="0">{
+        if t == nil || t.logger == nil </span><span class="cov0" title="0">{
+                // Return a default logger if telemetry is not initialized
+                logger, _ := NewLogger(false)
+                return logger
+        }</span>
+        <span class="cov0" title="0">return t.logger</span>
+}
+
+// newResource creates a new resource with service information
+func newResource(cfg *config.TelemetryConfig) (*resource.Resource, error) <span class="cov0" title="0">{
+        hostname, _ := os.Hostname()
+
+        return resource.Merge(
+                resource.Default(),
+                resource.NewWithAttributes(
+                        semconv.SchemaURL,
+                        semconv.ServiceName(cfg.ServiceName),
+                        semconv.ServiceVersion(cfg.ServiceVersion),
+                        attribute.String("host.name", hostname),
+                ),
+        )
+}</span>
+
+// initTracerProvider initializes the tracer provider
+func initTracerProvider(ctx context.Context, cfg *config.TelemetryConfig, res *resource.Resource) (*sdktrace.TracerProvider, error) <span class="cov0" title="0">{
+        var exporter sdktrace.SpanExporter
+        var err error
+
+        switch cfg.ExporterType </span>{
+        case "otlp":<span class="cov0" title="0">
+                opts := []otlptracegrpc.Option{
+                        otlptracegrpc.WithEndpoint(cfg.OTLPEndpoint),
+                }
+                if cfg.Insecure </span><span class="cov0" title="0">{
+                        opts = append(opts, otlptracegrpc.WithInsecure())
+                }</span>
+                <span class="cov0" title="0">if len(cfg.Headers) &gt; 0 </span><span class="cov0" title="0">{
+                        opts = append(opts, otlptracegrpc.WithHeaders(cfg.Headers))
+                }</span>
+                <span class="cov0" title="0">exporter, err = otlptracegrpc.New(ctx, opts...)</span>
+        case "stdout":<span class="cov0" title="0">
+                exporter, err = stdouttrace.New(stdouttrace.WithPrettyPrint())</span>
+        default:<span class="cov0" title="0">
+                // No exporter (noop)
+                return sdktrace.NewTracerProvider(
+                        sdktrace.WithResource(res),
+                        sdktrace.WithSampler(sdktrace.TraceIDRatioBased(cfg.SampleRate)),
+                ), nil</span>
+        }
+
+        <span class="cov0" title="0">if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create trace exporter: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">tp := sdktrace.NewTracerProvider(
+                sdktrace.WithBatcher(exporter,
+                        sdktrace.WithBatchTimeout(5*time.Second),
+                ),
+                sdktrace.WithResource(res),
+                sdktrace.WithSampler(sdktrace.TraceIDRatioBased(cfg.SampleRate)),
+        )
+
+        return tp, nil</span>
+}
+
+// initMeterProvider initializes the meter provider
+func initMeterProvider(ctx context.Context, cfg *config.TelemetryConfig, res *resource.Resource) (*sdkmetric.MeterProvider, error) <span class="cov0" title="0">{
+        var exporter sdkmetric.Exporter
+        var err error
+
+        switch cfg.ExporterType </span>{
+        case "otlp":<span class="cov0" title="0">
+                opts := []otlpmetricgrpc.Option{
+                        otlpmetricgrpc.WithEndpoint(cfg.OTLPEndpoint),
+                }
+                if cfg.Insecure </span><span class="cov0" title="0">{
+                        opts = append(opts, otlpmetricgrpc.WithInsecure())
+                }</span>
+                <span class="cov0" title="0">if len(cfg.Headers) &gt; 0 </span><span class="cov0" title="0">{
+                        opts = append(opts, otlpmetricgrpc.WithHeaders(cfg.Headers))
+                }</span>
+                <span class="cov0" title="0">exporter, err = otlpmetricgrpc.New(ctx, opts...)</span>
+        case "stdout":<span class="cov0" title="0">
+                exporter, err = stdoutmetric.New()</span>
+        default:<span class="cov0" title="0">
+                // No exporter (noop)
+                return sdkmetric.NewMeterProvider(
+                        sdkmetric.WithResource(res),
+                ), nil</span>
+        }
+
+        <span class="cov0" title="0">if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create metric exporter: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">mp := sdkmetric.NewMeterProvider(
+                sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exporter,
+                        sdkmetric.WithInterval(30*time.Second),
+                )),
+                sdkmetric.WithResource(res),
+        )
+
+        return mp, nil</span>
+}
+
+// StartSpan starts a new span
+func (t *Telemetry) StartSpan(ctx context.Context, name string, opts ...oteltrace.SpanStartOption) (context.Context, oteltrace.Span) <span class="cov10" title="44">{
+        if t == nil || !t.IsEnabled() </span><span class="cov10" title="44">{
+                return ctx, oteltrace.SpanFromContext(ctx)
+        }</span>
+        <span class="cov0" title="0">return t.tracer.Start(ctx, name, opts...)</span>
+}
+
+// RecordError records an error on the span
+func RecordError(ctx context.Context, err error, opts ...oteltrace.EventOption) <span class="cov2" title="2">{
+        if err == nil </span><span class="cov0" title="0">{
+                return
+        }</span>
+        <span class="cov2" title="2">span := oteltrace.SpanFromContext(ctx)
+        if span.IsRecording() </span><span class="cov0" title="0">{
+                span.RecordError(err, opts...)
+        }</span>
+}
+
+// SetStatus sets the status of the span
+func SetStatus(ctx context.Context, code codes.Code, description string) <span class="cov0" title="0">{
+        span := oteltrace.SpanFromContext(ctx)
+        if span.IsRecording() </span><span class="cov0" title="0">{
+                span.SetStatus(code, description)
+        }</span>
+}
+
+// AddAttributes adds attributes to the span
+func AddAttributes(ctx context.Context, attrs ...attribute.KeyValue) <span class="cov0" title="0">{
+        span := oteltrace.SpanFromContext(ctx)
+        if span.IsRecording() </span><span class="cov0" title="0">{
+                span.SetAttributes(attrs...)
+        }</span>
+}
+</pre>
+		
+		<pre class="file" id="file7" style="display: none">package main
+
+import (
+        "context"
+        "os"
+
+        "github.com/charmbracelet/fang"
+        "github.com/mkm29/valet/cmd"
+)
+
+func main() <span class="cov0" title="0">{
+        // Create root command
+        cmd := cmd.NewRootCmd()
+        // Execute the root command
+        if err := fang.Execute(context.TODO(), cmd); err != nil </span><span class="cov0" title="0">{
+                os.Exit(1)
+        }</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

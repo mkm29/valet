@@ -123,6 +123,11 @@ func initializeConfig(cmd *cobra.Command) (*config.Config, error) {
 			Telemetry: config.NewTelemetryConfig(),
 		}
 	}
+
+	// Always set the service version from build info, regardless of config source
+	if c.Telemetry != nil {
+		c.Telemetry.ServiceVersion = GetBuildVersion()
+	}
 	// Override with CLI flags or defaults
 	// Context: default to value or override
 	// Context flag override
@@ -147,6 +152,7 @@ func initializeConfig(cmd *cobra.Command) (*config.Config, error) {
 	if c.Telemetry == nil {
 		c.Telemetry = config.NewTelemetryConfig()
 	}
+
 	if cmd.PersistentFlags().Changed("telemetry") {
 		enabled, _ := cmd.PersistentFlags().GetBool("telemetry")
 		c.Telemetry.Enabled = enabled

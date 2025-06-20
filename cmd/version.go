@@ -18,30 +18,40 @@ var (
 	readBuildInfo = buildinfo.ReadFile
 )
 
-func showVersion() {
+// GetBuildVersion returns the build version information from the embedded build info
+// Returns "development" if the version cannot be determined
+func GetBuildVersion() string {
 	exe, err := exePath()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error retrieving executable path: %v\n", err)
-		exit(1)
+		return "development"
 	}
 	info, err := readBuildInfo(exe)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error reading build info: %v\n", err)
-		exit(1)
+		return "development"
 	}
-	// print main module path, version, and VCS revision if available
-	revision := ""
+
+	// If we have a proper version, use it
+	if info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+
+	// Otherwise, try to use the VCS revision
 	for _, setting := range info.Settings {
-		if setting.Key == "vcs.revision" {
-			revision = setting.Value
-			break
+		if setting.Key == "vcs.revision" && setting.Value != "" {
+			// Return the first 8 characters of the commit hash
+			if len(setting.Value) > 8 {
+				return setting.Value[:8]
+			}
+			return setting.Value
 		}
 	}
-	if revision != "" {
-		fmt.Printf("%s@%s (commit %s)\n", info.Main.Path, info.Main.Version, revision)
-	} else {
-		fmt.Printf("%s@%s\n", info.Main.Path, info.Main.Version)
-	}
+
+	return "development"
+}
+
+func showVersion() {
+	version := GetBuildVersion()
+	fmt.Println(version)
 	exit(0)
 }
 
