@@ -48,11 +48,7 @@ telemetry:
     # Use insecure connection (for development)
     insecure: true
   
-  # Logging configuration
-  logging:
-    # Log level: "debug", "info", "warn", "error"
-    level: "info"
-    # Log format: "json" or "text"
-    format: "json"
-    # Include caller information in logs
-    includeCaller: true
+  # Logging configuration (controlled by debug flag)
+  # When debug is true, log level is set to DEBUG
+  # When debug is false, log level is set to INFO
+  # All logs use zap's high-performance JSON encoding

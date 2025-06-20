@@ -10,12 +10,12 @@ import (
 
 // version subcommand
 var (
-   // exit is used to terminate the process; override for testing
-   exit = os.Exit
-   // exePath returns the path of the current executable; override for testing
-   exePath = os.Executable
-   // readBuildInfo reads embedded build info; override for testing
-   readBuildInfo = buildinfo.ReadFile
+	// exit is used to terminate the process; override for testing
+	exit = os.Exit
+	// exePath returns the path of the current executable; override for testing
+	exePath = os.Executable
+	// readBuildInfo reads embedded build info; override for testing
+	readBuildInfo = buildinfo.ReadFile
 )
 
 func showVersion() {

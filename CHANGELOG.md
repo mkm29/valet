@@ -12,9 +12,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Refactored telemetry configuration structure for better separation of concerns
   - Moved `Config` struct from `internal/telemetry` package to `internal/config` package as `TelemetryConfig`
   - Added YAML field tags to all `TelemetryConfig` fields for proper configuration file parsing
-  - Renamed `DefaultConfig()` to `DefaultTelemetryConfig()` and moved it to the config package
+  - Renamed `DefaultConfig()` to `NewTelemetryConfig()` and moved it to the config package
   - Updated all references to use `config.TelemetryConfig` instead of `telemetry.Config`
   - Improved configuration file field naming consistency (e.g., `exporter_type` → `exporterType`)
+- Replaced all logging with [Uber's zap](https://github.com/uber-go/zap) for high-performance structured logging
+  - Migrated from `slog` to `zap` for better performance and more features
+  - All log calls now use zap's typed field functions for type safety
+  - Integrated zap with OpenTelemetry to include trace/span IDs in logs
+  - All logs are also recorded as span events for complete observability
+  - Removed dependency on standard library `log` package
 
 ### Added
 

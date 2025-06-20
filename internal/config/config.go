@@ -36,8 +36,8 @@ type TelemetryConfig struct {
 	SampleRate float64 `yaml:"sampleRate"`
 }
 
-// DefaultTelemetryConfig returns the default telemetry configuration
-func DefaultTelemetryConfig() *TelemetryConfig {
+// NewTelemetryConfig returns the default telemetry configuration
+func NewTelemetryConfig() *TelemetryConfig {
 	return &TelemetryConfig{
 		Enabled:        false,
 		ServiceName:    "valet",
@@ -54,7 +54,7 @@ func DefaultTelemetryConfig() *TelemetryConfig {
 // If the file is not found, returns an empty Config without error.
 func LoadConfig(path string) (*Config, error) {
 	cfg := &Config{
-		Telemetry: DefaultTelemetryConfig(),
+		Telemetry: NewTelemetryConfig(),
 	}
 
 	data, err := os.ReadFile(path)
@@ -71,7 +71,7 @@ func LoadConfig(path string) (*Config, error) {
 
 	// Ensure telemetry config is not nil
 	if cfg.Telemetry == nil {
-		cfg.Telemetry = DefaultTelemetryConfig()
+		cfg.Telemetry = NewTelemetryConfig()
 	}
 
 	return cfg, nil

@@ -305,19 +305,24 @@ The following metrics are collected:
 
 #### Structured Logging
 
-When telemetry is enabled, Valet uses structured logging with OpenTelemetry context:
+Valet uses [Uber's zap](https://github.com/uber-go/zap) for high-performance structured logging with OpenTelemetry integration:
 
-- Log entries include trace and span IDs for correlation
-- Debug logs provide detailed insights into schema generation
-- All logs are emitted as JSON for easy parsing
+- **Zero-allocation logging**: Zap's design ensures minimal performance overhead
+- **Structured fields**: All log data is structured for easy parsing and querying
+- **OpenTelemetry integration**: Log entries automatically include trace and span IDs
+- **Span events**: All logs are also recorded as events in the active span
+- **Level control**: Info level by default, Debug level when `--debug` flag is set
+- **JSON encoding**: Logs are emitted as JSON for compatibility with log aggregation systems
 
 Example log output:
 
 ```json
 {
-  "time": "2024-01-20T10:15:30Z",
-  "level": "DEBUG",
-  "msg": "Original YAML values loaded",
+  "timestamp": "2024-01-20T10:15:30.123Z",
+  "level": "debug",
+  "logger": "valet",
+  "caller": "generate.go:459",
+  "message": "Original YAML values loaded",
   "trace_id": "7d3e8f9a1b2c3d4e5f6a7b8c9d0e1f2a",
   "span_id": "1a2b3c4d5e6f7890",
   "file": "charts/mychart/values.yaml",

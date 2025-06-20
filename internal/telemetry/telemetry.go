@@ -36,7 +36,7 @@ type Telemetry struct {
 // Initialize initializes the telemetry providers
 func Initialize(ctx context.Context, cfg *config.TelemetryConfig) (*Telemetry, error) {
 	if cfg == nil {
-		cfg = config.DefaultTelemetryConfig()
+		cfg = config.NewTelemetryConfig()
 	}
 
 	if !cfg.Enabled {
@@ -67,7 +67,10 @@ func Initialize(ctx context.Context, cfg *config.TelemetryConfig) (*Telemetry, e
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 
 	// Create structured logger
-	logger := NewLogger(false) // Debug will be controlled by the caller
+	logger, err := NewLogger(false) // Debug will be controlled by the caller
+	if err != nil {
+		return nil, fmt.Errorf("failed to create logger: %w", err)
+	}
 	logger.SetDefault()
 
 	// Create telemetry instance
@@ -103,6 +106,13 @@ func (t *Telemetry) Shutdown(ctx context.Context) error {
 		}
 	}
 
+	// Sync logger
+	if t.logger != nil {
+		if err := t.logger.Sync(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to sync logger: %w", err))
+		}
+	}
+
 	if len(errs) > 0 {
 		return fmt.Errorf("errors during shutdown: %v", errs)
 	}
@@ -135,7 +145,8 @@ func (t *Telemetry) IsEnabled() bool {
 func (t *Telemetry) Logger() *Logger {
 	if t == nil || t.logger == nil {
 		// Return a default logger if telemetry is not initialized
-		return NewLogger(false)
+		logger, _ := NewLogger(false)
+		return logger
 	}
 	return t.logger
 }

@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,6 +11,7 @@ import (
 	"github.com/mkm29/valet/internal/config"
 	"github.com/mkm29/valet/internal/telemetry"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 var (
@@ -42,7 +42,7 @@ func NewRootCmd() *cobra.Command {
 				if err != nil {
 					// Log error but don't fail - telemetry is optional
 					if cfg.Debug {
-						log.Printf("Failed to initialize telemetry: %v\n", err)
+						zap.L().Debug("Failed to initialize telemetry", zap.Error(err))
 					}
 				} else {
 					tel = t
@@ -57,7 +57,7 @@ func NewRootCmd() *cobra.Command {
 						defer cancel()
 
 						if err := tel.Shutdown(shutdownCtx); err != nil {
-							log.Printf("Error shutting down telemetry: %v\n", err)
+							zap.L().Error("Error shutting down telemetry", zap.Error(err))
 						}
 						os.Exit(0)
 					}()
@@ -120,7 +120,7 @@ func initializeConfig(cmd *cobra.Command) (*config.Config, error) {
 	} else {
 		// No config file: start with empty config
 		c = &config.Config{
-			Telemetry: config.DefaultTelemetryConfig(),
+			Telemetry: config.NewTelemetryConfig(),
 		}
 	}
 	// Override with CLI flags or defaults
@@ -145,7 +145,7 @@ func initializeConfig(cmd *cobra.Command) (*config.Config, error) {
 
 	// Handle telemetry flags
 	if c.Telemetry == nil {
-		c.Telemetry = config.DefaultTelemetryConfig()
+		c.Telemetry = config.NewTelemetryConfig()
 	}
 	if cmd.PersistentFlags().Changed("telemetry") {
 		enabled, _ := cmd.PersistentFlags().GetBool("telemetry")
@@ -169,7 +169,7 @@ func initializeConfig(cmd *cobra.Command) (*config.Config, error) {
 	}
 
 	if c.Debug {
-		log.Printf("Config: %+v\n", c)
+		zap.L().Debug("Config loaded", zap.Any("config", c))
 	}
 	return c, nil
 }

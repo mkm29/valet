@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -15,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 )
 
@@ -108,7 +108,9 @@ func inferSchema(val, defaultVal any) map[string]any {
 					if isEmptyValue(vDefault) {
 						isDebug := cfg != nil && cfg.Debug
 						if isDebug {
-							log.Printf("[DEBUG] Skipping field %s because it has an empty default value of type %T\n", k, vDefault)
+							zap.L().Debug("Skipping field because it has an empty default value",
+								zap.String("field", k),
+								zap.String("type", fmt.Sprintf("%T", vDefault)))
 						}
 						continue
 					}
@@ -455,8 +457,8 @@ func generateInternal(ctx context.Context, tel *telemetry.Telemetry, ctxDir, ove
 	if isDebug && tel.IsEnabled() {
 		logger := tel.Logger()
 		logger.Debug(ctx, "Original YAML values loaded",
-			"file", valuesPath,
-			"top_level_keys", len(yaml1),
+			zap.String("file", valuesPath),
+			zap.Int("top_level_keys", len(yaml1)),
 		)
 
 		// Count components with enabled field
@@ -473,16 +475,16 @@ func generateInternal(ctx context.Context, tel *telemetry.Telemetry, ctxDir, ove
 							disabledComponentCount++
 						}
 						logger.Debug(ctx, "Component status",
-							"component", key,
-							"enabled", enabledBool,
+							zap.String("component", key),
+							zap.Bool("enabled", enabledBool),
 						)
 					}
 				}
 			}
 		}
 		logger.Debug(ctx, "Component summary",
-			"enabled_count", enabledComponentCount,
-			"disabled_count", disabledComponentCount,
+			zap.Int("enabled_count", enabledComponentCount),
+			zap.Int("disabled_count", disabledComponentCount),
 		)
 	}
 
@@ -637,7 +639,7 @@ func processProperties(schema map[string]any, defaults map[string]any) {
 		if enabledBool, isBool := enabled.(bool); isBool && !enabledBool {
 			isDebug := cfg != nil && cfg.Debug
 			if isDebug {
-				log.Printf("[DEBUG] Post-processing: Removing required fields from component because it has enabled=false\n")
+				zap.L().Debug("Post-processing: Removing required fields from component because it has enabled=false")
 			}
 			delete(schema, "required")
 			return
@@ -654,7 +656,8 @@ func processProperties(schema map[string]any, defaults map[string]any) {
 		if hasDef && isEmptyValue(defVal) {
 			isDebug := cfg != nil && cfg.Debug
 			if isDebug {
-				log.Printf("[DEBUG] Post-processing: Removing field %s from required list because it has an empty default value\n", fieldName)
+				zap.L().Debug("Post-processing: Removing field from required list because it has an empty default value",
+					zap.String("field", fieldName))
 			}
 			continue
 		}
@@ -667,7 +670,8 @@ func processProperties(schema map[string]any, defaults map[string]any) {
 				if enabledBool, isBool := enabled.(bool); isBool && !enabledBool {
 					isDebug := cfg != nil && cfg.Debug
 					if isDebug {
-						log.Printf("[DEBUG] Post-processing: Removing field %s from required list because it is disabled\n", fieldName)
+						zap.L().Debug("Post-processing: Removing field from required list because it is disabled",
+							zap.String("field", fieldName))
 					}
 					continue
 				}
@@ -677,7 +681,8 @@ func processProperties(schema map[string]any, defaults map[string]any) {
 			if isEmptyValue(propObj) {
 				isDebug := cfg != nil && cfg.Debug
 				if isDebug {
-					log.Printf("[DEBUG] Post-processing: Removing field %s from required list because it has a nil default value\n", fieldName)
+					zap.L().Debug("Post-processing: Removing field from required list because it has a nil default value",
+						zap.String("field", fieldName))
 				}
 				continue
 			}
