@@ -50,6 +50,20 @@ func NewTelemetryConfig() *TelemetryConfig {
 	}
 }
 
+// validate TelemetryConfig struct
+func (c *TelemetryConfig) Validate() error {
+	if c == nil {
+		return fmt.Errorf("telemetry config is nil")
+	}
+	if c.ExporterType != "otlp" && c.ExporterType != "stdout" && c.ExporterType != "none" {
+		return fmt.Errorf("invalid exporter type: %s", c.ExporterType)
+	}
+	if c.SampleRate < 0.0 || c.SampleRate > 1.0 {
+		return fmt.Errorf("sample rate must be between 0.0 and 1.0, got: %f", c.SampleRate)
+	}
+	return nil
+}
+
 // LoadConfig reads configuration from a YAML file (if it exists).
 // If the file is not found, returns an empty Config without error.
 func LoadConfig(path string) (*Config, error) {

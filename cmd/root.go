@@ -53,7 +53,7 @@ func NewRootCmd() *cobra.Command {
 			if tel != nil {
 				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
-				
+
 				if err := tel.Shutdown(shutdownCtx); err != nil {
 					zap.L().Error("Error shutting down telemetry", zap.Error(err))
 					// Don't return error - telemetry shutdown failure shouldn't fail the command
