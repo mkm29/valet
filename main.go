@@ -27,7 +27,7 @@ func main() {
 
 	// Create root command
 	rootCmd := cmd.NewRootCmd()
-	
+
 	// Execute the root command with the cancellable context
 	if err := fang.Execute(ctx, rootCmd); err != nil {
 		os.Exit(1)

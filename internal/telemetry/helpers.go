@@ -101,25 +101,25 @@ func sanitizePath(path string) string {
 	if path == "" {
 		return ""
 	}
-	
+
 	// Clean the path
 	path = filepath.Clean(path)
-	
+
 	// Remove any home directory references
 	if strings.HasPrefix(path, "~/") {
 		path = strings.TrimPrefix(path, "~/")
 	}
-	
+
 	// Get the base name and parent directory
 	dir := filepath.Dir(path)
 	base := filepath.Base(path)
-	
+
 	// If we have a parent directory, include just the immediate parent
 	if dir != "." && dir != "/" && dir != "" {
 		parentDir := filepath.Base(dir)
 		return filepath.Join(parentDir, base)
 	}
-	
+
 	return base
 }
 

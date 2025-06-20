@@ -54,7 +54,7 @@ func TestLoggerWithContext(t *testing.T) {
 	// Create a real tracer with a noop provider to get recording spans
 	tracerProvider := trace.NewNoopTracerProvider()
 	tracer := tracerProvider.Tracer("test")
-	
+
 	// For noop provider, spans are not recording, so WithContext returns the same logger
 	ctx, span := tracer.Start(context.Background(), "test-span")
 	defer span.End()
@@ -62,7 +62,7 @@ func TestLoggerWithContext(t *testing.T) {
 	// Get logger with context
 	ctxLogger := logger.WithContext(ctx)
 	assert.NotNil(t, ctxLogger)
-	
+
 	// For non-recording spans, should return the same logger
 	assert.Equal(t, logger.Logger, ctxLogger)
 }
@@ -73,7 +73,7 @@ func TestLoggerWithSpanContext(t *testing.T) {
 
 	// Create a mock span context
 	ctx := context.Background()
-	
+
 	// Test with no span in context - should return the same logger
 	ctxLogger := logger.WithContext(ctx)
 	assert.Equal(t, logger.Logger, ctxLogger)

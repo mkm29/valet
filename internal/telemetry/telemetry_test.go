@@ -59,7 +59,7 @@ func TestInitializeAndShutdown(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.NotNil(t, tel)
-			
+
 			if tt.cfg.Enabled {
 				assert.NotNil(t, tel.tracer)
 				assert.NotNil(t, tel.meter)
@@ -90,7 +90,7 @@ func TestTelemetryDisabled(t *testing.T) {
 
 	ctx := context.Background()
 	tel, err := Initialize(ctx, cfg)
-	
+
 	assert.NoError(t, err)
 	assert.NotNil(t, tel)
 	assert.False(t, tel.IsEnabled())
@@ -115,10 +115,10 @@ func TestTelemetryShutdownTimeout(t *testing.T) {
 	// Create a context that times out immediately
 	shutdownCtx, cancel := context.WithTimeout(ctx, 1*time.Nanosecond)
 	defer cancel()
-	
+
 	// Give the context time to expire
 	time.Sleep(10 * time.Millisecond)
-	
+
 	// Shutdown should handle the timeout gracefully
 	err = tel.Shutdown(shutdownCtx)
 	// May or may not error depending on timing, but should not panic
@@ -146,7 +146,7 @@ func TestLoggerNilTelemetry(t *testing.T) {
 func TestRecordError(t *testing.T) {
 	// This test ensures RecordError doesn't panic with nil telemetry
 	ctx := context.Background()
-	
+
 	// Should not panic
 	assert.NotPanics(t, func() {
 		RecordError(ctx, assert.AnError)
