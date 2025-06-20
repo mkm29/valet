@@ -139,7 +139,7 @@ valet [global options] generate [flags] <context-dir>
 Global options:
   --config-file string          config file path (default: .valet.yaml)
   -d, --debug                   enable debug logging
-  --telemetry                   enable telemetry
+  --telemetry-enabled           enable telemetry
   --telemetry-exporter string   telemetry exporter type (none, stdout, otlp) (default: none)
   --telemetry-endpoint string   OTLP endpoint for telemetry (default: localhost:4317)
   --telemetry-insecure          use insecure connection for OTLP (default: true)
@@ -222,10 +222,10 @@ Enable telemetry using CLI flags or configuration:
 
 ```bash
 # Enable with stdout exporter (for development)
-valet generate --telemetry --telemetry-exporter stdout charts/mychart
+valet generate --telemetry-enabled --telemetry-exporter stdout charts/mychart
 
 # Enable with OTLP exporter (for production)
-valet generate --telemetry --telemetry-exporter otlp \
+valet generate --telemetry-enabled --telemetry-exporter otlp \
   --telemetry-endpoint localhost:4317 \
   --telemetry-insecure charts/mychart
 ```
@@ -235,7 +235,7 @@ valet generate --telemetry --telemetry-exporter otlp \
 Telemetry can be configured via:
 
 1. **CLI Flags**:
-   - `--telemetry`: Enable telemetry (default: false)
+   - `--telemetry-enabled`: Enable telemetry (default: false)
    - `--telemetry-exporter`: Exporter type: `none`, `stdout`, `otlp` (default: none)
    - `--telemetry-endpoint`: OTLP endpoint (default: localhost:4317)
    - `--telemetry-insecure`: Use insecure connection for OTLP (default: true)
