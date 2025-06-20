@@ -276,27 +276,35 @@ The tool includes several smart features:
 
 - Go 1.23 or later
 
-### Makefile
+### Just
 
-A Makefile is provided with common development tasks:
+This project uses [just](https://github.com/casey/just) as a command runner. To see all available commands:
 
-- `make help`: Show available commands (default when running `make`).
-- `make build`: Build the CLI (outputs `bin/valet`).
-- `make test`: Run tests, generate `cover.out` and `cover.html`.
-- `make check-coverage`: Install and run `go-test-coverage` to enforce coverage thresholds defined in `.testcoverage.yml`.
-- `make clean`: Remove build artifacts (`bin/` and `valet`).
+```bash
+just
+```
 
-Make sure you have [GNU Make](https://www.gnu.org/software/make/) installed.
+Common commands:
+
+- `just build`: Build the CLI (outputs `bin/valet`)
+- `just test`: Run tests with coverage
+- `just check-coverage`: Check coverage against thresholds
+- `just clean`: Remove build artifacts
+- `just fmt`: Format code
+- `just lint`: Run linters
+- `just check`: Quick check - format, vet, and test
+
+To install just, see the [installation guide](https://github.com/casey/just#installation).
 
 ### Testing & Coverage
 
 The project uses [Testify](https://github.com/stretchr/testify) as its testing framework, with a comprehensive test suite that includes unit tests, integration tests, and benchmarks.
 
-You can use the Makefile to run tests and check coverage:
+You can use just to run tests and check coverage:
 
 ```bash
-make test
-make check-coverage
+just test
+just check-coverage
 ```
 
 To run the test suite:

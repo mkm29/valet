@@ -21,18 +21,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - `showVersion` - tests with mocked dependencies for error scenarios
   - `main` function - integration tests using subprocess execution
 - Fixed previously skipped test `TestRootCmd_DefaultContext` by properly isolating test environment
+- Added `justfile` for task automation with additional development commands:
+  - Development workflow commands (`watch`, `debug`, `example`)
+  - Release management (`release`, `release-dry-run`)
+  - Code quality tools (`lint`, `fmt`, `vet`, `audit`)
+  - Dependency management (`tidy`, `update-deps`)
 
 ### Changed
 
 - Test coverage improved from 51.9% to 62.7%
 - Updated test expectations to match actual implementation behavior
 - Enhanced test infrastructure to support testing of unexported functions
+- Replaced `Makefile` with `justfile` for better cross-platform compatibility and more features
+
+### Removed
+
+- Removed `Makefile` in favor of `justfile`
 
 ### Technical Notes
 
 - Internal tests use the same package to access unexported functions
 - Integration tests cover YAML/JSON to schema conversion, error handling, and complex data types
 - Some test adjustments needed to match actual CLI behavior and schema generation logic
+- The `justfile` provides more commands and better error handling than the previous Makefile
 
 ## [v0.2.3] - 2025-06-19
 
