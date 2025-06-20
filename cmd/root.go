@@ -1,14 +1,23 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/mkm29/valet/internal/config"
+	"github.com/mkm29/valet/internal/telemetry"
 	"github.com/spf13/cobra"
 )
 
-var cfg *config.Config
+var (
+	cfg *config.Config
+	tel *telemetry.Telemetry
+)
 
 func NewRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -25,6 +34,36 @@ func NewRootCmd() *cobra.Command {
 				}
 				cfg = c
 			}
+			
+			// Initialize telemetry if not already initialized
+			if tel == nil && cfg.Telemetry != nil {
+				ctx := context.Background()
+				t, err := telemetry.Initialize(ctx, cfg.Telemetry)
+				if err != nil {
+					// Log error but don't fail - telemetry is optional
+					if cfg.Debug {
+						log.Printf("Failed to initialize telemetry: %v\n", err)
+					}
+				} else {
+					tel = t
+					
+					// Set up graceful shutdown
+					go func() {
+						sigChan := make(chan os.Signal, 1)
+						signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+						<-sigChan
+						
+						shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+						defer cancel()
+						
+						if err := tel.Shutdown(shutdownCtx); err != nil {
+							log.Printf("Error shutting down telemetry: %v\n", err)
+						}
+						os.Exit(0)
+					}()
+				}
+			}
+			
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -52,6 +91,13 @@ func NewRootCmd() *cobra.Command {
 	cmd.PersistentFlags().StringP("overrides", "f", "", "overrides file (optional)")
 	cmd.PersistentFlags().StringP("output", "o", "values.schema.json", "output file (default: values.schema.json)")
 	cmd.PersistentFlags().BoolP("debug", "d", false, "enable debug logging")
+	
+	// Telemetry flags
+	cmd.PersistentFlags().Bool("telemetry", false, "enable telemetry")
+	cmd.PersistentFlags().String("telemetry-exporter", "none", "telemetry exporter type (none, stdout, otlp)")
+	cmd.PersistentFlags().String("telemetry-endpoint", "localhost:4317", "OTLP endpoint for telemetry")
+	cmd.PersistentFlags().Bool("telemetry-insecure", true, "use insecure connection for OTLP")
+	cmd.PersistentFlags().Float64("telemetry-sample-rate", 1.0, "trace sampling rate (0.0 to 1.0)")
 
 	// add subcommands
 	cmd.AddCommand(NewVersionCmd())
@@ -73,7 +119,9 @@ func initializeConfig(cmd *cobra.Command) (*config.Config, error) {
 		}
 	} else {
 		// No config file: start with empty config
-		c = &config.Config{}
+		c = &config.Config{
+			Telemetry: telemetry.DefaultConfig(),
+		}
 	}
 	// Override with CLI flags or defaults
 	// Context: default to value or override
@@ -94,10 +142,41 @@ func initializeConfig(cmd *cobra.Command) (*config.Config, error) {
 		dbg, _ := cmd.PersistentFlags().GetBool("debug")
 		c.Debug = dbg
 	}
+	
+	// Handle telemetry flags
+	if c.Telemetry == nil {
+		c.Telemetry = telemetry.DefaultConfig()
+	}
+	if cmd.PersistentFlags().Changed("telemetry") {
+		enabled, _ := cmd.PersistentFlags().GetBool("telemetry")
+		c.Telemetry.Enabled = enabled
+	}
+	if cmd.PersistentFlags().Changed("telemetry-exporter") {
+		exporter, _ := cmd.PersistentFlags().GetString("telemetry-exporter")
+		c.Telemetry.ExporterType = exporter
+	}
+	if cmd.PersistentFlags().Changed("telemetry-endpoint") {
+		endpoint, _ := cmd.PersistentFlags().GetString("telemetry-endpoint")
+		c.Telemetry.OTLPEndpoint = endpoint
+	}
+	if cmd.PersistentFlags().Changed("telemetry-insecure") {
+		insecure, _ := cmd.PersistentFlags().GetBool("telemetry-insecure")
+		c.Telemetry.Insecure = insecure
+	}
+	if cmd.PersistentFlags().Changed("telemetry-sample-rate") {
+		rate, _ := cmd.PersistentFlags().GetFloat64("telemetry-sample-rate")
+		c.Telemetry.SampleRate = rate
+	}
+	
 	if c.Debug {
 		log.Printf("Config: %+v\n", c)
 	}
 	return c, nil
+}
+
+// GetTelemetry returns the global telemetry instance
+func GetTelemetry() *telemetry.Telemetry {
+	return tel
 }
 
 // (bindFlags removed; flags now override config file values directly)

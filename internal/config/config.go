@@ -4,30 +4,41 @@ import (
    "fmt"
    "os"
    "gopkg.in/yaml.v2"
+   "github.com/mkm29/valet/internal/telemetry"
 )
 
 // Config holds the configuration for the application
-// Config holds the configuration for the application
 type Config struct {
-   Debug     bool   `yaml:"debug"`
-   Context   string `yaml:"context"`
-   Overrides string `yaml:"overrides"`
-   Output    string `yaml:"output"`
+   Debug     bool                `yaml:"debug"`
+   Context   string             `yaml:"context"`
+   Overrides string             `yaml:"overrides"`
+   Output    string             `yaml:"output"`
+   Telemetry *telemetry.Config  `yaml:"telemetry"`
 }
 
 // LoadConfig reads configuration from a YAML file (if it exists).
 // If the file is not found, returns an empty Config without error.
 func LoadConfig(path string) (*Config, error) {
+   cfg := &Config{
+       Telemetry: telemetry.DefaultConfig(),
+   }
+   
    data, err := os.ReadFile(path)
    if err != nil {
        if os.IsNotExist(err) {
-           return &Config{}, nil
+           return cfg, nil
        }
        return nil, err
    }
-   var cfg Config
-   if err := yaml.Unmarshal(data, &cfg); err != nil {
+   
+   if err := yaml.Unmarshal(data, cfg); err != nil {
        return nil, fmt.Errorf("failed to parse config: %w", err)
    }
-   return &cfg, nil
+   
+   // Ensure telemetry config is not nil
+   if cfg.Telemetry == nil {
+       cfg.Telemetry = telemetry.DefaultConfig()
+   }
+   
+   return cfg, nil
 }

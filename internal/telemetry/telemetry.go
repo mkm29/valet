@@ -1,0 +1,313 @@
+package telemetry
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
+	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/propagation"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	oteltrace "go.opentelemetry.io/otel/trace"
+)
+
+const (
+	// ServiceName is the name of the service for telemetry
+	ServiceName = "valet"
+	// ServiceVersion is the version of the service
+	ServiceVersion = "0.1.0"
+)
+
+// Config holds the telemetry configuration
+type Config struct {
+	// Enabled determines if telemetry is enabled
+	Enabled bool
+	// ServiceName overrides the default service name
+	ServiceName string
+	// ServiceVersion overrides the default service version
+	ServiceVersion string
+	// ExporterType determines the exporter type (otlp, stdout, none)
+	ExporterType string
+	// OTLPEndpoint is the OTLP endpoint for traces and metrics
+	OTLPEndpoint string
+	// Insecure determines if the OTLP connection should be insecure
+	Insecure bool
+	// Headers are additional headers to send with OTLP requests
+	Headers map[string]string
+	// SampleRate is the trace sampling rate (0.0 to 1.0)
+	SampleRate float64
+}
+
+// DefaultConfig returns the default telemetry configuration
+func DefaultConfig() *Config {
+	return &Config{
+		Enabled:        false,
+		ServiceName:    ServiceName,
+		ServiceVersion: ServiceVersion,
+		ExporterType:   "none",
+		OTLPEndpoint:   "localhost:4317",
+		Insecure:       true,
+		Headers:        make(map[string]string),
+		SampleRate:     1.0,
+	}
+}
+
+// Telemetry holds the telemetry providers and instruments
+type Telemetry struct {
+	config         *Config
+	tracerProvider *sdktrace.TracerProvider
+	meterProvider  *sdkmetric.MeterProvider
+	tracer         oteltrace.Tracer
+	meter          metric.Meter
+	logger         *Logger
+}
+
+// Initialize initializes the telemetry providers
+func Initialize(ctx context.Context, cfg *Config) (*Telemetry, error) {
+	if cfg == nil {
+		cfg = DefaultConfig()
+	}
+
+	if !cfg.Enabled {
+		return &Telemetry{config: cfg}, nil
+	}
+
+	// Create resource
+	res, err := newResource(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create resource: %w", err)
+	}
+
+	// Initialize tracer provider
+	tracerProvider, err := initTracerProvider(ctx, cfg, res)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize tracer provider: %w", err)
+	}
+
+	// Initialize meter provider
+	meterProvider, err := initMeterProvider(ctx, cfg, res)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize meter provider: %w", err)
+	}
+
+	// Set global providers
+	otel.SetTracerProvider(tracerProvider)
+	otel.SetMeterProvider(meterProvider)
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+
+	// Create structured logger
+	logger := NewLogger(false) // Debug will be controlled by the caller
+	logger.SetDefault()
+	
+	// Create telemetry instance
+	t := &Telemetry{
+		config:         cfg,
+		tracerProvider: tracerProvider,
+		meterProvider:  meterProvider,
+		tracer:         tracerProvider.Tracer(cfg.ServiceName),
+		meter:          meterProvider.Meter(cfg.ServiceName),
+		logger:         logger,
+	}
+
+	return t, nil
+}
+
+// Shutdown shuts down the telemetry providers
+func (t *Telemetry) Shutdown(ctx context.Context) error {
+	if t == nil || !t.config.Enabled {
+		return nil
+	}
+
+	var errs []error
+
+	if t.tracerProvider != nil {
+		if err := t.tracerProvider.Shutdown(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("failed to shutdown tracer provider: %w", err))
+		}
+	}
+
+	if t.meterProvider != nil {
+		if err := t.meterProvider.Shutdown(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("failed to shutdown meter provider: %w", err))
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("errors during shutdown: %v", errs)
+	}
+
+	return nil
+}
+
+// Tracer returns the tracer
+func (t *Telemetry) Tracer() oteltrace.Tracer {
+	if t == nil || t.tracer == nil {
+		return otel.Tracer(ServiceName)
+	}
+	return t.tracer
+}
+
+// Meter returns the meter
+func (t *Telemetry) Meter() metric.Meter {
+	if t == nil || t.meter == nil {
+		return otel.Meter(ServiceName)
+	}
+	return t.meter
+}
+
+// IsEnabled returns true if telemetry is enabled
+func (t *Telemetry) IsEnabled() bool {
+	return t != nil && t.config != nil && t.config.Enabled
+}
+
+// Logger returns the structured logger
+func (t *Telemetry) Logger() *Logger {
+	if t == nil || t.logger == nil {
+		// Return a default logger if telemetry is not initialized
+		return NewLogger(false)
+	}
+	return t.logger
+}
+
+// newResource creates a new resource with service information
+func newResource(cfg *Config) (*resource.Resource, error) {
+	hostname, _ := os.Hostname()
+	
+	return resource.Merge(
+		resource.Default(),
+		resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceName(cfg.ServiceName),
+			semconv.ServiceVersion(cfg.ServiceVersion),
+			attribute.String("host.name", hostname),
+		),
+	)
+}
+
+// initTracerProvider initializes the tracer provider
+func initTracerProvider(ctx context.Context, cfg *Config, res *resource.Resource) (*sdktrace.TracerProvider, error) {
+	var exporter sdktrace.SpanExporter
+	var err error
+
+	switch cfg.ExporterType {
+	case "otlp":
+		opts := []otlptracegrpc.Option{
+			otlptracegrpc.WithEndpoint(cfg.OTLPEndpoint),
+		}
+		if cfg.Insecure {
+			opts = append(opts, otlptracegrpc.WithInsecure())
+		}
+		if len(cfg.Headers) > 0 {
+			opts = append(opts, otlptracegrpc.WithHeaders(cfg.Headers))
+		}
+		exporter, err = otlptracegrpc.New(ctx, opts...)
+	case "stdout":
+		exporter, err = stdouttrace.New(stdouttrace.WithPrettyPrint())
+	default:
+		// No exporter (noop)
+		return sdktrace.NewTracerProvider(
+			sdktrace.WithResource(res),
+			sdktrace.WithSampler(sdktrace.TraceIDRatioBased(cfg.SampleRate)),
+		), nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
+	}
+
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exporter,
+			sdktrace.WithBatchTimeout(5*time.Second),
+		),
+		sdktrace.WithResource(res),
+		sdktrace.WithSampler(sdktrace.TraceIDRatioBased(cfg.SampleRate)),
+	)
+
+	return tp, nil
+}
+
+// initMeterProvider initializes the meter provider
+func initMeterProvider(ctx context.Context, cfg *Config, res *resource.Resource) (*sdkmetric.MeterProvider, error) {
+	var exporter sdkmetric.Exporter
+	var err error
+
+	switch cfg.ExporterType {
+	case "otlp":
+		opts := []otlpmetricgrpc.Option{
+			otlpmetricgrpc.WithEndpoint(cfg.OTLPEndpoint),
+		}
+		if cfg.Insecure {
+			opts = append(opts, otlpmetricgrpc.WithInsecure())
+		}
+		if len(cfg.Headers) > 0 {
+			opts = append(opts, otlpmetricgrpc.WithHeaders(cfg.Headers))
+		}
+		exporter, err = otlpmetricgrpc.New(ctx, opts...)
+	case "stdout":
+		exporter, err = stdoutmetric.New()
+	default:
+		// No exporter (noop)
+		return sdkmetric.NewMeterProvider(
+			sdkmetric.WithResource(res),
+		), nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create metric exporter: %w", err)
+	}
+
+	mp := sdkmetric.NewMeterProvider(
+		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exporter,
+			sdkmetric.WithInterval(30*time.Second),
+		)),
+		sdkmetric.WithResource(res),
+	)
+
+	return mp, nil
+}
+
+// StartSpan starts a new span
+func (t *Telemetry) StartSpan(ctx context.Context, name string, opts ...oteltrace.SpanStartOption) (context.Context, oteltrace.Span) {
+	if t == nil || !t.IsEnabled() {
+		return ctx, oteltrace.SpanFromContext(ctx)
+	}
+	return t.tracer.Start(ctx, name, opts...)
+}
+
+// RecordError records an error on the span
+func RecordError(ctx context.Context, err error, opts ...oteltrace.EventOption) {
+	if err == nil {
+		return
+	}
+	span := oteltrace.SpanFromContext(ctx)
+	if span.IsRecording() {
+		span.RecordError(err, opts...)
+	}
+}
+
+// SetStatus sets the status of the span
+func SetStatus(ctx context.Context, code codes.Code, description string) {
+	span := oteltrace.SpanFromContext(ctx)
+	if span.IsRecording() {
+		span.SetStatus(code, description)
+	}
+}
+
+// AddAttributes adds attributes to the span
+func AddAttributes(ctx context.Context, attrs ...attribute.KeyValue) {
+	span := oteltrace.SpanFromContext(ctx)
+	if span.IsRecording() {
+		span.SetAttributes(attrs...)
+	}
+}
