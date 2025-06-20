@@ -2,6 +2,8 @@ package telemetry
 
 import (
 	"context"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -93,6 +95,34 @@ func errorType(err error) string {
 	return "generic"
 }
 
+// sanitizePath removes sensitive information from file paths
+// It returns only the filename and immediate parent directory
+func sanitizePath(path string) string {
+	if path == "" {
+		return ""
+	}
+	
+	// Clean the path
+	path = filepath.Clean(path)
+	
+	// Remove any home directory references
+	if strings.HasPrefix(path, "~/") {
+		path = strings.TrimPrefix(path, "~/")
+	}
+	
+	// Get the base name and parent directory
+	dir := filepath.Dir(path)
+	base := filepath.Base(path)
+	
+	// If we have a parent directory, include just the immediate parent
+	if dir != "." && dir != "/" && dir != "" {
+		parentDir := filepath.Base(dir)
+		return filepath.Join(parentDir, base)
+	}
+	
+	return base
+}
+
 // WithCommandSpan wraps a command execution with a span and metrics
 func WithCommandSpan(ctx context.Context, t *Telemetry, command string, fn func(context.Context) error) error {
 	start := time.Now()
@@ -182,7 +212,7 @@ func (m *FileOperationMetrics) RecordFileRead(ctx context.Context, path string, 
 	}
 
 	attrs := []attribute.KeyValue{
-		attribute.String("path", path),
+		attribute.String("path", sanitizePath(path)),
 		attribute.Bool("error", err != nil),
 	}
 
@@ -200,7 +230,7 @@ func (m *FileOperationMetrics) RecordFileWrite(ctx context.Context, path string,
 	}
 
 	attrs := []attribute.KeyValue{
-		attribute.String("path", path),
+		attribute.String("path", sanitizePath(path)),
 		attribute.Bool("error", err != nil),
 	}
 

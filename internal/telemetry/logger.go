@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"math"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -144,8 +145,10 @@ func (l *Logger) addSpanEvent(ctx context.Context, level zapcore.Level, msg stri
 			attrs = append(attrs, attribute.String("log."+field.Key, field.String))
 		case zapcore.Int64Type, zapcore.Int32Type, zapcore.Int16Type, zapcore.Int8Type:
 			attrs = append(attrs, attribute.Int64("log."+field.Key, field.Integer))
-		case zapcore.Float64Type, zapcore.Float32Type:
-			attrs = append(attrs, attribute.Float64("log."+field.Key, float64(field.Integer)))
+		case zapcore.Float64Type:
+			attrs = append(attrs, attribute.Float64("log."+field.Key, math.Float64frombits(uint64(field.Integer))))
+		case zapcore.Float32Type:
+			attrs = append(attrs, attribute.Float64("log."+field.Key, float64(math.Float32frombits(uint32(field.Integer)))))
 		case zapcore.BoolType:
 			attrs = append(attrs, attribute.Bool("log."+field.Key, field.Integer == 1))
 		case zapcore.ErrorType:

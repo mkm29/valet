@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [v0.2.4] - 2025-06-19
 
 ### Changed
 
@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Integrated zap with OpenTelemetry to include trace/span IDs in logs
   - All logs are also recorded as span events for complete observability
   - Removed dependency on standard library `log` package
+- Changed default value of `--telemetry-insecure` flag from `true` to `false` for better security
 
 ### Added
 
@@ -30,6 +31,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - OpenTelemetry Collector configuration example (`otel-config.yaml`)
   - Sample Helm chart demonstrating all supported patterns
   - Detailed README explaining how to use the examples
+- Added comprehensive test coverage for the telemetry package:
+  - Tests for telemetry initialization and shutdown
+  - Tests for structured logger with OpenTelemetry integration
+  - Tests for metrics recording (command, file operations, schema generation)
+  - Tests for helper functions including path sanitization
+  - Achieved significant coverage improvement for telemetry functionality
+- Added path sanitization for file paths in telemetry attributes to protect sensitive information
+
+### Fixed
+
+- Fixed telemetry flag naming inconsistency where `--telemetry-enabled` flag was incorrectly referenced as `--telemetry` in code
+- Fixed race condition in signal handler by moving signal handling to `main.go` with proper context cancellation
+- Fixed float64 conversion bug in logger where float values were incorrectly converted using integer field
+- Improved error handling in telemetry shutdown using `errors.Join` for better error aggregation
+- Fixed telemetry shutdown to properly use `PersistentPostRunE` ensuring cleanup happens after command execution
+
+### Security
+
+- File paths in telemetry attributes are now sanitized to only include filename and immediate parent directory
+- OTLP connections now default to secure (TLS) mode, requiring explicit opt-in for insecure connections
 
 ## [v0.2.3] - 2025-06-19
 

@@ -3,9 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/mkm29/valet/internal/config"
@@ -37,7 +34,7 @@ func NewRootCmd() *cobra.Command {
 
 			// Initialize telemetry if not already initialized
 			if tel == nil && cfg.Telemetry != nil {
-				ctx := context.Background()
+				ctx := cmd.Context()
 				t, err := telemetry.Initialize(ctx, cfg.Telemetry)
 				if err != nil {
 					// Log error but don't fail - telemetry is optional
@@ -46,24 +43,22 @@ func NewRootCmd() *cobra.Command {
 					}
 				} else {
 					tel = t
-
-					// Set up graceful shutdown
-					go func() {
-						sigChan := make(chan os.Signal, 1)
-						signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-						<-sigChan
-
-						shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-						defer cancel()
-
-						if err := tel.Shutdown(shutdownCtx); err != nil {
-							zap.L().Error("Error shutting down telemetry", zap.Error(err))
-						}
-						os.Exit(0)
-					}()
 				}
 			}
 
+			return nil
+		},
+		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
+			// Shutdown telemetry if it was initialized
+			if tel != nil {
+				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				
+				if err := tel.Shutdown(shutdownCtx); err != nil {
+					zap.L().Error("Error shutting down telemetry", zap.Error(err))
+					// Don't return error - telemetry shutdown failure shouldn't fail the command
+				}
+			}
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -96,7 +91,7 @@ func NewRootCmd() *cobra.Command {
 	cmd.PersistentFlags().Bool("telemetry-enabled", false, "enable telemetry")
 	cmd.PersistentFlags().String("telemetry-exporter", "none", "telemetry exporter type (none, stdout, otlp)")
 	cmd.PersistentFlags().String("telemetry-endpoint", "localhost:4317", "OTLP endpoint for telemetry")
-	cmd.PersistentFlags().Bool("telemetry-insecure", true, "use insecure connection for OTLP")
+	cmd.PersistentFlags().Bool("telemetry-insecure", false, "use insecure connection for OTLP")
 	cmd.PersistentFlags().Float64("telemetry-sample-rate", 1.0, "trace sampling rate (0.0 to 1.0)")
 
 	// add subcommands
@@ -153,8 +148,8 @@ func initializeConfig(cmd *cobra.Command) (*config.Config, error) {
 		c.Telemetry = config.NewTelemetryConfig()
 	}
 
-	if cmd.PersistentFlags().Changed("telemetry") {
-		enabled, _ := cmd.PersistentFlags().GetBool("telemetry")
+	if cmd.PersistentFlags().Changed("telemetry-enabled") {
+		enabled, _ := cmd.PersistentFlags().GetBool("telemetry-enabled")
 		c.Telemetry.Enabled = enabled
 	}
 	if cmd.PersistentFlags().Changed("telemetry-exporter") {

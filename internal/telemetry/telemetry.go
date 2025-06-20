@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -114,7 +115,7 @@ func (t *Telemetry) Shutdown(ctx context.Context) error {
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("errors during shutdown: %v", errs)
+		return errors.Join(errs...)
 	}
 
 	return nil

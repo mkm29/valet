@@ -76,6 +76,7 @@ graph TD
     RootCmd --> VersionCmd[cmd/version.go]
     GenerateCmd --> Config[internal/config]
     GenerateCmd --> |schema generation| SchemaGen[Schema Generator]
+    GenerateCmd --> Telemetry[internal/telemetry]
     Config --> |config loading| YAML[YAML Config Files]
 
     subgraph "Core Functionality"
@@ -98,15 +99,26 @@ graph TD
         YAML
     end
 
+    subgraph "Observability"
+        Telemetry --> Tracing[OpenTelemetry Tracing]
+        Telemetry --> Metrics[Metrics Collection]
+        Telemetry --> Logging[Structured Logging]
+        Tracing --> OTLP[OTLP Exporter]
+        Metrics --> OTLP
+        Logging --> |zap integration| Tracing
+    end
+
     classDef core fill:#c678dd,stroke:#61afef,stroke-width:1px,color:#efefef;
     classDef cli fill:#61afef,stroke:#56b6c2,stroke-width:1px,color:#efefef;
     classDef config fill:#98c379,stroke:#56b6c2,stroke-width:1px,color:#282c34;
     classDef fang fill:#e06c75,stroke:#56b6c2,stroke-width:2px,color:#efefef;
+    classDef telemetry fill:#56b6c2,stroke:#61afef,stroke-width:1px,color:#efefef;
 
     class SchemaGen,TypeInference,ComponentHandling,OverrideMerging core;
     class Main,Cmd,RootCmd,GenerateCmd,VersionCmd cli;
     class Config,YAML config;
     class Fang fang;
+    class Telemetry,Tracing,Metrics,Logging,OTLP telemetry;
 ```
 
 ## Installation
@@ -142,7 +154,7 @@ Global options:
   --telemetry-enabled           enable telemetry
   --telemetry-exporter string   telemetry exporter type (none, stdout, otlp) (default: none)
   --telemetry-endpoint string   OTLP endpoint for telemetry (default: localhost:4317)
-  --telemetry-insecure          use insecure connection for OTLP (default: true)
+  --telemetry-insecure          use insecure connection for OTLP (default: false)
   --telemetry-sample-rate float trace sampling rate (0.0 to 1.0) (default: 1.0)
 
 Generate flags:
@@ -238,7 +250,7 @@ Telemetry can be configured via:
    - `--telemetry-enabled`: Enable telemetry (default: false)
    - `--telemetry-exporter`: Exporter type: `none`, `stdout`, `otlp` (default: none)
    - `--telemetry-endpoint`: OTLP endpoint (default: localhost:4317)
-   - `--telemetry-insecure`: Use insecure connection for OTLP (default: true)
+   - `--telemetry-insecure`: Use insecure connection for OTLP (default: false for better security)
    - `--telemetry-sample-rate`: Trace sampling rate 0.0-1.0 (default: 1.0)
 
 2. **Configuration File** (`.valet.yaml`):
@@ -250,7 +262,7 @@ telemetry:
   serviceVersion: 0.1.0
   exporterType: otlp
   otlpEndpoint: localhost:4317
-  insecure: true
+  insecure: false
   sampleRate: 1.0
   headers:
     api-key: your-api-key
@@ -302,6 +314,8 @@ The following metrics are collected:
   - `valet.schema.generations`: Total schema generations (counter)
   - `valet.schema.fields`: Number of fields in schemas (histogram)
   - `valet.schema.generation_duration`: Schema generation time (histogram)
+
+All file path attributes in metrics are sanitized to protect sensitive information - only the filename and immediate parent directory are included in telemetry data.
 
 #### Structured Logging
 

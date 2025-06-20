@@ -57,17 +57,17 @@
 				
 				<option value="file0">github.com/mkm29/valet/cmd/generate.go (53.7%)</option>
 				
-				<option value="file1">github.com/mkm29/valet/cmd/root.go (68.5%)</option>
+				<option value="file1">github.com/mkm29/valet/cmd/root.go (68.6%)</option>
 				
 				<option value="file2">github.com/mkm29/valet/cmd/version.go (50.0%)</option>
 				
 				<option value="file3">github.com/mkm29/valet/internal/config/config.go (91.7%)</option>
 				
-				<option value="file4">github.com/mkm29/valet/internal/telemetry/helpers.go (16.5%)</option>
+				<option value="file4">github.com/mkm29/valet/internal/telemetry/helpers.go (89.6%)</option>
 				
-				<option value="file5">github.com/mkm29/valet/internal/telemetry/logger.go (0.0%)</option>
+				<option value="file5">github.com/mkm29/valet/internal/telemetry/logger.go (58.0%)</option>
 				
-				<option value="file6">github.com/mkm29/valet/internal/telemetry/telemetry.go (9.6%)</option>
+				<option value="file6">github.com/mkm29/valet/internal/telemetry/telemetry.go (68.1%)</option>
 				
 				<option value="file7">github.com/mkm29/valet/main.go (0.0%)</option>
 				
@@ -849,9 +849,6 @@ func NewGenerateCmd() *cobra.Command <span class="cov7" title="10">{
 import (
         "context"
         "fmt"
-        "os"
-        "os/signal"
-        "syscall"
         "time"
 
         "github.com/mkm29/valet/internal/config"
@@ -883,7 +880,7 @@ func NewRootCmd() *cobra.Command <span class="cov6" title="4">{
 
                         // Initialize telemetry if not already initialized
                         <span class="cov5" title="3">if tel == nil &amp;&amp; cfg.Telemetry != nil </span><span class="cov1" title="1">{
-                                ctx := context.Background()
+                                ctx := cmd.Context()
                                 t, err := telemetry.Initialize(ctx, cfg.Telemetry)
                                 if err != nil </span><span class="cov0" title="0">{
                                         // Log error but don't fail - telemetry is optional
@@ -892,25 +889,23 @@ func NewRootCmd() *cobra.Command <span class="cov6" title="4">{
                                         }</span>
                                 } else<span class="cov1" title="1"> {
                                         tel = t
-
-                                        // Set up graceful shutdown
-                                        go func() </span><span class="cov1" title="1">{
-                                                sigChan := make(chan os.Signal, 1)
-                                                signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-                                                &lt;-sigChan
-
-                                                shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-                                                defer cancel()
-
-                                                if err := tel.Shutdown(shutdownCtx); err != nil </span><span class="cov0" title="0">{
-                                                        zap.L().Error("Error shutting down telemetry", zap.Error(err))
-                                                }</span>
-                                                <span class="cov0" title="0">os.Exit(0)</span>
-                                        }()
-                                }
+                                }</span>
                         }
 
                         <span class="cov5" title="3">return nil</span>
+                },
+                PersistentPostRunE: func(cmd *cobra.Command, args []string) error <span class="cov3" title="2">{
+                        // Shutdown telemetry if it was initialized
+                        if tel != nil </span><span class="cov3" title="2">{
+                                shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+                                defer cancel()
+                                
+                                if err := tel.Shutdown(shutdownCtx); err != nil </span><span class="cov0" title="0">{
+                                        zap.L().Error("Error shutting down telemetry", zap.Error(err))
+                                        // Don't return error - telemetry shutdown failure shouldn't fail the command
+                                }</span>
+                        }
+                        <span class="cov3" title="2">return nil</span>
                 },
                 RunE: func(cmd *cobra.Command, args []string) error <span class="cov5" title="3">{
                         // Default action: delegate to Generate
@@ -942,7 +937,7 @@ func NewRootCmd() *cobra.Command <span class="cov6" title="4">{
         cmd.PersistentFlags().Bool("telemetry-enabled", false, "enable telemetry")
         cmd.PersistentFlags().String("telemetry-exporter", "none", "telemetry exporter type (none, stdout, otlp)")
         cmd.PersistentFlags().String("telemetry-endpoint", "localhost:4317", "OTLP endpoint for telemetry")
-        cmd.PersistentFlags().Bool("telemetry-insecure", true, "use insecure connection for OTLP")
+        cmd.PersistentFlags().Bool("telemetry-insecure", false, "use insecure connection for OTLP")
         cmd.PersistentFlags().Float64("telemetry-sample-rate", 1.0, "trace sampling rate (0.0 to 1.0)")
 
         // add subcommands
@@ -969,7 +964,7 @@ func initializeConfig(cmd *cobra.Command) (*config.Config, error) <span class="c
                         Telemetry: config.NewTelemetryConfig(),
                 }
         }</span>
-        
+
         // Always set the service version from build info, regardless of config source
         <span class="cov1" title="1">if c.Telemetry != nil </span><span class="cov1" title="1">{
                 c.Telemetry.ServiceVersion = GetBuildVersion()
@@ -998,9 +993,9 @@ func initializeConfig(cmd *cobra.Command) (*config.Config, error) <span class="c
         <span class="cov1" title="1">if c.Telemetry == nil </span><span class="cov0" title="0">{
                 c.Telemetry = config.NewTelemetryConfig()
         }</span>
-        
-        <span class="cov1" title="1">if cmd.PersistentFlags().Changed("telemetry") </span><span class="cov0" title="0">{
-                enabled, _ := cmd.PersistentFlags().GetBool("telemetry")
+
+        <span class="cov1" title="1">if cmd.PersistentFlags().Changed("telemetry-enabled") </span><span class="cov0" title="0">{
+                enabled, _ := cmd.PersistentFlags().GetBool("telemetry-enabled")
                 c.Telemetry.Enabled = enabled
         }</span>
         <span class="cov1" title="1">if cmd.PersistentFlags().Changed("telemetry-exporter") </span><span class="cov0" title="0">{
@@ -1065,12 +1060,12 @@ func GetBuildVersion() string <span class="cov3" title="3">{
         if err != nil </span><span class="cov0" title="0">{
                 return "development"
         }</span>
-        
+
         // If we have a proper version, use it
         <span class="cov3" title="3">if info.Main.Version != "" &amp;&amp; info.Main.Version != "(devel)" </span><span class="cov0" title="0">{
                 return info.Main.Version
         }</span>
-        
+
         // Otherwise, try to use the VCS revision
         <span class="cov3" title="3">for _, setting := range info.Settings </span><span class="cov10" title="36">{
                 if setting.Key == "vcs.revision" &amp;&amp; setting.Value != "" </span><span class="cov0" title="0">{
@@ -1081,7 +1076,7 @@ func GetBuildVersion() string <span class="cov3" title="3">{
                         <span class="cov0" title="0">return setting.Value</span>
                 }
         }
-        
+
         <span class="cov3" title="3">return "development"</span>
 }
 
@@ -1188,6 +1183,8 @@ func LoadConfig(path string) (*Config, error) <span class="cov10" title="8">{
 
 import (
         "context"
+        "path/filepath"
+        "strings"
         "time"
 
         "go.opentelemetry.io/otel/attribute"
@@ -1204,12 +1201,12 @@ type CommandMetrics struct {
 }
 
 // NewCommandMetrics creates metrics for command execution
-func (t *Telemetry) NewCommandMetrics() (*CommandMetrics, error) <span class="cov0" title="0">{
+func (t *Telemetry) NewCommandMetrics() (*CommandMetrics, error) <span class="cov1" title="1">{
         if t == nil || !t.IsEnabled() </span><span class="cov0" title="0">{
                 return &amp;CommandMetrics{}, nil
         }</span>
 
-        <span class="cov0" title="0">meter := t.Meter()
+        <span class="cov1" title="1">meter := t.Meter()
 
         executionCounter, err := meter.Int64Counter(
                 "valet.command.executions",
@@ -1220,7 +1217,7 @@ func (t *Telemetry) NewCommandMetrics() (*CommandMetrics, error) <span class="co
                 return nil, err
         }</span>
 
-        <span class="cov0" title="0">durationHistogram, err := meter.Float64Histogram(
+        <span class="cov1" title="1">durationHistogram, err := meter.Float64Histogram(
                 "valet.command.duration",
                 metric.WithDescription("Command execution duration"),
                 metric.WithUnit("s"),
@@ -1229,7 +1226,7 @@ func (t *Telemetry) NewCommandMetrics() (*CommandMetrics, error) <span class="co
                 return nil, err
         }</span>
 
-        <span class="cov0" title="0">errorCounter, err := meter.Int64Counter(
+        <span class="cov1" title="1">errorCounter, err := meter.Int64Counter(
                 "valet.command.errors",
                 metric.WithDescription("Total number of command errors"),
                 metric.WithUnit("1"),
@@ -1238,7 +1235,7 @@ func (t *Telemetry) NewCommandMetrics() (*CommandMetrics, error) <span class="co
                 return nil, err
         }</span>
 
-        <span class="cov0" title="0">return &amp;CommandMetrics{
+        <span class="cov1" title="1">return &amp;CommandMetrics{
                 ExecutionCounter:  executionCounter,
                 DurationHistogram: durationHistogram,
                 ErrorCounter:      errorCounter,
@@ -1246,41 +1243,69 @@ func (t *Telemetry) NewCommandMetrics() (*CommandMetrics, error) <span class="co
 }
 
 // RecordCommandExecution records command execution metrics
-func (m *CommandMetrics) RecordCommandExecution(ctx context.Context, command string, duration time.Duration, err error) <span class="cov0" title="0">{
-        if m == nil </span><span class="cov0" title="0">{
+func (m *CommandMetrics) RecordCommandExecution(ctx context.Context, command string, duration time.Duration, err error) <span class="cov4" title="3">{
+        if m == nil </span><span class="cov1" title="1">{
                 return
         }</span>
 
-        <span class="cov0" title="0">attrs := []attribute.KeyValue{
+        <span class="cov3" title="2">attrs := []attribute.KeyValue{
                 attribute.String("command", command),
                 attribute.Bool("error", err != nil),
         }
 
-        if m.ExecutionCounter != nil </span><span class="cov0" title="0">{
+        if m.ExecutionCounter != nil </span><span class="cov3" title="2">{
                 m.ExecutionCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
         }</span>
 
-        <span class="cov0" title="0">if m.DurationHistogram != nil </span><span class="cov0" title="0">{
+        <span class="cov3" title="2">if m.DurationHistogram != nil </span><span class="cov3" title="2">{
                 m.DurationHistogram.Record(ctx, duration.Seconds(), metric.WithAttributes(attrs...))
         }</span>
 
-        <span class="cov0" title="0">if err != nil &amp;&amp; m.ErrorCounter != nil </span><span class="cov0" title="0">{
+        <span class="cov3" title="2">if err != nil &amp;&amp; m.ErrorCounter != nil </span><span class="cov1" title="1">{
                 errorAttrs := append(attrs, attribute.String("error.type", errorType(err)))
                 m.ErrorCounter.Add(ctx, 1, metric.WithAttributes(errorAttrs...))
         }</span>
 }
 
 // errorType returns a simplified error type for metrics
-func errorType(err error) string <span class="cov0" title="0">{
-        if err == nil </span><span class="cov0" title="0">{
+func errorType(err error) string <span class="cov4" title="3">{
+        if err == nil </span><span class="cov1" title="1">{
                 return ""
         }</span>
         // You can add more specific error type detection here
-        <span class="cov0" title="0">return "generic"</span>
+        <span class="cov3" title="2">return "generic"</span>
+}
+
+// sanitizePath removes sensitive information from file paths
+// It returns only the filename and immediate parent directory
+func sanitizePath(path string) string <span class="cov8" title="11">{
+        if path == "" </span><span class="cov1" title="1">{
+                return ""
+        }</span>
+        
+        // Clean the path
+        <span class="cov8" title="10">path = filepath.Clean(path)
+        
+        // Remove any home directory references
+        if strings.HasPrefix(path, "~/") </span><span class="cov1" title="1">{
+                path = strings.TrimPrefix(path, "~/")
+        }</span>
+        
+        // Get the base name and parent directory
+        <span class="cov8" title="10">dir := filepath.Dir(path)
+        base := filepath.Base(path)
+        
+        // If we have a parent directory, include just the immediate parent
+        if dir != "." &amp;&amp; dir != "/" &amp;&amp; dir != "" </span><span class="cov7" title="7">{
+                parentDir := filepath.Base(dir)
+                return filepath.Join(parentDir, base)
+        }</span>
+        
+        <span class="cov4" title="3">return base</span>
 }
 
 // WithCommandSpan wraps a command execution with a span and metrics
-func WithCommandSpan(ctx context.Context, t *Telemetry, command string, fn func(context.Context) error) error <span class="cov0" title="0">{
+func WithCommandSpan(ctx context.Context, t *Telemetry, command string, fn func(context.Context) error) error <span class="cov3" title="2">{
         start := time.Now()
 
         // Start span
@@ -1298,14 +1323,14 @@ func WithCommandSpan(ctx context.Context, t *Telemetry, command string, fn func(
         duration := time.Since(start)
 
         // Set span status and attributes
-        if err != nil </span><span class="cov0" title="0">{
+        if err != nil </span><span class="cov1" title="1">{
                 span.RecordError(err)
                 span.SetStatus(codes.Error, err.Error())
-        }</span> else<span class="cov0" title="0"> {
+        }</span> else<span class="cov1" title="1"> {
                 span.SetStatus(codes.Ok, "")
         }</span>
 
-        <span class="cov0" title="0">span.SetAttributes(
+        <span class="cov3" title="2">span.SetAttributes(
                 attribute.Float64("duration.seconds", duration.Seconds()),
         )
 
@@ -1320,12 +1345,12 @@ type FileOperationMetrics struct {
 }
 
 // NewFileOperationMetrics creates metrics for file operations
-func (t *Telemetry) NewFileOperationMetrics() (*FileOperationMetrics, error) <span class="cov10" title="15">{
-        if t == nil || !t.IsEnabled() </span><span class="cov10" title="15">{
+func (t *Telemetry) NewFileOperationMetrics() (*FileOperationMetrics, error) <span class="cov10" title="16">{
+        if t == nil || !t.IsEnabled() </span><span class="cov9" title="15">{
                 return &amp;FileOperationMetrics{}, nil
         }</span>
 
-        <span class="cov0" title="0">meter := t.Meter()
+        <span class="cov1" title="1">meter := t.Meter()
 
         readCounter, err := meter.Int64Counter(
                 "valet.file.reads",
@@ -1336,7 +1361,7 @@ func (t *Telemetry) NewFileOperationMetrics() (*FileOperationMetrics, error) <sp
                 return nil, err
         }</span>
 
-        <span class="cov0" title="0">writeCounter, err := meter.Int64Counter(
+        <span class="cov1" title="1">writeCounter, err := meter.Int64Counter(
                 "valet.file.writes",
                 metric.WithDescription("Total number of file write operations"),
                 metric.WithUnit("1"),
@@ -1345,7 +1370,7 @@ func (t *Telemetry) NewFileOperationMetrics() (*FileOperationMetrics, error) <sp
                 return nil, err
         }</span>
 
-        <span class="cov0" title="0">sizeHistogram, err := meter.Int64Histogram(
+        <span class="cov1" title="1">sizeHistogram, err := meter.Int64Histogram(
                 "valet.file.size",
                 metric.WithDescription("File size distribution"),
                 metric.WithUnit("By"),
@@ -1354,7 +1379,7 @@ func (t *Telemetry) NewFileOperationMetrics() (*FileOperationMetrics, error) <sp
                 return nil, err
         }</span>
 
-        <span class="cov0" title="0">return &amp;FileOperationMetrics{
+        <span class="cov1" title="1">return &amp;FileOperationMetrics{
                 ReadCounter:   readCounter,
                 WriteCounter:  writeCounter,
                 SizeHistogram: sizeHistogram,
@@ -1362,37 +1387,37 @@ func (t *Telemetry) NewFileOperationMetrics() (*FileOperationMetrics, error) <sp
 }
 
 // RecordFileRead records a file read operation
-func (m *FileOperationMetrics) RecordFileRead(ctx context.Context, path string, size int64, err error) <span class="cov7" title="8">{
-        if m == nil || m.ReadCounter == nil </span><span class="cov7" title="8">{
+func (m *FileOperationMetrics) RecordFileRead(ctx context.Context, path string, size int64, err error) <span class="cov8" title="11">{
+        if m == nil || m.ReadCounter == nil </span><span class="cov8" title="9">{
                 return
         }</span>
 
-        <span class="cov0" title="0">attrs := []attribute.KeyValue{
-                attribute.String("path", path),
+        <span class="cov3" title="2">attrs := []attribute.KeyValue{
+                attribute.String("path", sanitizePath(path)),
                 attribute.Bool("error", err != nil),
         }
 
         m.ReadCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
 
-        if err == nil &amp;&amp; m.SizeHistogram != nil </span><span class="cov0" title="0">{
+        if err == nil &amp;&amp; m.SizeHistogram != nil </span><span class="cov1" title="1">{
                 m.SizeHistogram.Record(ctx, size, metric.WithAttributes(attrs...))
         }</span>
 }
 
 // RecordFileWrite records a file write operation
-func (m *FileOperationMetrics) RecordFileWrite(ctx context.Context, path string, size int64, err error) <span class="cov7" title="7">{
-        if m == nil || m.WriteCounter == nil </span><span class="cov7" title="7">{
+func (m *FileOperationMetrics) RecordFileWrite(ctx context.Context, path string, size int64, err error) <span class="cov8" title="9">{
+        if m == nil || m.WriteCounter == nil </span><span class="cov7" title="8">{
                 return
         }</span>
 
-        <span class="cov0" title="0">attrs := []attribute.KeyValue{
-                attribute.String("path", path),
+        <span class="cov1" title="1">attrs := []attribute.KeyValue{
+                attribute.String("path", sanitizePath(path)),
                 attribute.Bool("error", err != nil),
         }
 
         m.WriteCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
 
-        if err == nil &amp;&amp; m.SizeHistogram != nil </span><span class="cov0" title="0">{
+        if err == nil &amp;&amp; m.SizeHistogram != nil </span><span class="cov1" title="1">{
                 m.SizeHistogram.Record(ctx, size, metric.WithAttributes(attrs...))
         }</span>
 }
@@ -1405,12 +1430,12 @@ type SchemaGenerationMetrics struct {
 }
 
 // NewSchemaGenerationMetrics creates metrics for schema generation
-func (t *Telemetry) NewSchemaGenerationMetrics() (*SchemaGenerationMetrics, error) <span class="cov7" title="7">{
+func (t *Telemetry) NewSchemaGenerationMetrics() (*SchemaGenerationMetrics, error) <span class="cov7" title="8">{
         if t == nil || !t.IsEnabled() </span><span class="cov7" title="7">{
                 return &amp;SchemaGenerationMetrics{}, nil
         }</span>
 
-        <span class="cov0" title="0">meter := t.Meter()
+        <span class="cov1" title="1">meter := t.Meter()
 
         generationCounter, err := meter.Int64Counter(
                 "valet.schema.generations",
@@ -1421,7 +1446,7 @@ func (t *Telemetry) NewSchemaGenerationMetrics() (*SchemaGenerationMetrics, erro
                 return nil, err
         }</span>
 
-        <span class="cov0" title="0">fieldCounter, err := meter.Int64Histogram(
+        <span class="cov1" title="1">fieldCounter, err := meter.Int64Histogram(
                 "valet.schema.fields",
                 metric.WithDescription("Number of fields in generated schemas"),
                 metric.WithUnit("1"),
@@ -1430,7 +1455,7 @@ func (t *Telemetry) NewSchemaGenerationMetrics() (*SchemaGenerationMetrics, erro
                 return nil, err
         }</span>
 
-        <span class="cov0" title="0">durationHistogram, err := meter.Float64Histogram(
+        <span class="cov1" title="1">durationHistogram, err := meter.Float64Histogram(
                 "valet.schema.generation_duration",
                 metric.WithDescription("Schema generation duration"),
                 metric.WithUnit("s"),
@@ -1439,7 +1464,7 @@ func (t *Telemetry) NewSchemaGenerationMetrics() (*SchemaGenerationMetrics, erro
                 return nil, err
         }</span>
 
-        <span class="cov0" title="0">return &amp;SchemaGenerationMetrics{
+        <span class="cov1" title="1">return &amp;SchemaGenerationMetrics{
                 GenerationCounter: generationCounter,
                 FieldCounter:      fieldCounter,
                 DurationHistogram: durationHistogram,
@@ -1447,24 +1472,24 @@ func (t *Telemetry) NewSchemaGenerationMetrics() (*SchemaGenerationMetrics, erro
 }
 
 // RecordSchemaGeneration records schema generation metrics
-func (m *SchemaGenerationMetrics) RecordSchemaGeneration(ctx context.Context, fields int64, duration time.Duration, err error) <span class="cov7" title="7">{
-        if m == nil </span><span class="cov0" title="0">{
+func (m *SchemaGenerationMetrics) RecordSchemaGeneration(ctx context.Context, fields int64, duration time.Duration, err error) <span class="cov8" title="10">{
+        if m == nil </span><span class="cov1" title="1">{
                 return
         }</span>
 
-        <span class="cov7" title="7">attrs := []attribute.KeyValue{
+        <span class="cov8" title="9">attrs := []attribute.KeyValue{
                 attribute.Bool("error", err != nil),
         }
 
-        if m.GenerationCounter != nil </span><span class="cov0" title="0">{
+        if m.GenerationCounter != nil </span><span class="cov3" title="2">{
                 m.GenerationCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
         }</span>
 
-        <span class="cov7" title="7">if err == nil </span><span class="cov7" title="7">{
-                if m.FieldCounter != nil </span><span class="cov0" title="0">{
+        <span class="cov8" title="9">if err == nil </span><span class="cov7" title="8">{
+                if m.FieldCounter != nil </span><span class="cov1" title="1">{
                         m.FieldCounter.Record(ctx, fields, metric.WithAttributes(attrs...))
                 }</span>
-                <span class="cov7" title="7">if m.DurationHistogram != nil </span><span class="cov0" title="0">{
+                <span class="cov7" title="8">if m.DurationHistogram != nil </span><span class="cov1" title="1">{
                         m.DurationHistogram.Record(ctx, duration.Seconds(), metric.WithAttributes(attrs...))
                 }</span>
         }
@@ -1475,6 +1500,7 @@ func (m *SchemaGenerationMetrics) RecordSchemaGeneration(ctx context.Context, fi
 
 import (
         "context"
+        "math"
 
         "go.opentelemetry.io/otel/attribute"
         "go.opentelemetry.io/otel/trace"
@@ -1488,18 +1514,18 @@ type Logger struct {
 }
 
 // NewLogger creates a new zap logger with OpenTelemetry integration
-func NewLogger(debug bool) (*Logger, error) <span class="cov0" title="0">{
+func NewLogger(debug bool) (*Logger, error) <span class="cov10" title="14">{
         config := zap.NewProductionConfig()
 
         // Set log level based on debug flag
-        if debug </span><span class="cov0" title="0">{
+        if debug </span><span class="cov6" title="5">{
                 config.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
-        }</span> else<span class="cov0" title="0"> {
+        }</span> else<span class="cov8" title="9"> {
                 config.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
         }</span>
 
         // Use JSON encoding for structured logs
-        <span class="cov0" title="0">config.Encoding = "json"
+        <span class="cov10" title="14">config.Encoding = "json"
 
         // Add caller information
         config.EncoderConfig.TimeKey = "timestamp"
@@ -1521,18 +1547,18 @@ func NewLogger(debug bool) (*Logger, error) <span class="cov0" title="0">{
                 return nil, err
         }</span>
 
-        <span class="cov0" title="0">return &amp;Logger{Logger: logger}, nil</span>
+        <span class="cov10" title="14">return &amp;Logger{Logger: logger}, nil</span>
 }
 
 // SetDefault sets this logger as the global zap logger
-func (l *Logger) SetDefault() <span class="cov0" title="0">{
+func (l *Logger) SetDefault() <span class="cov8" title="8">{
         zap.ReplaceGlobals(l.Logger)
 }</span>
 
 // WithContext returns a logger with trace information from the context
-func (l *Logger) WithContext(ctx context.Context) *zap.Logger <span class="cov0" title="0">{
+func (l *Logger) WithContext(ctx context.Context) *zap.Logger <span class="cov7" title="7">{
         span := trace.SpanFromContext(ctx)
-        if !span.IsRecording() </span><span class="cov0" title="0">{
+        if !span.IsRecording() </span><span class="cov7" title="7">{
                 return l.Logger
         }</span>
 
@@ -1548,28 +1574,28 @@ func (l *Logger) WithContext(ctx context.Context) *zap.Logger <span class="cov0"
 }
 
 // Debug logs a debug message with OpenTelemetry context
-func (l *Logger) Debug(ctx context.Context, msg string, fields ...zap.Field) <span class="cov0" title="0">{
+func (l *Logger) Debug(ctx context.Context, msg string, fields ...zap.Field) <span class="cov1" title="1">{
         logger := l.WithContext(ctx)
         logger.Debug(msg, fields...)
         l.addSpanEvent(ctx, zap.DebugLevel, msg, fields...)
 }</span>
 
 // Info logs an info message with OpenTelemetry context
-func (l *Logger) Info(ctx context.Context, msg string, fields ...zap.Field) <span class="cov0" title="0">{
+func (l *Logger) Info(ctx context.Context, msg string, fields ...zap.Field) <span class="cov1" title="1">{
         logger := l.WithContext(ctx)
         logger.Info(msg, fields...)
         l.addSpanEvent(ctx, zap.InfoLevel, msg, fields...)
 }</span>
 
 // Warn logs a warning message with OpenTelemetry context
-func (l *Logger) Warn(ctx context.Context, msg string, fields ...zap.Field) <span class="cov0" title="0">{
+func (l *Logger) Warn(ctx context.Context, msg string, fields ...zap.Field) <span class="cov1" title="1">{
         logger := l.WithContext(ctx)
         logger.Warn(msg, fields...)
         l.addSpanEvent(ctx, zap.WarnLevel, msg, fields...)
 }</span>
 
 // Error logs an error message with OpenTelemetry context
-func (l *Logger) Error(ctx context.Context, msg string, fields ...zap.Field) <span class="cov0" title="0">{
+func (l *Logger) Error(ctx context.Context, msg string, fields ...zap.Field) <span class="cov1" title="1">{
         logger := l.WithContext(ctx)
         logger.Error(msg, fields...)
         l.addSpanEvent(ctx, zap.ErrorLevel, msg, fields...)
@@ -1597,9 +1623,9 @@ func (l *Logger) Fatal(ctx context.Context, msg string, fields ...zap.Field) <sp
 }</span>
 
 // addSpanEvent adds a log event to the current span
-func (l *Logger) addSpanEvent(ctx context.Context, level zapcore.Level, msg string, fields ...zap.Field) <span class="cov0" title="0">{
+func (l *Logger) addSpanEvent(ctx context.Context, level zapcore.Level, msg string, fields ...zap.Field) <span class="cov5" title="4">{
         span := trace.SpanFromContext(ctx)
-        if !span.IsRecording() </span><span class="cov0" title="0">{
+        if !span.IsRecording() </span><span class="cov5" title="4">{
                 return
         }</span>
 
@@ -1617,8 +1643,10 @@ func (l *Logger) addSpanEvent(ctx context.Context, level zapcore.Level, msg stri
                         attrs = append(attrs, attribute.String("log."+field.Key, field.String))</span>
                 case zapcore.Int64Type, zapcore.Int32Type, zapcore.Int16Type, zapcore.Int8Type:<span class="cov0" title="0">
                         attrs = append(attrs, attribute.Int64("log."+field.Key, field.Integer))</span>
-                case zapcore.Float64Type, zapcore.Float32Type:<span class="cov0" title="0">
-                        attrs = append(attrs, attribute.Float64("log."+field.Key, float64(field.Integer)))</span>
+                case zapcore.Float64Type:<span class="cov0" title="0">
+                        attrs = append(attrs, attribute.Float64("log."+field.Key, math.Float64frombits(uint64(field.Integer))))</span>
+                case zapcore.Float32Type:<span class="cov0" title="0">
+                        attrs = append(attrs, attribute.Float64("log."+field.Key, float64(math.Float32frombits(uint32(field.Integer)))))</span>
                 case zapcore.BoolType:<span class="cov0" title="0">
                         attrs = append(attrs, attribute.Bool("log."+field.Key, field.Integer == 1))</span>
                 case zapcore.ErrorType:<span class="cov0" title="0">
@@ -1643,7 +1671,7 @@ func (l *Logger) WithError(err error) *zap.Logger <span class="cov0" title="0">{
 }
 
 // Sync flushes any buffered log entries
-func (l *Logger) Sync() error <span class="cov0" title="0">{
+func (l *Logger) Sync() error <span class="cov7" title="7">{
         return l.Logger.Sync()
 }</span>
 </pre>
@@ -1652,6 +1680,7 @@ func (l *Logger) Sync() error <span class="cov0" title="0">{
 
 import (
         "context"
+        "errors"
         "fmt"
         "os"
         "time"
@@ -1684,35 +1713,35 @@ type Telemetry struct {
 }
 
 // Initialize initializes the telemetry providers
-func Initialize(ctx context.Context, cfg *config.TelemetryConfig) (*Telemetry, error) <span class="cov1" title="1">{
+func Initialize(ctx context.Context, cfg *config.TelemetryConfig) (*Telemetry, error) <span class="cov6" title="10">{
         if cfg == nil </span><span class="cov0" title="0">{
                 cfg = config.NewTelemetryConfig()
         }</span>
 
-        <span class="cov1" title="1">if !cfg.Enabled </span><span class="cov1" title="1">{
+        <span class="cov6" title="10">if !cfg.Enabled </span><span class="cov3" title="3">{
                 return &amp;Telemetry{config: cfg}, nil
         }</span>
 
         // Create resource
-        <span class="cov0" title="0">res, err := newResource(cfg)
+        <span class="cov5" title="7">res, err := newResource(cfg)
         if err != nil </span><span class="cov0" title="0">{
                 return nil, fmt.Errorf("failed to create resource: %w", err)
         }</span>
 
         // Initialize tracer provider
-        <span class="cov0" title="0">tracerProvider, err := initTracerProvider(ctx, cfg, res)
+        <span class="cov5" title="7">tracerProvider, err := initTracerProvider(ctx, cfg, res)
         if err != nil </span><span class="cov0" title="0">{
                 return nil, fmt.Errorf("failed to initialize tracer provider: %w", err)
         }</span>
 
         // Initialize meter provider
-        <span class="cov0" title="0">meterProvider, err := initMeterProvider(ctx, cfg, res)
+        <span class="cov5" title="7">meterProvider, err := initMeterProvider(ctx, cfg, res)
         if err != nil </span><span class="cov0" title="0">{
                 return nil, fmt.Errorf("failed to initialize meter provider: %w", err)
         }</span>
 
         // Set global providers
-        <span class="cov0" title="0">otel.SetTracerProvider(tracerProvider)
+        <span class="cov5" title="7">otel.SetTracerProvider(tracerProvider)
         otel.SetMeterProvider(meterProvider)
         otel.SetTextMapPropagator(propagation.TraceContext{})
 
@@ -1721,7 +1750,7 @@ func Initialize(ctx context.Context, cfg *config.TelemetryConfig) (*Telemetry, e
         if err != nil </span><span class="cov0" title="0">{
                 return nil, fmt.Errorf("failed to create logger: %w", err)
         }</span>
-        <span class="cov0" title="0">logger.SetDefault()
+        <span class="cov5" title="7">logger.SetDefault()
 
         // Create telemetry instance
         t := &amp;Telemetry{
@@ -1737,63 +1766,63 @@ func Initialize(ctx context.Context, cfg *config.TelemetryConfig) (*Telemetry, e
 }
 
 // Shutdown shuts down the telemetry providers
-func (t *Telemetry) Shutdown(ctx context.Context) error <span class="cov0" title="0">{
-        if t == nil || !t.config.Enabled </span><span class="cov0" title="0">{
+func (t *Telemetry) Shutdown(ctx context.Context) error <span class="cov6" title="10">{
+        if t == nil || !t.config.Enabled </span><span class="cov3" title="3">{
                 return nil
         }</span>
 
-        <span class="cov0" title="0">var errs []error
+        <span class="cov5" title="7">var errs []error
 
-        if t.tracerProvider != nil </span><span class="cov0" title="0">{
-                if err := t.tracerProvider.Shutdown(ctx); err != nil </span><span class="cov0" title="0">{
+        if t.tracerProvider != nil </span><span class="cov5" title="7">{
+                if err := t.tracerProvider.Shutdown(ctx); err != nil </span><span class="cov1" title="1">{
                         errs = append(errs, fmt.Errorf("failed to shutdown tracer provider: %w", err))
                 }</span>
         }
 
-        <span class="cov0" title="0">if t.meterProvider != nil </span><span class="cov0" title="0">{
-                if err := t.meterProvider.Shutdown(ctx); err != nil </span><span class="cov0" title="0">{
+        <span class="cov5" title="7">if t.meterProvider != nil </span><span class="cov5" title="7">{
+                if err := t.meterProvider.Shutdown(ctx); err != nil </span><span class="cov1" title="1">{
                         errs = append(errs, fmt.Errorf("failed to shutdown meter provider: %w", err))
                 }</span>
         }
 
         // Sync logger
-        <span class="cov0" title="0">if t.logger != nil </span><span class="cov0" title="0">{
-                if err := t.logger.Sync(); err != nil </span><span class="cov0" title="0">{
+        <span class="cov5" title="7">if t.logger != nil </span><span class="cov5" title="7">{
+                if err := t.logger.Sync(); err != nil </span><span class="cov5" title="7">{
                         errs = append(errs, fmt.Errorf("failed to sync logger: %w", err))
                 }</span>
         }
 
-        <span class="cov0" title="0">if len(errs) &gt; 0 </span><span class="cov0" title="0">{
-                return fmt.Errorf("errors during shutdown: %v", errs)
+        <span class="cov5" title="7">if len(errs) &gt; 0 </span><span class="cov5" title="7">{
+                return errors.Join(errs...)
         }</span>
 
         <span class="cov0" title="0">return nil</span>
 }
 
 // Tracer returns the tracer
-func (t *Telemetry) Tracer() oteltrace.Tracer <span class="cov0" title="0">{
-        if t == nil || t.tracer == nil </span><span class="cov0" title="0">{
+func (t *Telemetry) Tracer() oteltrace.Tracer <span class="cov1" title="1">{
+        if t == nil || t.tracer == nil </span><span class="cov1" title="1">{
                 return otel.Tracer("valet")
         }</span>
         <span class="cov0" title="0">return t.tracer</span>
 }
 
 // Meter returns the meter
-func (t *Telemetry) Meter() metric.Meter <span class="cov0" title="0">{
-        if t == nil || t.meter == nil </span><span class="cov0" title="0">{
+func (t *Telemetry) Meter() metric.Meter <span class="cov4" title="4">{
+        if t == nil || t.meter == nil </span><span class="cov1" title="1">{
                 return otel.Meter("valet")
         }</span>
-        <span class="cov0" title="0">return t.meter</span>
+        <span class="cov3" title="3">return t.meter</span>
 }
 
 // IsEnabled returns true if telemetry is enabled
-func (t *Telemetry) IsEnabled() bool <span class="cov8" title="28">{
+func (t *Telemetry) IsEnabled() bool <span class="cov9" title="34">{
         return t != nil &amp;&amp; t.config != nil &amp;&amp; t.config.Enabled
 }</span>
 
 // Logger returns the structured logger
-func (t *Telemetry) Logger() *Logger <span class="cov0" title="0">{
-        if t == nil || t.logger == nil </span><span class="cov0" title="0">{
+func (t *Telemetry) Logger() *Logger <span class="cov1" title="1">{
+        if t == nil || t.logger == nil </span><span class="cov1" title="1">{
                 // Return a default logger if telemetry is not initialized
                 logger, _ := NewLogger(false)
                 return logger
@@ -1802,7 +1831,7 @@ func (t *Telemetry) Logger() *Logger <span class="cov0" title="0">{
 }
 
 // newResource creates a new resource with service information
-func newResource(cfg *config.TelemetryConfig) (*resource.Resource, error) <span class="cov0" title="0">{
+func newResource(cfg *config.TelemetryConfig) (*resource.Resource, error) <span class="cov5" title="7">{
         hostname, _ := os.Hostname()
 
         return resource.Merge(
@@ -1817,7 +1846,7 @@ func newResource(cfg *config.TelemetryConfig) (*resource.Resource, error) <span 
 }</span>
 
 // initTracerProvider initializes the tracer provider
-func initTracerProvider(ctx context.Context, cfg *config.TelemetryConfig, res *resource.Resource) (*sdktrace.TracerProvider, error) <span class="cov0" title="0">{
+func initTracerProvider(ctx context.Context, cfg *config.TelemetryConfig, res *resource.Resource) (*sdktrace.TracerProvider, error) <span class="cov5" title="7">{
         var exporter sdktrace.SpanExporter
         var err error
 
@@ -1833,9 +1862,9 @@ func initTracerProvider(ctx context.Context, cfg *config.TelemetryConfig, res *r
                         opts = append(opts, otlptracegrpc.WithHeaders(cfg.Headers))
                 }</span>
                 <span class="cov0" title="0">exporter, err = otlptracegrpc.New(ctx, opts...)</span>
-        case "stdout":<span class="cov0" title="0">
+        case "stdout":<span class="cov2" title="2">
                 exporter, err = stdouttrace.New(stdouttrace.WithPrettyPrint())</span>
-        default:<span class="cov0" title="0">
+        default:<span class="cov4" title="5">
                 // No exporter (noop)
                 return sdktrace.NewTracerProvider(
                         sdktrace.WithResource(res),
@@ -1843,11 +1872,11 @@ func initTracerProvider(ctx context.Context, cfg *config.TelemetryConfig, res *r
                 ), nil</span>
         }
 
-        <span class="cov0" title="0">if err != nil </span><span class="cov0" title="0">{
+        <span class="cov2" title="2">if err != nil </span><span class="cov0" title="0">{
                 return nil, fmt.Errorf("failed to create trace exporter: %w", err)
         }</span>
 
-        <span class="cov0" title="0">tp := sdktrace.NewTracerProvider(
+        <span class="cov2" title="2">tp := sdktrace.NewTracerProvider(
                 sdktrace.WithBatcher(exporter,
                         sdktrace.WithBatchTimeout(5*time.Second),
                 ),
@@ -1859,7 +1888,7 @@ func initTracerProvider(ctx context.Context, cfg *config.TelemetryConfig, res *r
 }
 
 // initMeterProvider initializes the meter provider
-func initMeterProvider(ctx context.Context, cfg *config.TelemetryConfig, res *resource.Resource) (*sdkmetric.MeterProvider, error) <span class="cov0" title="0">{
+func initMeterProvider(ctx context.Context, cfg *config.TelemetryConfig, res *resource.Resource) (*sdkmetric.MeterProvider, error) <span class="cov5" title="7">{
         var exporter sdkmetric.Exporter
         var err error
 
@@ -1875,20 +1904,20 @@ func initMeterProvider(ctx context.Context, cfg *config.TelemetryConfig, res *re
                         opts = append(opts, otlpmetricgrpc.WithHeaders(cfg.Headers))
                 }</span>
                 <span class="cov0" title="0">exporter, err = otlpmetricgrpc.New(ctx, opts...)</span>
-        case "stdout":<span class="cov0" title="0">
+        case "stdout":<span class="cov2" title="2">
                 exporter, err = stdoutmetric.New()</span>
-        default:<span class="cov0" title="0">
+        default:<span class="cov4" title="5">
                 // No exporter (noop)
                 return sdkmetric.NewMeterProvider(
                         sdkmetric.WithResource(res),
                 ), nil</span>
         }
 
-        <span class="cov0" title="0">if err != nil </span><span class="cov0" title="0">{
+        <span class="cov2" title="2">if err != nil </span><span class="cov0" title="0">{
                 return nil, fmt.Errorf("failed to create metric exporter: %w", err)
         }</span>
 
-        <span class="cov0" title="0">mp := sdkmetric.NewMeterProvider(
+        <span class="cov2" title="2">mp := sdkmetric.NewMeterProvider(
                 sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exporter,
                         sdkmetric.WithInterval(30*time.Second),
                 )),
@@ -1899,19 +1928,19 @@ func initMeterProvider(ctx context.Context, cfg *config.TelemetryConfig, res *re
 }
 
 // StartSpan starts a new span
-func (t *Telemetry) StartSpan(ctx context.Context, name string, opts ...oteltrace.SpanStartOption) (context.Context, oteltrace.Span) <span class="cov10" title="44">{
-        if t == nil || !t.IsEnabled() </span><span class="cov10" title="44">{
+func (t *Telemetry) StartSpan(ctx context.Context, name string, opts ...oteltrace.SpanStartOption) (context.Context, oteltrace.Span) <span class="cov10" title="46">{
+        if t == nil || !t.IsEnabled() </span><span class="cov9" title="44">{
                 return ctx, oteltrace.SpanFromContext(ctx)
         }</span>
-        <span class="cov0" title="0">return t.tracer.Start(ctx, name, opts...)</span>
+        <span class="cov2" title="2">return t.tracer.Start(ctx, name, opts...)</span>
 }
 
 // RecordError records an error on the span
-func RecordError(ctx context.Context, err error, opts ...oteltrace.EventOption) <span class="cov2" title="2">{
+func RecordError(ctx context.Context, err error, opts ...oteltrace.EventOption) <span class="cov3" title="3">{
         if err == nil </span><span class="cov0" title="0">{
                 return
         }</span>
-        <span class="cov2" title="2">span := oteltrace.SpanFromContext(ctx)
+        <span class="cov3" title="3">span := oteltrace.SpanFromContext(ctx)
         if span.IsRecording() </span><span class="cov0" title="0">{
                 span.RecordError(err, opts...)
         }</span>
@@ -1939,16 +1968,33 @@ func AddAttributes(ctx context.Context, attrs ...attribute.KeyValue) <span class
 import (
         "context"
         "os"
+        "os/signal"
+        "syscall"
 
         "github.com/charmbracelet/fang"
         "github.com/mkm29/valet/cmd"
 )
 
 func main() <span class="cov0" title="0">{
+        // Create a context that is canceled on interrupt signals
+        ctx, cancel := context.WithCancel(context.Background())
+        defer cancel()
+
+        // Set up signal handling
+        sigChan := make(chan os.Signal, 1)
+        signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+        go func() </span><span class="cov0" title="0">{
+                &lt;-sigChan
+                // Cancel the context when a signal is received
+                cancel()
+        }</span>()
+
         // Create root command
-        cmd := cmd.NewRootCmd()
-        // Execute the root command
-        if err := fang.Execute(context.TODO(), cmd); err != nil </span><span class="cov0" title="0">{
+        <span class="cov0" title="0">rootCmd := cmd.NewRootCmd()
+        
+        // Execute the root command with the cancellable context
+        if err := fang.Execute(ctx, rootCmd); err != nil </span><span class="cov0" title="0">{
                 os.Exit(1)
         }</span>
 }
