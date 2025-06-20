@@ -1,13 +1,20 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"time"
 
+	"github.com/mkm29/valet/internal/telemetry"
 	"github.com/spf13/cobra"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 )
 
@@ -101,7 +108,9 @@ func inferSchema(val, defaultVal any) map[string]any {
 					if isEmptyValue(vDefault) {
 						isDebug := cfg != nil && cfg.Debug
 						if isDebug {
-							fmt.Printf("Skipping field because it has an empty default value of type %T\n", vDefault)
+							zap.L().Debug("Skipping field because it has an empty default value",
+								zap.String("field", k),
+								zap.String("type", fmt.Sprintf("%T", vDefault)))
 						}
 						continue
 					}
@@ -364,75 +373,206 @@ func loadYAML(path string) (map[string]any, error) {
 // Generate a JSON Schema for the values.yaml in ctx directory,
 // optionally merging an overrides YAML file relative to ctx.
 // It writes the schema to values.schema.json and returns a status message.
-func Generate(ctx, overridesFlag string) (string, error) {
+func Generate(ctxDir, overridesFlag string) (string, error) {
+	// Create context for tracing
+	ctx := context.Background()
+	tel := GetTelemetry()
+
+	// Start main span
+	start := time.Now()
+	ctx, span := tel.StartSpan(ctx, "generate.command",
+		trace.WithAttributes(
+			attribute.String("context_dir", ctxDir),
+			attribute.Bool("has_overrides", overridesFlag != ""),
+		),
+	)
+	defer span.End()
+
+	// Function to execute the actual generation
+	executeGenerate := func() (string, error) {
+		return generateInternal(ctx, tel, ctxDir, overridesFlag)
+	}
+
+	// Execute with telemetry wrapper if enabled
+	if tel.IsEnabled() {
+		result, err := executeGenerate()
+		duration := time.Since(start)
+
+		// Record command metrics
+		if cmdMetrics, metricsErr := tel.NewCommandMetrics(); metricsErr == nil {
+			cmdMetrics.RecordCommandExecution(ctx, "generate", duration, err)
+		}
+
+		// Set span status
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		} else {
+			span.SetStatus(codes.Ok, "Schema generated successfully")
+		}
+
+		return result, err
+	}
+
+	// Execute without telemetry
+	return executeGenerate()
+}
+
+// generateInternal contains the actual generation logic
+func generateInternal(ctx context.Context, tel *telemetry.Telemetry, ctxDir, overridesFlag string) (string, error) {
 	// Locate values file (values.yaml or values.yml)
-	valuesPath := filepath.Join(ctx, "values.yaml")
+	valuesPath := filepath.Join(ctxDir, "values.yaml")
 	if _, err := os.Stat(valuesPath); os.IsNotExist(err) {
-		alt := filepath.Join(ctx, "values.yml")
+		alt := filepath.Join(ctxDir, "values.yml")
 		if _, err2 := os.Stat(alt); os.IsNotExist(err2) {
-			return "", fmt.Errorf("no values.yaml or values.yml found in %s", ctx)
+			return "", fmt.Errorf("no values.yaml or values.yml found in %s", ctxDir)
 		}
 		valuesPath = alt
 	}
 	var overridesPath string
 	if overridesFlag != "" {
-		overridesPath = filepath.Join(ctx, overridesFlag)
+		overridesPath = filepath.Join(ctxDir, overridesFlag)
 	}
+	// Load main values file with tracing
+	ctx, loadSpan := tel.StartSpan(ctx, "load.values_yaml",
+		trace.WithAttributes(attribute.String("file", valuesPath)),
+	)
 	yaml1, err := loadYAML(valuesPath)
+	loadSpan.End()
 	if err != nil {
+		telemetry.RecordError(ctx, err)
 		return "", fmt.Errorf("error loading %s: %w", valuesPath, err)
+	}
+
+	// Record file metrics
+	if fileMetrics, metricsErr := tel.NewFileOperationMetrics(); metricsErr == nil {
+		if fi, statErr := os.Stat(valuesPath); statErr == nil {
+			fileMetrics.RecordFileRead(ctx, valuesPath, fi.Size(), nil)
+		}
 	}
 
 	// Log some of the top-level default values to help with debugging
 	// Use safe debugging to handle cases when cfg is nil (testing environment)
 	isDebug := cfg != nil && cfg.Debug
-	if isDebug {
-		fmt.Println("Original YAML values from", valuesPath)
-		
-		// Print debug info for top-level components in a generic way
-		fmt.Println("Components with 'enabled' field:")
+	if isDebug && tel.IsEnabled() {
+		logger := tel.Logger()
+		logger.Debug(ctx, "Original YAML values loaded",
+			zap.String("file", valuesPath),
+			zap.Int("top_level_keys", len(yaml1)),
+		)
+
+		// Count components with enabled field
 		enabledComponentCount := 0
-		for _, compVal := range yaml1 {
+		disabledComponentCount := 0
+		for key, compVal := range yaml1 {
 			if compMap, isMap := compVal.(map[string]any); isMap {
 				// Log components with enabled field
 				if enabled, hasEnabled := compMap["enabled"]; hasEnabled {
-					enabledComponentCount++
 					if enabledBool, isBool := enabled.(bool); isBool {
-						fmt.Printf("  Component %d: %v\n", enabledComponentCount, enabledBool)
+						if enabledBool {
+							enabledComponentCount++
+						} else {
+							disabledComponentCount++
+						}
+						logger.Debug(ctx, "Component status",
+							zap.String("component", key),
+							zap.Bool("enabled", enabledBool),
+						)
 					}
 				}
 			}
 		}
+		logger.Debug(ctx, "Component summary",
+			zap.Int("enabled_count", enabledComponentCount),
+			zap.Int("disabled_count", disabledComponentCount),
+		)
 	}
 
 	var merged map[string]any
 	if overridesPath != "" {
+		// Load overrides file with tracing
+		ctx, overrideSpan := tel.StartSpan(ctx, "load.overrides_yaml",
+			trace.WithAttributes(attribute.String("file", overridesPath)),
+		)
 		yaml2, err := loadYAML(overridesPath)
+		overrideSpan.End()
 		if err != nil {
+			telemetry.RecordError(ctx, err)
 			return "", fmt.Errorf("error loading %s: %w", overridesPath, err)
 		}
+
+		// Merge with tracing
+		ctx, mergeSpan := tel.StartSpan(ctx, "merge.yaml_files")
 		merged = deepMerge(yaml1, yaml2)
+		mergeSpan.End()
 	} else {
 		merged = yaml1
 	}
+
+	// Generate schema with tracing
+	ctx, schemaSpan := tel.StartSpan(ctx, "generate.schema")
+	schemaStart := time.Now()
 	schema := inferSchema(merged, yaml1)
 	schema["$schema"] = "http://json-schema.org/schema#"
 
 	// Post-process the schema to ensure no empty fields are in the required lists
 	cleanupRequiredFields(schema, yaml1)
+	schemaSpan.End()
 
-	outPath := filepath.Join(ctx, "values.schema.json")
+	// Record schema generation metrics
+	if schemaMetrics, metricsErr := tel.NewSchemaGenerationMetrics(); metricsErr == nil {
+		fieldCount := countSchemaFields(schema)
+		schemaMetrics.RecordSchemaGeneration(ctx, int64(fieldCount), time.Since(schemaStart), nil)
+	}
+
+	outPath := filepath.Join(ctxDir, "values.schema.json")
+
+	// Marshal JSON with tracing
+	ctx, marshalSpan := tel.StartSpan(ctx, "marshal.json")
 	data, err := json.MarshalIndent(schema, "", "  ")
+	marshalSpan.End()
 	if err != nil {
+		telemetry.RecordError(ctx, err)
 		return "", fmt.Errorf("error marshaling JSON: %w", err)
 	}
+
+	// Write file with tracing
+	ctx, writeSpan := tel.StartSpan(ctx, "write.schema_file",
+		trace.WithAttributes(
+			attribute.String("file", outPath),
+			attribute.Int("size", len(data)),
+		),
+	)
 	if err := os.WriteFile(outPath, data, 0644); err != nil {
+		writeSpan.End()
+		telemetry.RecordError(ctx, err)
 		return "", fmt.Errorf("error writing %s: %w", outPath, err)
 	}
+	writeSpan.End()
+
+	// Record file write metrics
+	if fileMetrics, metricsErr := tel.NewFileOperationMetrics(); metricsErr == nil {
+		fileMetrics.RecordFileWrite(ctx, outPath, int64(len(data)), nil)
+	}
+
 	if overridesPath != "" {
 		return fmt.Sprintf("Generated %s by merging %s into values.yaml", outPath, overridesFlag), nil
 	}
 	return fmt.Sprintf("Generated %s from values.yaml", outPath), nil
+}
+
+// countSchemaFields counts the number of fields in a schema recursively
+func countSchemaFields(schema map[string]any) int {
+	count := 0
+	if props, ok := schema["properties"].(map[string]any); ok {
+		count += len(props)
+		for _, prop := range props {
+			if propMap, ok := prop.(map[string]any); ok {
+				count += countSchemaFields(propMap)
+			}
+		}
+	}
+	return count
 }
 
 // isEmptyValue checks if a value represents an empty value (empty string, array, map)
@@ -499,7 +639,7 @@ func processProperties(schema map[string]any, defaults map[string]any) {
 		if enabledBool, isBool := enabled.(bool); isBool && !enabledBool {
 			isDebug := cfg != nil && cfg.Debug
 			if isDebug {
-				fmt.Printf("Post-processing: Removing required fields from component because it has enabled=false\n")
+				zap.L().Debug("Post-processing: Removing required fields from component because it has enabled=false")
 			}
 			delete(schema, "required")
 			return
@@ -516,7 +656,8 @@ func processProperties(schema map[string]any, defaults map[string]any) {
 		if hasDef && isEmptyValue(defVal) {
 			isDebug := cfg != nil && cfg.Debug
 			if isDebug {
-				fmt.Printf("Post-processing: Removing field from required list because it has an empty default value\n")
+				zap.L().Debug("Post-processing: Removing field from required list because it has an empty default value",
+					zap.String("field", fieldName))
 			}
 			continue
 		}
@@ -529,7 +670,8 @@ func processProperties(schema map[string]any, defaults map[string]any) {
 				if enabledBool, isBool := enabled.(bool); isBool && !enabledBool {
 					isDebug := cfg != nil && cfg.Debug
 					if isDebug {
-						fmt.Printf("Post-processing: Removing field from required list because it is disabled\n")
+						zap.L().Debug("Post-processing: Removing field from required list because it is disabled",
+							zap.String("field", fieldName))
 					}
 					continue
 				}
@@ -539,7 +681,8 @@ func processProperties(schema map[string]any, defaults map[string]any) {
 			if isEmptyValue(propObj) {
 				isDebug := cfg != nil && cfg.Debug
 				if isDebug {
-					fmt.Printf("Post-processing: Removing field from required list because it has a nil default value\n")
+					zap.L().Debug("Post-processing: Removing field from required list because it has a nil default value",
+						zap.String("field", fieldName))
 				}
 				continue
 			}

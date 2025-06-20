@@ -252,4 +252,3 @@ func (ts *ValetTestSuite) TestGenerate_InvalidOverrides() {
 	ts.Error(err)
 	ts.Contains(err.Error(), "error", "expected error for invalid overrides")
 }
-

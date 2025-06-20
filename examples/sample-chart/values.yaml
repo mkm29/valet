@@ -1,0 +1,307 @@
+# Default values for sample-application.
+# This is a YAML-formatted file demonstrating various patterns that Valet handles.
+
+# Global configuration
+global:
+  # Environment name
+  environment: "production"
+  # Enable debug mode
+  debug: false
+  # Image pull secrets
+  imagePullSecrets:
+    - name: "docker-registry"
+
+# Application configuration
+app:
+  # Enable the application
+  enabled: true
+  # Application name
+  name: "sample-app"
+  # Version tag
+  version: "1.16.0"
+  # Number of replicas
+  replicaCount: 3
+
+# Image configuration
+image:
+  repository: "nginx"
+  pullPolicy: "IfNotPresent"
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+# Service account configuration
+serviceAccount:
+  # Specifies whether a service account should be created
+  enabled: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# Pod configuration
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9090"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 2000
+
+# Container configuration
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+# Service configuration
+service:
+  enabled: true
+  type: "ClusterIP"
+  port: 80
+  targetPort: 8080
+  annotations: {}
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+  hosts:
+    - host: "chart-example.local"
+      paths:
+        - path: /
+          pathType: "Prefix"
+  tls:
+    - secretName: "chart-example-tls"
+      hosts:
+        - "chart-example.local"
+
+# Resource limits and requests
+resources:
+  limits:
+    cpu: "200m"
+    memory: "256Mi"
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+
+# Autoscaling configuration
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Database configuration (component example)
+database:
+  enabled: true
+  type: "postgresql"
+  host: "postgres.default.svc.cluster.local"
+  port: 5432
+  name: "appdb"
+  username: "appuser"
+  # Password should be provided via secrets
+  existingSecret: ""
+  secretKey: "password"
+  
+  # Connection pool settings
+  connectionPool:
+    maxConnections: 20
+    minConnections: 5
+    connectionTimeout: 30
+
+# Redis cache configuration (another component)
+redis:
+  enabled: false
+  host: "redis.default.svc.cluster.local"
+  port: 6379
+  password: ""
+  db: 0
+
+# Monitoring configuration
+monitoring:
+  enabled: true
+  
+  # Prometheus metrics
+  metrics:
+    enabled: true
+    path: "/metrics"
+    port: 9090
+    interval: "30s"
+  
+  # Service monitor for Prometheus Operator
+  serviceMonitor:
+    enabled: false
+    namespace: ""
+    labels: {}
+
+# Logging configuration
+logging:
+  enabled: true
+  level: "info"
+  format: "json"
+  
+  # Log aggregation
+  aggregation:
+    enabled: false
+    type: "fluentd"
+    endpoint: "fluentd.logging.svc.cluster.local:24224"
+
+# Feature flags
+features:
+  newUI: false
+  experimentalAPI: false
+  debugEndpoints: false
+
+# External dependencies
+externalServices:
+  - name: "payment-gateway"
+    url: "https://api.payment-provider.com"
+    timeout: 30
+  - name: "notification-service"
+    url: "https://notifications.internal.com"
+    timeout: 15
+
+# Configuration maps
+configMaps:
+  app-config:
+    data:
+      config.yaml: |
+        server:
+          port: 8080
+          timeout: 60
+        features:
+          rateLimit: true
+          caching: true
+
+# Secrets (structure only, values should be provided separately)
+secrets:
+  api-keys:
+    stringData:
+      stripe: ""
+      sendgrid: ""
+      datadog: ""
+
+# Job configuration
+jobs:
+  migration:
+    enabled: false
+    image: "migrate/migrate"
+    tag: "latest"
+    command: ["migrate", "-path", "/migrations", "-database", "postgres://...", "up"]
+
+# CronJob configuration
+cronJobs:
+  backup:
+    enabled: false
+    schedule: "0 2 * * *"
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 1
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity rules
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: "app"
+                operator: "In"
+                values:
+                  - "sample-app"
+          topologyKey: "kubernetes.io/hostname"
+
+# Extra environment variables
+extraEnvVars:
+  - name: "LOG_LEVEL"
+    value: "info"
+  - name: "ENVIRONMENT"
+    value: "production"
+
+# Extra volumes
+extraVolumes: []
+
+# Extra volume mounts
+extraVolumeMounts: []
+
+# Health checks
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 5
+
+# Network policies
+networkPolicy:
+  enabled: false
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: "frontend"
+      ports:
+        - protocol: TCP
+          port: 8080
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  maxUnavailable: null
+
+# Service mesh configuration
+serviceMesh:
+  enabled: false
+  provider: "istio"
+  sidecar:
+    inject: true
+    resources:
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+
+# Backup configuration
+backup:
+  enabled: false
+  schedule: "daily"
+  retention: 7
+  storage:
+    type: "s3"
+    bucket: "backups"
+    region: "us-east-1"
+
+# Multi-tenancy support
+tenants:
+  - name: "tenant1"
+    namespace: "tenant1-prod"
+    quota:
+      cpu: "4"
+      memory: "8Gi"
+  - name: "tenant2"
+    namespace: "tenant2-prod"
+    quota:
+      cpu: "2"
+      memory: "4Gi"

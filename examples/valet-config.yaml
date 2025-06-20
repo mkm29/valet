@@ -1,0 +1,54 @@
+# Example Valet configuration file
+# Place this file at ~/.valet.yaml or specify with --config flag
+
+# Enable debug mode for verbose logging
+debug: false
+
+# Default output file for generated schemas
+output: "values.schema.json"
+
+# Optional: Path to an overrides file for customizing schema generation
+# overrides: "schema-overrides.yaml"
+
+# Optional: Additional context for schema generation
+# context: "production"
+
+# Telemetry configuration for observability
+telemetry:
+  # Enable or disable telemetry
+  enabled: true
+  
+  # Service name for identification in telemetry data
+  serviceName: "valet"
+  
+  # Service version
+  serviceVersion: "1.0.0"
+  
+  # Tracing configuration
+  tracing:
+    enabled: true
+    # Exporter type: "stdout", "otlp", or "none"
+    exporter: "otlp"
+    # Sampling rate (0.0 to 1.0)
+    samplingRate: 1.0
+    # OTLP endpoint (if using OTLP exporter)
+    endpoint: "localhost:4317"
+    # Use insecure connection (for development)
+    insecure: true
+  
+  # Metrics configuration
+  metrics:
+    enabled: true
+    # Exporter type: "stdout", "otlp", or "none"
+    exporter: "stdout"
+    # Export interval in seconds
+    exportInterval: 30
+    # OTLP endpoint (if using OTLP exporter)
+    endpoint: "localhost:4317"
+    # Use insecure connection (for development)
+    insecure: true
+  
+  # Logging configuration (controlled by debug flag)
+  # When debug is true, log level is set to DEBUG
+  # When debug is false, log level is set to INFO
+  # All logs use zap's high-performance JSON encoding

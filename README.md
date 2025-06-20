@@ -11,19 +11,36 @@ A command-line tool to generate a JSON Schema from a YAML `values.yaml` file, op
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Installation](#installation)
-- [Usage](#usage)
-  - [Configuration](#configuration)
-  - [Examples](#examples)
-- [How it works](#how-it-works)
-- [Development](#development)
-  - [Requirements](#requirements)
-  - [Makefile](#makefile)
-  - [Testing & Coverage](#testing--coverage)
-  - [Release](#release)
-- [Contributing](#contributing)
+- [Valet: Helm Values to JSON Schema](#valet-helm-values-to-json-schema)
+  - [Fast. Flexible. Clean. Beautiful.](#fast-flexible-clean-beautiful)
+  - [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
+  - [Architecture](#architecture)
+  - [Installation](#installation)
+    - [From Source](#from-source)
+    - [Using Go Install](#using-go-install)
+  - [Usage](#usage)
+    - [Configuration](#configuration)
+      - [Configuration File](#configuration-file)
+      - [Environment Variables](#environment-variables)
+    - [Examples](#examples)
+    - [Observability](#observability)
+      - [Telemetry Configuration](#telemetry-configuration)
+      - [Configuration Options](#configuration-options)
+      - [Distributed Tracing](#distributed-tracing)
+      - [Metrics](#metrics)
+      - [Structured Logging](#structured-logging)
+      - [Integration with Observability Platforms](#integration-with-observability-platforms)
+      - [Example Input/Output](#example-inputoutput)
+  - [How it works](#how-it-works)
+    - [Schema Generation Intelligence](#schema-generation-intelligence)
+  - [Development](#development)
+    - [Requirements](#requirements)
+    - [Makefile](#makefile)
+    - [Testing \& Coverage](#testing--coverage)
+      - [Test Organization](#test-organization)
+    - [Release](#release)
+  - [Contributing](#contributing)
 
 ## Overview
 
@@ -59,14 +76,15 @@ graph TD
     RootCmd --> VersionCmd[cmd/version.go]
     GenerateCmd --> Config[internal/config]
     GenerateCmd --> |schema generation| SchemaGen[Schema Generator]
+    GenerateCmd --> Telemetry[internal/telemetry]
     Config --> |config loading| YAML[YAML Config Files]
-    
+
     subgraph "Core Functionality"
         SchemaGen --> TypeInference[Type Inference]
         SchemaGen --> ComponentHandling[Component Processing]
         SchemaGen --> OverrideMerging[Override Merging]
     end
-    
+
     subgraph "CLI Interface"
         Main --> |wrapped by| Fang[Fang CLI Framework]
         Fang --> Cmd
@@ -75,21 +93,32 @@ graph TD
         GenerateCmd
         VersionCmd
     end
-    
+
     subgraph "Configuration"
         Config
         YAML
     end
-    
+
+    subgraph "Observability"
+        Telemetry --> Tracing[OpenTelemetry Tracing]
+        Telemetry --> Metrics[Metrics Collection]
+        Telemetry --> Logging[Structured Logging]
+        Tracing --> OTLP[OTLP Exporter]
+        Metrics --> OTLP
+        Logging --> |zap integration| Tracing
+    end
+
     classDef core fill:#c678dd,stroke:#61afef,stroke-width:1px,color:#efefef;
     classDef cli fill:#61afef,stroke:#56b6c2,stroke-width:1px,color:#efefef;
     classDef config fill:#98c379,stroke:#56b6c2,stroke-width:1px,color:#282c34;
     classDef fang fill:#e06c75,stroke:#56b6c2,stroke-width:2px,color:#efefef;
-    
+    classDef telemetry fill:#56b6c2,stroke:#61afef,stroke-width:1px,color:#efefef;
+
     class SchemaGen,TypeInference,ComponentHandling,OverrideMerging core;
     class Main,Cmd,RootCmd,GenerateCmd,VersionCmd cli;
     class Config,YAML config;
     class Fang fang;
+    class Telemetry,Tracing,Metrics,Logging,OTLP telemetry;
 ```
 
 ## Installation
@@ -120,8 +149,13 @@ Generate a JSON Schema from a `values.yaml` in the given `<context-dir>` using t
 valet [global options] generate [flags] <context-dir>
 
 Global options:
-  --config-file string   config file path (default: .valet.yaml)
-  -d, --debug            enable debug logging
+  --config-file string          config file path (default: .valet.yaml)
+  -d, --debug                   enable debug logging
+  --telemetry-enabled           enable telemetry
+  --telemetry-exporter string   telemetry exporter type (none, stdout, otlp) (default: none)
+  --telemetry-endpoint string   OTLP endpoint for telemetry (default: localhost:4317)
+  --telemetry-insecure          use insecure connection for OTLP (default: false)
+  --telemetry-sample-rate float trace sampling rate (0.0 to 1.0) (default: 1.0)
 
 Generate flags:
   -f, --overrides string   path (relative to context dir) to an overrides YAML file (optional)
@@ -133,6 +167,7 @@ The tool writes a `values.schema.json` (or custom output file) in the `<context-
 ### Configuration
 
 Valet supports configuration through multiple sources, with precedence in the following order:
+
 1. CLI flags (highest priority)
 2. Environment variables
 3. Configuration file
@@ -146,10 +181,20 @@ The CLI supports a YAML configuration file (default: `.valet.yaml`) in the curre
 - `overrides`: path to an overrides YAML file
 - `output`: name of the output schema file (default: `values.schema.json`)
 - `debug`: enable debug logging (boolean)
+- `telemetry`: telemetry configuration (object)
+  - `enabled`: enable telemetry (boolean)
+  - `serviceName`: service name for telemetry (default: `valet`)
+  - `serviceVersion`: service version for telemetry (default: `0.1.0`)
+  - `exporterType`: type of exporter (`none`, `stdout`, `otlp`)
+  - `otlpEndpoint`: OTLP endpoint for traces and metrics
+  - `insecure`: use insecure connection for OTLP
+  - `sampleRate`: trace sampling rate (0.0 to 1.0)
+  - `headers`: additional headers for OTLP requests (map)
 
 #### Environment Variables
 
 Configuration can also be set via environment variables:
+
 - `VALET_CONTEXT`
 - `VALET_OVERRIDES`
 - `VALET_OUTPUT`
@@ -175,10 +220,158 @@ Print version/build information:
 ./bin/valet version
 ```
 
-Output format:
-
 ```text
 github.com/mkm29/valet@v0.1.1 (commit 9153c14b9ffddeaccba93268a0851d5da0ae8cbf)
+```
+
+### Observability
+
+Valet includes comprehensive observability capabilities through OpenTelemetry integration, providing distributed tracing, metrics, and structured logging for monitoring and debugging.
+
+#### Telemetry Configuration
+
+Enable telemetry using CLI flags or configuration:
+
+```bash
+# Enable with stdout exporter (for development)
+valet generate --telemetry-enabled --telemetry-exporter stdout charts/mychart
+
+# Enable with OTLP exporter (for production)
+valet generate --telemetry-enabled --telemetry-exporter otlp \
+  --telemetry-endpoint localhost:4317 \
+  --telemetry-insecure charts/mychart
+```
+
+#### Configuration Options
+
+Telemetry can be configured via:
+
+1. **CLI Flags**:
+   - `--telemetry-enabled`: Enable telemetry (default: false)
+   - `--telemetry-exporter`: Exporter type: `none`, `stdout`, `otlp` (default: none)
+   - `--telemetry-endpoint`: OTLP endpoint (default: localhost:4317)
+   - `--telemetry-insecure`: Use insecure connection for OTLP (default: false for better security)
+   - `--telemetry-sample-rate`: Trace sampling rate 0.0-1.0 (default: 1.0)
+
+2. **Configuration File** (`.valet.yaml`):
+
+```yaml
+telemetry:
+  enabled: true
+  serviceName: valet
+  serviceVersion: 0.1.0
+  exporterType: otlp
+  otlpEndpoint: localhost:4317
+  insecure: false
+  sampleRate: 1.0
+  headers:
+    api-key: your-api-key
+```
+
+1. **Environment Variables**:
+   - `VALET_TELEMETRY`
+   - `VALET_TELEMETRY_EXPORTER`
+   - `VALET_TELEMETRY_ENDPOINT`
+   - `VALET_TELEMETRY_INSECURE`
+   - `VALET_TELEMETRY_SAMPLE_RATE`
+
+#### Distributed Tracing
+
+Valet creates detailed traces for all operations:
+
+- **Command execution**: Root span for the entire command
+- **File operations**: Loading values.yaml, overrides, writing schema
+- **Schema generation**: Type inference, merging, validation
+- **Component processing**: Individual spans for complex operations
+
+Example trace structure:
+
+```bash
+generate.command
+├── load.values_yaml
+├── load.overrides_yaml (if applicable)
+├── merge.yaml_files
+├── generate.schema
+├── marshal.json
+└── write.schema_file
+```
+
+#### Metrics
+
+The following metrics are collected:
+
+- **Command Metrics**:
+  - `valet.command.executions`: Total command executions (counter)
+  - `valet.command.duration`: Command execution duration (histogram)
+  - `valet.command.errors`: Total command errors (counter)
+
+- **File Operation Metrics**:
+  - `valet.file.reads`: File read operations (counter)
+  - `valet.file.writes`: File write operations (counter)
+  - `valet.file.size`: File size distribution (histogram)
+
+- **Schema Generation Metrics**:
+  - `valet.schema.generations`: Total schema generations (counter)
+  - `valet.schema.fields`: Number of fields in schemas (histogram)
+  - `valet.schema.generation_duration`: Schema generation time (histogram)
+
+All file path attributes in metrics are sanitized to protect sensitive information - only the filename and immediate parent directory are included in telemetry data.
+
+#### Structured Logging
+
+Valet uses [Uber's zap](https://github.com/uber-go/zap) for high-performance structured logging with OpenTelemetry integration:
+
+- **Zero-allocation logging**: Zap's design ensures minimal performance overhead
+- **Structured fields**: All log data is structured for easy parsing and querying
+- **OpenTelemetry integration**: Log entries automatically include trace and span IDs
+- **Span events**: All logs are also recorded as events in the active span
+- **Level control**: Info level by default, Debug level when `--debug` flag is set
+- **JSON encoding**: Logs are emitted as JSON for compatibility with log aggregation systems
+
+Example log output:
+
+```json
+{
+  "timestamp": "2024-01-20T10:15:30.123Z",
+  "level": "debug",
+  "logger": "valet",
+  "caller": "generate.go:459",
+  "message": "Original YAML values loaded",
+  "trace_id": "7d3e8f9a1b2c3d4e5f6a7b8c9d0e1f2a",
+  "span_id": "1a2b3c4d5e6f7890",
+  "file": "charts/mychart/values.yaml",
+  "top_level_keys": 15
+}
+```
+
+#### Integration with Observability Platforms
+
+Valet's OTLP exporter can send telemetry data to any OpenTelemetry-compatible backend:
+
+- **Jaeger**: For distributed tracing
+- **Prometheus**: For metrics collection
+- **Grafana**: For visualization
+- **Elastic APM**: For application performance monitoring
+- **New Relic, Datadog, etc.**: Via OTLP support
+
+Example docker-compose setup for local observability:
+
+```yaml
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    ports:
+      - "4317:4317"  # OTLP gRPC
+      - "4318:4318"  # OTLP HTTP
+    volumes:
+      - ./otel-config.yaml:/etc/otel-collector-config.yaml
+    command: ["--config=/etc/otel-collector-config.yaml"]
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14250:14250"  # Jaeger gRPC
 ```
 
 #### Example Input/Output
@@ -327,11 +520,13 @@ go tool cover -html=coverage.out
 #### Test Organization
 
 All tests are located in the `tests` directory and use the `ValetTestSuite` struct which provides:
+
 - Setup and teardown functionality
 - Helper methods like `CopyDir` for test fixtures
 - Consistent assertion methods via Testify
 
 The project maintains high test coverage standards:
+
 - 70% minimum coverage for each file
 - 80% minimum coverage for each package
 - 85% minimum total coverage
