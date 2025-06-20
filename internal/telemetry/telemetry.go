@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/mkm29/valet/internal/config"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -22,50 +23,9 @@ import (
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
-const (
-	// ServiceName is the name of the service for telemetry
-	ServiceName = "valet"
-	// ServiceVersion is the version of the service
-	ServiceVersion = "0.1.0"
-)
-
-// Config holds the telemetry configuration
-type Config struct {
-	// Enabled determines if telemetry is enabled
-	Enabled bool
-	// ServiceName overrides the default service name
-	ServiceName string
-	// ServiceVersion overrides the default service version
-	ServiceVersion string
-	// ExporterType determines the exporter type (otlp, stdout, none)
-	ExporterType string
-	// OTLPEndpoint is the OTLP endpoint for traces and metrics
-	OTLPEndpoint string
-	// Insecure determines if the OTLP connection should be insecure
-	Insecure bool
-	// Headers are additional headers to send with OTLP requests
-	Headers map[string]string
-	// SampleRate is the trace sampling rate (0.0 to 1.0)
-	SampleRate float64
-}
-
-// DefaultConfig returns the default telemetry configuration
-func DefaultConfig() *Config {
-	return &Config{
-		Enabled:        false,
-		ServiceName:    ServiceName,
-		ServiceVersion: ServiceVersion,
-		ExporterType:   "none",
-		OTLPEndpoint:   "localhost:4317",
-		Insecure:       true,
-		Headers:        make(map[string]string),
-		SampleRate:     1.0,
-	}
-}
-
 // Telemetry holds the telemetry providers and instruments
 type Telemetry struct {
-	config         *Config
+	config         *config.TelemetryConfig
 	tracerProvider *sdktrace.TracerProvider
 	meterProvider  *sdkmetric.MeterProvider
 	tracer         oteltrace.Tracer
@@ -74,9 +34,9 @@ type Telemetry struct {
 }
 
 // Initialize initializes the telemetry providers
-func Initialize(ctx context.Context, cfg *Config) (*Telemetry, error) {
+func Initialize(ctx context.Context, cfg *config.TelemetryConfig) (*Telemetry, error) {
 	if cfg == nil {
-		cfg = DefaultConfig()
+		cfg = config.DefaultTelemetryConfig()
 	}
 
 	if !cfg.Enabled {
@@ -109,7 +69,7 @@ func Initialize(ctx context.Context, cfg *Config) (*Telemetry, error) {
 	// Create structured logger
 	logger := NewLogger(false) // Debug will be controlled by the caller
 	logger.SetDefault()
-	
+
 	// Create telemetry instance
 	t := &Telemetry{
 		config:         cfg,
@@ -153,7 +113,7 @@ func (t *Telemetry) Shutdown(ctx context.Context) error {
 // Tracer returns the tracer
 func (t *Telemetry) Tracer() oteltrace.Tracer {
 	if t == nil || t.tracer == nil {
-		return otel.Tracer(ServiceName)
+		return otel.Tracer("valet")
 	}
 	return t.tracer
 }
@@ -161,7 +121,7 @@ func (t *Telemetry) Tracer() oteltrace.Tracer {
 // Meter returns the meter
 func (t *Telemetry) Meter() metric.Meter {
 	if t == nil || t.meter == nil {
-		return otel.Meter(ServiceName)
+		return otel.Meter("valet")
 	}
 	return t.meter
 }
@@ -181,9 +141,9 @@ func (t *Telemetry) Logger() *Logger {
 }
 
 // newResource creates a new resource with service information
-func newResource(cfg *Config) (*resource.Resource, error) {
+func newResource(cfg *config.TelemetryConfig) (*resource.Resource, error) {
 	hostname, _ := os.Hostname()
-	
+
 	return resource.Merge(
 		resource.Default(),
 		resource.NewWithAttributes(
@@ -196,7 +156,7 @@ func newResource(cfg *Config) (*resource.Resource, error) {
 }
 
 // initTracerProvider initializes the tracer provider
-func initTracerProvider(ctx context.Context, cfg *Config, res *resource.Resource) (*sdktrace.TracerProvider, error) {
+func initTracerProvider(ctx context.Context, cfg *config.TelemetryConfig, res *resource.Resource) (*sdktrace.TracerProvider, error) {
 	var exporter sdktrace.SpanExporter
 	var err error
 
@@ -238,7 +198,7 @@ func initTracerProvider(ctx context.Context, cfg *Config, res *resource.Resource
 }
 
 // initMeterProvider initializes the meter provider
-func initMeterProvider(ctx context.Context, cfg *Config, res *resource.Resource) (*sdkmetric.MeterProvider, error) {
+func initMeterProvider(ctx context.Context, cfg *config.TelemetryConfig, res *resource.Resource) (*sdkmetric.MeterProvider, error) {
 	var exporter sdkmetric.Exporter
 	var err error
 

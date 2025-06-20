@@ -96,7 +96,7 @@ func errorType(err error) string {
 // WithCommandSpan wraps a command execution with a span and metrics
 func WithCommandSpan(ctx context.Context, t *Telemetry, command string, fn func(context.Context) error) error {
 	start := time.Now()
-	
+
 	// Start span
 	ctx, span := t.StartSpan(ctx, "command."+command,
 		trace.WithAttributes(
@@ -107,10 +107,10 @@ func WithCommandSpan(ctx context.Context, t *Telemetry, command string, fn func(
 
 	// Execute the function
 	err := fn(ctx)
-	
+
 	// Record duration
 	duration := time.Since(start)
-	
+
 	// Set span status and attributes
 	if err != nil {
 		span.RecordError(err)
@@ -118,7 +118,7 @@ func WithCommandSpan(ctx context.Context, t *Telemetry, command string, fn func(
 	} else {
 		span.SetStatus(codes.Ok, "")
 	}
-	
+
 	span.SetAttributes(
 		attribute.Float64("duration.seconds", duration.Seconds()),
 	)
@@ -128,8 +128,8 @@ func WithCommandSpan(ctx context.Context, t *Telemetry, command string, fn func(
 
 // FileOperationMetrics holds metrics for file operations
 type FileOperationMetrics struct {
-	ReadCounter  metric.Int64Counter
-	WriteCounter metric.Int64Counter
+	ReadCounter   metric.Int64Counter
+	WriteCounter  metric.Int64Counter
 	SizeHistogram metric.Int64Histogram
 }
 
@@ -187,7 +187,7 @@ func (m *FileOperationMetrics) RecordFileRead(ctx context.Context, path string, 
 	}
 
 	m.ReadCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
-	
+
 	if err == nil && m.SizeHistogram != nil {
 		m.SizeHistogram.Record(ctx, size, metric.WithAttributes(attrs...))
 	}
@@ -205,7 +205,7 @@ func (m *FileOperationMetrics) RecordFileWrite(ctx context.Context, path string,
 	}
 
 	m.WriteCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
-	
+
 	if err == nil && m.SizeHistogram != nil {
 		m.SizeHistogram.Record(ctx, size, metric.WithAttributes(attrs...))
 	}

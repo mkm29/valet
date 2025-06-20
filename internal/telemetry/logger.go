@@ -42,22 +42,22 @@ func (h *OtelHandler) Handle(ctx context.Context, r slog.Record) error {
 				slog.String("span_id", spanCtx.SpanID().String()),
 			)
 		}
-		
+
 		// Also add the log as an event to the span
 		attrs := make([]attribute.KeyValue, 0, r.NumAttrs())
 		attrs = append(attrs,
 			attribute.String("log.severity", r.Level.String()),
 			attribute.String("log.message", r.Message),
 		)
-		
+
 		r.Attrs(func(a slog.Attr) bool {
 			attrs = append(attrs, attribute.String("log."+a.Key, fmt.Sprint(a.Value)))
 			return true
 		})
-		
+
 		span.AddEvent("log", trace.WithAttributes(attrs...))
 	}
-	
+
 	return h.handler.Handle(ctx, r)
 }
 
@@ -90,10 +90,10 @@ func NewLogger(debug bool) *Logger {
 	if debug {
 		opts.Level = slog.LevelDebug
 	}
-	
+
 	handler := NewOtelHandler(opts)
 	logger := slog.New(handler)
-	
+
 	return &Logger{
 		Logger: logger,
 	}

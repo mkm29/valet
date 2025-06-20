@@ -34,7 +34,7 @@ func NewRootCmd() *cobra.Command {
 				}
 				cfg = c
 			}
-			
+
 			// Initialize telemetry if not already initialized
 			if tel == nil && cfg.Telemetry != nil {
 				ctx := context.Background()
@@ -46,16 +46,16 @@ func NewRootCmd() *cobra.Command {
 					}
 				} else {
 					tel = t
-					
+
 					// Set up graceful shutdown
 					go func() {
 						sigChan := make(chan os.Signal, 1)
 						signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 						<-sigChan
-						
+
 						shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 						defer cancel()
-						
+
 						if err := tel.Shutdown(shutdownCtx); err != nil {
 							log.Printf("Error shutting down telemetry: %v\n", err)
 						}
@@ -63,7 +63,7 @@ func NewRootCmd() *cobra.Command {
 					}()
 				}
 			}
-			
+
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -91,7 +91,7 @@ func NewRootCmd() *cobra.Command {
 	cmd.PersistentFlags().StringP("overrides", "f", "", "overrides file (optional)")
 	cmd.PersistentFlags().StringP("output", "o", "values.schema.json", "output file (default: values.schema.json)")
 	cmd.PersistentFlags().BoolP("debug", "d", false, "enable debug logging")
-	
+
 	// Telemetry flags
 	cmd.PersistentFlags().Bool("telemetry", false, "enable telemetry")
 	cmd.PersistentFlags().String("telemetry-exporter", "none", "telemetry exporter type (none, stdout, otlp)")
@@ -120,7 +120,7 @@ func initializeConfig(cmd *cobra.Command) (*config.Config, error) {
 	} else {
 		// No config file: start with empty config
 		c = &config.Config{
-			Telemetry: telemetry.DefaultConfig(),
+			Telemetry: config.DefaultTelemetryConfig(),
 		}
 	}
 	// Override with CLI flags or defaults
@@ -142,10 +142,10 @@ func initializeConfig(cmd *cobra.Command) (*config.Config, error) {
 		dbg, _ := cmd.PersistentFlags().GetBool("debug")
 		c.Debug = dbg
 	}
-	
+
 	// Handle telemetry flags
 	if c.Telemetry == nil {
-		c.Telemetry = telemetry.DefaultConfig()
+		c.Telemetry = config.DefaultTelemetryConfig()
 	}
 	if cmd.PersistentFlags().Changed("telemetry") {
 		enabled, _ := cmd.PersistentFlags().GetBool("telemetry")
@@ -167,7 +167,7 @@ func initializeConfig(cmd *cobra.Command) (*config.Config, error) {
 		rate, _ := cmd.PersistentFlags().GetFloat64("telemetry-sample-rate")
 		c.Telemetry.SampleRate = rate
 	}
-	
+
 	if c.Debug {
 		log.Printf("Config: %+v\n", c)
 	}

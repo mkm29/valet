@@ -1,0 +1,102 @@
+# OpenTelemetry Collector Configuration
+# This example shows how to configure the OpenTelemetry Collector to receive
+# telemetry data from Valet and export it to various backends
+
+receivers:
+  # OTLP receiver for traces and metrics from Valet
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Add metadata to all telemetry
+  resource:
+    attributes:
+      - key: environment
+        value: development
+        action: upsert
+      - key: deployment.environment
+        value: local
+        action: upsert
+  
+  # Batch telemetry data to reduce API calls
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+  
+  # Memory limiter prevents OOM situations
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+exporters:
+  # Console exporter for debugging
+  logging:
+    loglevel: debug
+    sampling_initial: 5
+    sampling_thereafter: 200
+  
+  # Prometheus exporter for metrics
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    const_labels:
+      service: "valet"
+  
+  # Jaeger exporter for traces
+  jaeger:
+    endpoint: jaeger:14250
+    tls:
+      insecure: true
+  
+  # OTLP exporter (can be used for various backends like Grafana Cloud, New Relic, etc.)
+  otlp/backend:
+    endpoint: "your-backend-endpoint:4317"
+    headers:
+      api-key: "your-api-key"
+    tls:
+      insecure: false
+
+# Extension for health checks
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  pprof:
+    endpoint: 0.0.0.0:1777
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+service:
+  # Enable extensions
+  extensions: [health_check, pprof, zpages]
+  
+  # Enable telemetry for the collector itself
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      level: detailed
+      address: 0.0.0.0:8888
+  
+  # Define pipelines
+  pipelines:
+    # Traces pipeline
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [logging, jaeger]
+    
+    # Metrics pipeline
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [logging, prometheus]
+    
+    # Logs pipeline (if Valet starts exporting logs via OTLP)
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [logging]

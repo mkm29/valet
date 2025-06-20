@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Refactored telemetry configuration structure for better separation of concerns
+  - Moved `Config` struct from `internal/telemetry` package to `internal/config` package as `TelemetryConfig`
+  - Added YAML field tags to all `TelemetryConfig` fields for proper configuration file parsing
+  - Renamed `DefaultConfig()` to `DefaultTelemetryConfig()` and moved it to the config package
+  - Updated all references to use `config.TelemetryConfig` instead of `telemetry.Config`
+  - Improved configuration file field naming consistency (e.g., `exporter_type` → `exporterType`)
+
+### Added
+
+- Added `serviceName` and `serviceVersion` fields to telemetry configuration for better observability customization
+- Added comprehensive examples directory with:
+  - Complete Valet configuration file example (`valet-config.yaml`)
+  - OpenTelemetry Collector configuration example (`otel-config.yaml`)
+  - Sample Helm chart demonstrating all supported patterns
+  - Detailed README explaining how to use the examples
+
 ## [v0.2.3] - 2025-06-19
 
 ### Changed

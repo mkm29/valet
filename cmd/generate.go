@@ -375,7 +375,7 @@ func Generate(ctxDir, overridesFlag string) (string, error) {
 	// Create context for tracing
 	ctx := context.Background()
 	tel := GetTelemetry()
-	
+
 	// Start main span
 	start := time.Now()
 	ctx, span := tel.StartSpan(ctx, "generate.command",
@@ -385,22 +385,22 @@ func Generate(ctxDir, overridesFlag string) (string, error) {
 		),
 	)
 	defer span.End()
-	
+
 	// Function to execute the actual generation
 	executeGenerate := func() (string, error) {
 		return generateInternal(ctx, tel, ctxDir, overridesFlag)
 	}
-	
+
 	// Execute with telemetry wrapper if enabled
 	if tel.IsEnabled() {
 		result, err := executeGenerate()
 		duration := time.Since(start)
-		
+
 		// Record command metrics
 		if cmdMetrics, metricsErr := tel.NewCommandMetrics(); metricsErr == nil {
 			cmdMetrics.RecordCommandExecution(ctx, "generate", duration, err)
 		}
-		
+
 		// Set span status
 		if err != nil {
 			span.RecordError(err)
@@ -408,10 +408,10 @@ func Generate(ctxDir, overridesFlag string) (string, error) {
 		} else {
 			span.SetStatus(codes.Ok, "Schema generated successfully")
 		}
-		
+
 		return result, err
 	}
-	
+
 	// Execute without telemetry
 	return executeGenerate()
 }
@@ -441,7 +441,7 @@ func generateInternal(ctx context.Context, tel *telemetry.Telemetry, ctxDir, ove
 		telemetry.RecordError(ctx, err)
 		return "", fmt.Errorf("error loading %s: %w", valuesPath, err)
 	}
-	
+
 	// Record file metrics
 	if fileMetrics, metricsErr := tel.NewFileOperationMetrics(); metricsErr == nil {
 		if fi, statErr := os.Stat(valuesPath); statErr == nil {
@@ -454,11 +454,11 @@ func generateInternal(ctx context.Context, tel *telemetry.Telemetry, ctxDir, ove
 	isDebug := cfg != nil && cfg.Debug
 	if isDebug && tel.IsEnabled() {
 		logger := tel.Logger()
-		logger.Debug(ctx, "Original YAML values loaded", 
+		logger.Debug(ctx, "Original YAML values loaded",
 			"file", valuesPath,
 			"top_level_keys", len(yaml1),
 		)
-		
+
 		// Count components with enabled field
 		enabledComponentCount := 0
 		disabledComponentCount := 0
@@ -498,7 +498,7 @@ func generateInternal(ctx context.Context, tel *telemetry.Telemetry, ctxDir, ove
 			telemetry.RecordError(ctx, err)
 			return "", fmt.Errorf("error loading %s: %w", overridesPath, err)
 		}
-		
+
 		// Merge with tracing
 		ctx, mergeSpan := tel.StartSpan(ctx, "merge.yaml_files")
 		merged = deepMerge(yaml1, yaml2)
@@ -506,7 +506,7 @@ func generateInternal(ctx context.Context, tel *telemetry.Telemetry, ctxDir, ove
 	} else {
 		merged = yaml1
 	}
-	
+
 	// Generate schema with tracing
 	ctx, schemaSpan := tel.StartSpan(ctx, "generate.schema")
 	schemaStart := time.Now()
@@ -516,7 +516,7 @@ func generateInternal(ctx context.Context, tel *telemetry.Telemetry, ctxDir, ove
 	// Post-process the schema to ensure no empty fields are in the required lists
 	cleanupRequiredFields(schema, yaml1)
 	schemaSpan.End()
-	
+
 	// Record schema generation metrics
 	if schemaMetrics, metricsErr := tel.NewSchemaGenerationMetrics(); metricsErr == nil {
 		fieldCount := countSchemaFields(schema)
@@ -524,7 +524,7 @@ func generateInternal(ctx context.Context, tel *telemetry.Telemetry, ctxDir, ove
 	}
 
 	outPath := filepath.Join(ctxDir, "values.schema.json")
-	
+
 	// Marshal JSON with tracing
 	ctx, marshalSpan := tel.StartSpan(ctx, "marshal.json")
 	data, err := json.MarshalIndent(schema, "", "  ")
@@ -533,7 +533,7 @@ func generateInternal(ctx context.Context, tel *telemetry.Telemetry, ctxDir, ove
 		telemetry.RecordError(ctx, err)
 		return "", fmt.Errorf("error marshaling JSON: %w", err)
 	}
-	
+
 	// Write file with tracing
 	ctx, writeSpan := tel.StartSpan(ctx, "write.schema_file",
 		trace.WithAttributes(
@@ -547,12 +547,12 @@ func generateInternal(ctx context.Context, tel *telemetry.Telemetry, ctxDir, ove
 		return "", fmt.Errorf("error writing %s: %w", outPath, err)
 	}
 	writeSpan.End()
-	
+
 	// Record file write metrics
 	if fileMetrics, metricsErr := tel.NewFileOperationMetrics(); metricsErr == nil {
 		fileMetrics.RecordFileWrite(ctx, outPath, int64(len(data)), nil)
 	}
-	
+
 	if overridesPath != "" {
 		return fmt.Sprintf("Generated %s by merging %s into values.yaml", outPath, overridesFlag), nil
 	}

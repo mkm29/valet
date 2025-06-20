@@ -171,10 +171,12 @@ The CLI supports a YAML configuration file (default: `.valet.yaml`) in the curre
 - `debug`: enable debug logging (boolean)
 - `telemetry`: telemetry configuration (object)
   - `enabled`: enable telemetry (boolean)
-  - `exporter_type`: type of exporter (`none`, `stdout`, `otlp`)
-  - `otlp_endpoint`: OTLP endpoint for traces and metrics
+  - `serviceName`: service name for telemetry (default: `valet`)
+  - `serviceVersion`: service version for telemetry (default: `0.1.0`)
+  - `exporterType`: type of exporter (`none`, `stdout`, `otlp`)
+  - `otlpEndpoint`: OTLP endpoint for traces and metrics
   - `insecure`: use insecure connection for OTLP
-  - `sample_rate`: trace sampling rate (0.0 to 1.0)
+  - `sampleRate`: trace sampling rate (0.0 to 1.0)
   - `headers`: additional headers for OTLP requests (map)
 
 #### Environment Variables
@@ -244,10 +246,12 @@ Telemetry can be configured via:
 ```yaml
 telemetry:
   enabled: true
-  exporter_type: otlp
-  otlp_endpoint: localhost:4317
+  serviceName: valet
+  serviceVersion: 0.1.0
+  exporterType: otlp
+  otlpEndpoint: localhost:4317
   insecure: true
-  sample_rate: 1.0
+  sampleRate: 1.0
   headers:
     api-key: your-api-key
 ```
