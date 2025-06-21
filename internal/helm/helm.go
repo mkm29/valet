@@ -7,47 +7,25 @@ import (
 	"log"
 	"os"
 
+	"github.com/mkm29/valet/internal/config"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/getter"
 )
 
-type Registry struct {
-	URL  string
-	Auth struct {
-		Username string // Optional username for authentication
-		Password string // Optional password for authentication
-		Token    string // Optional authentication token for private registries
-	} // Optional authentication token for private registries
-	TLS struct {
-		InsecureSkipTLSVerify bool   // Whether to skip TLS verification
-		CertFile              string // Path to the client certificate file
-		KeyFile               string // Path to the client key file
-		CaFile                string // Path to the CA certificate file
-	} // optional TLS configuration
-	Insecure bool   // Whether to allow insecure connections
-	Type     string // e.g., "HTTP", "HTTPS", "OCI"
-}
-
-type Chart struct {
-	Registry *Registry
-	Name     string
-	Version  string
-}
-
-// get Options
-func (c *Chart) GetOptions() []getter.Option {
+// GetOptions builds getter options from a HelmChart configuration
+func GetOptions(c *config.HelmChart) []getter.Option {
 	var getterOpts []getter.Option
 
 	if c.Registry.Type == "HTTP" {
 		getterOpts = append(getterOpts, getter.WithPlainHTTP(true))
 	}
-	if c.Registry.Auth.Username != "" && c.Registry.Auth.Password != "" {
+	if c.Registry.Auth != nil && c.Registry.Auth.Username != "" && c.Registry.Auth.Password != "" {
 		getterOpts = append(getterOpts, getter.WithBasicAuth(c.Registry.Auth.Username, c.Registry.Auth.Password))
 	}
 	if c.Registry.Insecure {
 		getterOpts = append(getterOpts, getter.WithInsecureSkipVerifyTLS(true))
 	}
-	if c.Registry.TLS.CertFile != "" && c.Registry.TLS.KeyFile != "" && c.Registry.TLS.CaFile != "" {
+	if c.Registry.TLS != nil && c.Registry.TLS.CertFile != "" && c.Registry.TLS.KeyFile != "" && c.Registry.TLS.CaFile != "" {
 		getterOpts = append(getterOpts, getter.WithTLSClientConfig(c.Registry.TLS.CertFile, c.Registry.TLS.KeyFile, c.Registry.TLS.CaFile))
 		getterOpts = append(getterOpts, getter.WithURL(c.Registry.URL))
 	}
@@ -55,8 +33,8 @@ func (c *Chart) GetOptions() []getter.Option {
 	return getterOpts
 }
 
-// ChartHasSchema checks if a chart has a values.schema.json file
-func (c *Chart) HasSchema() (bool, error) {
+// HasSchema checks if a chart has a values.schema.json file
+func HasSchema(c *config.HelmChart) (bool, error) {
 	url := fmt.Sprintf("%s/%s-%s.tgz", c.Registry.URL, c.Name, c.Version)
 
 	// 1. Download the chart archive
@@ -78,7 +56,7 @@ func (c *Chart) HasSchema() (bool, error) {
 		return false, fmt.Errorf("unsupported registry type: %s", c.Registry.Type)
 	}
 
-	getterOpts := c.GetOptions()
+	getterOpts := GetOptions(c)
 	provider, err := g.Get(url, getterOpts...)
 	if err != nil {
 		return false, fmt.Errorf("failed to get chart: %w", err)
@@ -101,9 +79,9 @@ func (c *Chart) HasSchema() (bool, error) {
 	return false, nil
 }
 
-// GetSchema retrieves the values.schema.json file from the chart and saves to temporary file
-func (c *Chart) DownloadSchema() (string, error) {
-	hasSchema, err := c.HasSchema()
+// DownloadSchema retrieves the values.schema.json file from the chart and saves to temporary file
+func DownloadSchema(c *config.HelmChart) (string, error) {
+	hasSchema, err := HasSchema(c)
 	if err != nil {
 		return "", fmt.Errorf("error checking for schema: %w", err)
 	}
@@ -132,7 +110,7 @@ func (c *Chart) DownloadSchema() (string, error) {
 		return "", fmt.Errorf("unsupported registry type: %s", c.Registry.Type)
 	}
 
-	getterOpts := c.GetOptions()
+	getterOpts := GetOptions(c)
 	provider, err := g.Get(url, getterOpts...)
 	if err != nil {
 		return "", fmt.Errorf("failed to get chart: %w", err)

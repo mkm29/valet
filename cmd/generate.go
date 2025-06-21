@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/mkm29/valet/internal/config"
+	"github.com/mkm29/valet/internal/helm"
 	"github.com/mkm29/valet/internal/telemetry"
 	"github.com/spf13/cobra"
 	"go.opentelemetry.io/otel/attribute"
@@ -730,7 +731,7 @@ You can generate a schema from either:
 		// Do not print usage on error; just show the error message
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			
+
 			// Get context directory if provided
 			var ctx string
 			if len(args) > 0 {
@@ -744,7 +745,7 @@ You can generate a schema from either:
 			hasRemoteChartFlags := chartName != ""
 			hasRemoteChartConfig := cfg != nil && cfg.Helm != nil && cfg.Helm.Chart != nil && cfg.Helm.Chart.Name != ""
 			hasLocalContext := ctx != ""
-			
+
 			// Debug output
 			if cfg != nil && cfg.Debug && zap.L() != nil {
 				zap.L().Debug("Generate command configuration",
@@ -791,15 +792,15 @@ You can generate a schema from either:
 
 					// Build HelmConfig from flags
 					helmConfig := &config.HelmConfig{
-						Chart: &config.HelmChartConfig{
+						Chart: &config.HelmChart{
 							Name:    chartName,
 							Version: chartVersion,
-							Registry: &config.HelmRegistryConfig{
+							Registry: &config.HelmRegistry{
 								URL:      registryURL,
 								Type:     registryType,
 								Insecure: false,
-								Auth:     config.NewHelmAuthConfig(),
-								TLS:      config.NewHelmTLSConfig(),
+								Auth:     config.NewHelmAuth(),
+								TLS:      config.NewHelmTLS(),
 							},
 						},
 					}
@@ -844,7 +845,16 @@ You can generate a schema from either:
 				} else {
 					// Use config file helm configuration
 					// TODO: Use cfg.Helm to generate schema from remote chart
-					return fmt.Errorf("remote chart support via config file not yet implemented")
+					// execute DownloadSchema() just for testing
+					loc, err := helm.DownloadSchema(cfg.Helm.Chart)
+					if err != nil {
+						return fmt.Errorf("error downloading remote chart schema: %w", err)
+					}
+					if loc == "" {
+						return fmt.Errorf("no schema found for remote chart %s", cfg.Helm.Chart.Name)
+					}
+					// print out the location of the downloaded schema
+					fmt.Printf("Downloaded remote chart schema to: %s\n", loc)
 				}
 			}
 

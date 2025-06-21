@@ -1,7 +1,7 @@
 # Example Valet configuration for working with remote Helm charts
 
 # Debug logging
-debug: false
+debug: true
 
 # Output file name
 output: values.schema.json

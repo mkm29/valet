@@ -17,58 +17,6 @@ type Config struct {
 	Helm      *HelmConfig      `yaml:"helm"`
 }
 
-// HelmConfig holds the configuration for Helm chart operations
-type HelmConfig struct {
-	// Chart specifies the remote chart details
-	Chart *HelmChartConfig `yaml:"chart"`
-}
-
-// HelmChartConfig holds the configuration for a specific Helm chart
-type HelmChartConfig struct {
-	// Name is the chart name
-	Name string `yaml:"name"`
-	// Version is the chart version
-	Version string `yaml:"version"`
-	// Registry holds the registry configuration
-	Registry *HelmRegistryConfig `yaml:"registry"`
-}
-
-// HelmRegistryConfig holds the registry configuration
-type HelmRegistryConfig struct {
-	// URL is the registry URL
-	URL string `yaml:"url"`
-	// Type is the registry type (HTTP, HTTPS, OCI)
-	Type string `yaml:"type"`
-	// Insecure allows insecure connections
-	Insecure bool `yaml:"insecure"`
-	// Auth holds authentication configuration
-	Auth *HelmAuthConfig `yaml:"auth"`
-	// TLS holds TLS configuration
-	TLS *HelmTLSConfig `yaml:"tls"`
-}
-
-// HelmAuthConfig holds authentication configuration
-type HelmAuthConfig struct {
-	// Username for basic auth
-	Username string `yaml:"username"`
-	// Password for basic auth
-	Password string `yaml:"password"`
-	// Token for token-based auth
-	Token string `yaml:"token"`
-}
-
-// HelmTLSConfig holds TLS configuration
-type HelmTLSConfig struct {
-	// InsecureSkipTLSVerify skips TLS verification
-	InsecureSkipTLSVerify bool `yaml:"insecureSkipTLSVerify"`
-	// CertFile is the path to the client certificate
-	CertFile string `yaml:"certFile"`
-	// KeyFile is the path to the client key
-	KeyFile string `yaml:"keyFile"`
-	// CaFile is the path to the CA certificate
-	CaFile string `yaml:"caFile"`
-}
-
 // TelemetryConfig holds the telemetry configuration
 type TelemetryConfig struct {
 	// Enabled determines if telemetry is enabled
@@ -103,6 +51,42 @@ func NewTelemetryConfig() *TelemetryConfig {
 	}
 }
 
+// HelmConfig holds the configuration for Helm chart operations
+type HelmConfig struct {
+	Chart *HelmChart `yaml:"chart"`
+}
+
+// HelmChart holds the configuration for a specific Helm chart
+type HelmChart struct {
+	Name     string        `yaml:"name"`
+	Version  string        `yaml:"version"`
+	Registry *HelmRegistry `yaml:"registry"`
+}
+
+// HelmRegistry holds the registry configuration
+type HelmRegistry struct {
+	URL      string    `yaml:"url"`
+	Type     string    `yaml:"type"`     // e.g., "HTTP", "HTTPS", "OCI"
+	Insecure bool      `yaml:"insecure"` // Whether to allow insecure connections
+	Auth     *HelmAuth `yaml:"auth"`
+	TLS      *HelmTLS  `yaml:"tls"`
+}
+
+// HelmAuth holds authentication configuration
+type HelmAuth struct {
+	Username string `yaml:"username"` // Optional username for authentication
+	Password string `yaml:"password"` // Optional password for authentication
+	Token    string `yaml:"token"`    // Optional authentication token for private registries
+}
+
+// HelmTLS holds TLS configuration
+type HelmTLS struct {
+	InsecureSkipTLSVerify bool   `yaml:"insecureSkipTLSVerify"` // Whether to skip TLS verification
+	CertFile              string `yaml:"certFile"`              // Path to the client certificate file
+	KeyFile               string `yaml:"keyFile"`               // Path to the client key file
+	CaFile                string `yaml:"caFile"`                // Path to the CA certificate file
+}
+
 // NewHelmConfig returns the default Helm configuration
 func NewHelmConfig() *HelmConfig {
 	return &HelmConfig{
@@ -110,38 +94,38 @@ func NewHelmConfig() *HelmConfig {
 	}
 }
 
-// NewHelmChartConfig returns the default Helm chart configuration
-func NewHelmChartConfig() *HelmChartConfig {
-	return &HelmChartConfig{
+// NewHelmChart returns the default Helm chart configuration
+func NewHelmChart() *HelmChart {
+	return &HelmChart{
 		Name:     "",
 		Version:  "",
-		Registry: NewHelmRegistryConfig(),
+		Registry: NewHelmRegistry(),
 	}
 }
 
-// NewHelmRegistryConfig returns the default Helm registry configuration
-func NewHelmRegistryConfig() *HelmRegistryConfig {
-	return &HelmRegistryConfig{
+// NewHelmRegistry returns the default Helm registry configuration
+func NewHelmRegistry() *HelmRegistry {
+	return &HelmRegistry{
 		URL:      "",
 		Type:     "HTTPS",
 		Insecure: false,
-		Auth:     NewHelmAuthConfig(),
-		TLS:      NewHelmTLSConfig(),
+		Auth:     NewHelmAuth(),
+		TLS:      NewHelmTLS(),
 	}
 }
 
-// NewHelmAuthConfig returns the default Helm auth configuration
-func NewHelmAuthConfig() *HelmAuthConfig {
-	return &HelmAuthConfig{
+// NewHelmAuth returns the default Helm auth configuration
+func NewHelmAuth() *HelmAuth {
+	return &HelmAuth{
 		Username: "",
 		Password: "",
 		Token:    "",
 	}
 }
 
-// NewHelmTLSConfig returns the default Helm TLS configuration
-func NewHelmTLSConfig() *HelmTLSConfig {
-	return &HelmTLSConfig{
+// NewHelmTLS returns the default Helm TLS configuration
+func NewHelmTLS() *HelmTLS {
+	return &HelmTLS{
 		InsecureSkipTLSVerify: false,
 		CertFile:              "",
 		KeyFile:               "",
@@ -235,75 +219,13 @@ func LoadConfig(path string) (*Config, error) {
 			}
 			// Ensure Auth and TLS are not nil
 			if cfg.Helm.Chart.Registry.Auth == nil {
-				cfg.Helm.Chart.Registry.Auth = NewHelmAuthConfig()
+				cfg.Helm.Chart.Registry.Auth = NewHelmAuth()
 			}
 			if cfg.Helm.Chart.Registry.TLS == nil {
-				cfg.Helm.Chart.Registry.TLS = NewHelmTLSConfig()
+				cfg.Helm.Chart.Registry.TLS = NewHelmTLS()
 			}
 		}
 	}
 
 	return cfg, nil
-}
-
-// ToHelmChart converts the HelmConfig to a helm.Chart structure
-func (h *HelmConfig) ToHelmChart() *HelmChart {
-	if h == nil || h.Chart == nil {
-		return nil
-	}
-
-	chart := &HelmChart{
-		Name:    h.Chart.Name,
-		Version: h.Chart.Version,
-	}
-
-	if h.Chart.Registry != nil {
-		registry := &HelmRegistry{
-			URL:      h.Chart.Registry.URL,
-			Type:     h.Chart.Registry.Type,
-			Insecure: h.Chart.Registry.Insecure,
-		}
-
-		if h.Chart.Registry.Auth != nil {
-			registry.Auth.Username = h.Chart.Registry.Auth.Username
-			registry.Auth.Password = h.Chart.Registry.Auth.Password
-			registry.Auth.Token = h.Chart.Registry.Auth.Token
-		}
-
-		if h.Chart.Registry.TLS != nil {
-			registry.TLS.InsecureSkipTLSVerify = h.Chart.Registry.TLS.InsecureSkipTLSVerify
-			registry.TLS.CertFile = h.Chart.Registry.TLS.CertFile
-			registry.TLS.KeyFile = h.Chart.Registry.TLS.KeyFile
-			registry.TLS.CaFile = h.Chart.Registry.TLS.CaFile
-		}
-
-		chart.Registry = registry
-	}
-
-	return chart
-}
-
-// HelmChart represents a Helm chart (for internal use)
-type HelmChart struct {
-	Registry *HelmRegistry
-	Name     string
-	Version  string
-}
-
-// HelmRegistry represents a Helm registry (for internal use)
-type HelmRegistry struct {
-	URL  string
-	Auth struct {
-		Username string
-		Password string
-		Token    string
-	}
-	TLS struct {
-		InsecureSkipTLSVerify bool
-		CertFile              string
-		KeyFile               string
-		CaFile                string
-	}
-	Insecure bool
-	Type     string
 }

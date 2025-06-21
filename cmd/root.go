@@ -41,13 +41,13 @@ func NewRootCmd() *cobra.Command {
 			} else {
 				logConfig = zap.NewProductionConfig()
 			}
-			
+
 			logger, err := logConfig.Build()
 			if err != nil {
 				return fmt.Errorf("failed to initialize logger: %w", err)
 			}
 			zap.ReplaceGlobals(logger)
-			
+
 			// Log config if debug is enabled
 			if cfg.Debug {
 				zap.L().Debug("Config loaded", zap.Any("config", cfg))
@@ -128,7 +128,7 @@ func initializeConfig(cmd *cobra.Command) (*config.Config, error) {
 	// Get the root command to access persistent flags
 	rootCmd := cmd.Root()
 	cfgFile, _ := rootCmd.PersistentFlags().GetString("config-file")
-	
+
 	// Check if config file exists (either explicitly set or default)
 	if _, statErr := os.Stat(cfgFile); statErr == nil {
 		c, err = config.LoadConfig(cfgFile)

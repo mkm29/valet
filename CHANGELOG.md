@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Improved configuration file loading to properly detect and load config files when specified
 - Logging is now independent of telemetry - logger is always initialized based on debug setting
 - Debug logging is available whenever `debug: true` is set, regardless of telemetry state
+- Consolidated Helm configuration structs in the `internal/helm` package to avoid duplication
 
 ### Fixed
 
