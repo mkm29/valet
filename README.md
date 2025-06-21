@@ -595,11 +595,12 @@ Our development roadmap reflects our commitment to making Valet the most powerfu
   - [ ] Min/max constraints for numeric fields
   - [ ] Required field inference from templates
 
-- [ ] **Developer Experience**
-  - [ ] Interactive mode with schema preview
-  - [ ] Schema diff tool for comparing versions
-  - [ ] VS Code extension for real-time validation
-  - [ ] Watch mode for automatic regeneration
+- [ ] **CUE Integration**
+  - [ ] See HEP [13260](https://github.com/helm/helm/issues/13260)
+  - [ ] Generate CUE schemas from Helm values
+  - [ ] Support CUE validation in CLI
+  - [ ] CUE-based schema merging and overrides
+  - [ ] CUE schema generation from remote charts
 
 #### Medium-term (Q3-Q4 2025)
 
