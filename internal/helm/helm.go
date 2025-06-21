@@ -22,7 +22,6 @@ type Helm struct {
 type HelmOptions struct {
 	Debug  bool
 	Logger *zap.Logger
-	// Add more options as needed in the future
 }
 
 // NewHelm creates a new Helm instance with options

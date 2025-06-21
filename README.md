@@ -140,13 +140,14 @@ graph TD
 
 ### Package Design
 
-Valet follows Go best practices with well-structured packages:
+Valet follows Go best practices with well-structured packages using a consistent Options pattern:
 
 #### internal/config
 - Centralized configuration management
 - All configuration structs (including Helm configuration)
 - YAML marshaling/unmarshaling support
 - Default values and validation
+- Constructor functions for each configuration type
 
 #### internal/helm
 - Helm chart operations
@@ -154,12 +155,48 @@ Valet follows Go best practices with well-structured packages:
 - Flexible initialization via `HelmOptions` pattern
 - Named logger for better debugging (`helm`)
 - Methods for checking and downloading schemas from remote charts
+- Convenience function `NewHelmWithDebug` for simple use cases
+- Example usage:
+  ```go
+  // Using options pattern
+  h := helm.NewHelm(helm.HelmOptions{
+      Debug:  true,
+      Logger: customLogger, // optional
+  })
+  
+  // Using convenience function
+  h := helm.NewHelmWithDebug(true)
+  ```
 
 #### internal/telemetry
 - OpenTelemetry integration
+- Struct-based design with `Telemetry` type and `NewTelemetry` constructor
+- Flexible initialization via `TelemetryOptions` pattern
 - Structured logging with zap
 - Metrics and tracing support
-- Configurable exporters
+- Configurable exporters (OTLP, stdout)
+- Convenience function `NewTelemetryWithConfig` for simple use cases
+- Backward compatible `Initialize` function
+- Example usage:
+  ```go
+  // Using options pattern
+  tel := telemetry.NewTelemetry(ctx, telemetry.TelemetryOptions{
+      Config: cfg,
+  })
+  
+  // Using convenience function (or backward compatible Initialize)
+  tel := telemetry.NewTelemetryWithConfig(ctx, cfg)
+  ```
+
+### Architectural Benefits
+
+The consistent Options pattern across packages provides:
+
+- **Flexibility**: Easy to add new configuration options without breaking existing code
+- **Testability**: Simple to mock dependencies and inject test configurations
+- **Consistency**: All packages follow the same initialization patterns
+- **Extensibility**: Options structs can grow with new fields as needed
+- **Type Safety**: Compile-time checking of configuration options
 
 ### Logging
 
@@ -169,6 +206,7 @@ Valet uses [Uber's zap](https://github.com/uber-go/zap) throughout for high-perf
 - **Structured fields**: All log data uses typed fields for consistency
 - **Level control**: Debug logs only shown when debug mode is enabled
 - **Integration**: Logs include trace/span IDs when telemetry is enabled
+- **Performance**: Zero-allocation logging in hot paths
 
 ## Installation
 
@@ -589,6 +627,26 @@ The tool includes several smart features:
 ### Requirements
 
 - Go 1.23 or later
+
+### Code Architecture
+
+When contributing to Valet, please follow these architectural patterns:
+
+1. **Package Structure**: Each package should have:
+   - A main struct type (e.g., `Helm`, `Telemetry`)
+   - An Options struct for configuration (e.g., `HelmOptions`, `TelemetryOptions`)
+   - A primary constructor `New<Package>(opts <Package>Options)`
+   - Convenience constructors for common use cases
+   - Methods on the struct rather than standalone functions
+
+2. **Logging**: Use zap with named loggers:
+   ```go
+   logger := zap.L().Named("packagename")
+   ```
+
+3. **Configuration**: All configuration structs belong in `internal/config`
+
+4. **Error Handling**: Wrap errors with context using `fmt.Errorf`
 
 ### Makefile
 

@@ -23,8 +23,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Example configuration file `examples/helm-config.yaml` demonstrating remote chart usage
 - CUE language support added to roadmap for future schema generation
 - Pretty printing of configuration to stdout when debug mode is enabled
-- `HelmOptions` pattern for flexible helm package configuration
-- Named logger for helm package (`helm`) for better log organization
+- Options pattern for flexible package initialization:
+  - `HelmOptions` for configuring helm package instances
+  - `TelemetryOptions` for configuring telemetry package instances
+- Named loggers for better debugging:
+  - Helm package uses `helm` logger name
+  - Each package can have its own named logger
+- Convenience functions for simple use cases:
+  - `NewHelmWithDebug` for helm package
+  - `NewTelemetryWithConfig` for telemetry package
 
 ### Changed
 
@@ -35,12 +42,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Debug logging is available whenever `debug: true` is set, regardless of telemetry state
 - Consolidated Helm configuration structs in the `internal/config` package to avoid duplication
 - Migrated helm package from standard `log` to `zap` for consistent structured logging
-- Refactored helm package to follow Go best practices with struct-based design
-  - Created `Helm` struct with encapsulated logger and configuration
-  - Added `NewHelm` constructor with `HelmOptions` for flexible initialization
-  - Converted functions to methods on the `Helm` struct
-  - Added `NewHelmWithDebug` convenience function for simple use cases
+- Refactored packages to follow Go best practices with consistent struct-based design:
+  - **Helm package**:
+    - Created `Helm` struct with encapsulated logger and configuration
+    - Added `NewHelm` constructor with `HelmOptions` for flexible initialization
+    - Converted standalone functions to methods on the `Helm` struct
+    - Added `NewHelmWithDebug` convenience function for simple use cases
+    - Functions now accept debug flag for conditional logging
+  - **Telemetry package**:
+    - Enhanced existing struct-based design with Options pattern
+    - Added `NewTelemetry` constructor with `TelemetryOptions` for flexible initialization
+    - Maintained backward compatibility with existing `Initialize` function
+    - Added `NewTelemetryWithConfig` convenience function
+    - Consistent with helm package architecture
 - Helm functions (`HasSchema`, `DownloadSchema`) now use `chart.Raw` consistently for file iteration
+- All packages now follow the same architectural patterns for consistency and maintainability
 
 ### Fixed
 
