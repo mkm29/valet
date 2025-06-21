@@ -5,6 +5,7 @@ package helm
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/getter"
@@ -100,12 +101,13 @@ func (c *Chart) HasSchema() (bool, error) {
 }
 
 // GetSchema retrieves the values.schema.json file from the chart and saves to temporary file
-func (c *Chart) GetSchema() (string, error) {
+func (c *Chart) DownloadSchema() (string, error) {
 	hasSchema, err := c.HasSchema()
 	if err != nil {
 		return "", fmt.Errorf("error checking for schema: %w", err)
 	}
 	if !hasSchema {
+		// TODO: generate a schema
 		return "", fmt.Errorf("chart does not have values.schema.json")
 	}
 
@@ -143,7 +145,19 @@ func (c *Chart) GetSchema() (string, error) {
 	for _, file := range chart.Files {
 		if file.Name == "values.schema.json" {
 			log.Println("Found values.schema.json in chart")
-			return string(file.Data), nil
+			// write the schema to a temporary file
+			tmp, err := os.CreateTemp("", "values.schema.json")
+			if err != nil {
+				return "", fmt.Errorf("failed to create temporary file: %w", err)
+			}
+			defer tmp.Close()
+			if _, err := tmp.Write(file.Data); err != nil {
+				return "", fmt.Errorf("failed to write to temporary file: %w", err)
+			}
+			log.Printf("Schema saved to temporary file: %s", tmp.Name())
+			// return the path to the temporary file
+			// or return the schema as a string
+			return tmp.Name(), nil
 		}
 	}
 
