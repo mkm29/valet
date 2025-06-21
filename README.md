@@ -41,6 +41,15 @@ A command-line tool to generate a JSON Schema from a YAML `values.yaml` file, op
       - [Test Organization](#test-organization)
     - [Release](#release)
   - [Contributing](#contributing)
+  - [Roadmap](#roadmap)
+    - [✅ Completed Features](#-completed-features)
+    - [🚧 In Progress](#-in-progress)
+    - [📋 Planned Features](#-planned-features)
+      - [Short-term (Q2-Q3 2025)](#short-term-q2-q3-2025)
+      - [Medium-term (Q3-Q4 2025)](#medium-term-q3-q4-2025)
+      - [Long-term (2026 and beyond)](#long-term-2026-and-beyond)
+    - [🎯 Community Requested Features](#-community-requested-features)
+    - [🤝 Get Involved](#-get-involved)
 
 ## Overview
 
@@ -548,3 +557,102 @@ This project uses [GoReleaser](https://goreleaser.com) to automate builds and re
 ## Contributing
 
 Contributions are welcome! Feel free to open issues and submit pull requests.
+
+## Roadmap
+
+Our development roadmap reflects our commitment to making Valet the most powerful and user-friendly tool for Helm schema generation. We welcome community feedback and contributions!
+
+### ✅ Completed Features
+
+- [x] Core schema generation from `values.yaml`
+- [x] Type inference with intelligent defaults
+- [x] Override file support for configuration merging
+- [x] Component detection with `enabled` flag handling
+- [x] Beautiful CLI experience with Fang
+- [x] OpenTelemetry integration (tracing, metrics, logging)
+- [x] Multiple configuration sources (CLI, env vars, config file)
+- [x] Comprehensive test coverage (>85%)
+- [x] Automated CI/CD with GitHub Actions
+- [x] Cross-platform support (Linux, macOS, Windows)
+
+### 🚧 In Progress
+
+- [ ] **Remote Chart Support** - Work with charts from any registry
+  - [ ] Authentication to private Helm registries
+  - [ ] Retrieve values.yaml from remote charts (HTTP/HTTPS)
+  - [ ] Support for OCI registry authentication and retrieval
+  - [ ] Generate schemas directly from remote charts
+  - [ ] Validate local values against remote chart schemas
+  - [ ] Cache remote charts for offline use
+
+### 📋 Planned Features
+
+#### Short-term (Q2-Q3 2025)
+
+- [ ] **Enhanced Schema Features**
+  - [ ] Custom validation rules support
+  - [ ] Pattern matching for string fields
+  - [ ] Enum detection from comments
+  - [ ] Min/max constraints for numeric fields
+  - [ ] Required field inference from templates
+
+- [ ] **Developer Experience**
+  - [ ] Interactive mode with schema preview
+  - [ ] Schema diff tool for comparing versions
+  - [ ] VS Code extension for real-time validation
+  - [ ] Watch mode for automatic regeneration
+
+#### Medium-term (Q3-Q4 2025)
+
+- [ ] **Advanced Type System**
+  - [ ] Union types support
+  - [ ] Conditional schema based on other fields
+  - [ ] Reference resolution (`$ref`) support
+  - [ ] External schema imports
+
+- [ ] **Integration Ecosystem**
+  - [ ] Kubernetes CRD generation from schema
+  - [ ] ArgoCD integration for GitOps workflows
+  - [ ] Backstage plugin for documentation
+  - [ ] JSON Schema to TypeScript/Go type generation
+
+#### Long-term (2026 and beyond)
+
+- [ ] **AI-Powered Features**
+  - [ ] Smart type inference using ML models
+  - [ ] Natural language schema descriptions
+  - [ ] Automated documentation generation
+  - [ ] Schema optimization suggestions
+
+- [ ] **Enterprise Features**
+  - [ ] Schema registry with versioning
+  - [ ] Access control and approval workflows
+  - [ ] Audit logging for schema changes
+  - [ ] Multi-tenant support
+
+- [ ] **Performance & Scale**
+  - [ ] Parallel processing for large charts
+  - [ ] Incremental schema generation
+  - [ ] Distributed caching support
+  - [ ] WebAssembly runtime for browser usage
+
+### 🎯 Community Requested Features
+
+These features have been requested by our users. Vote with 👍 on [issues](https://github.com/mkm29/valet/issues) to help prioritize!
+
+- [ ] Support for Kustomize overlays
+- [ ] Integration with popular Helm chart repositories
+- [ ] Schema validation GitHub Action
+- [ ] Terraform provider for schema management
+- [ ] GraphQL API for schema queries
+
+### 🤝 Get Involved
+
+Want to contribute to the roadmap? Here's how:
+
+1. **Vote on features**: Add reactions to [existing issues](https://github.com/mkm29/valet/issues)
+2. **Suggest ideas**: Open a [new issue](https://github.com/mkm29/valet/issues/new) with your feature request
+3. **Contribute code**: Pick an item from the roadmap and submit a PR
+4. **Join discussions**: Participate in [GitHub Discussions](https://github.com/mkm29/valet/discussions)
+
+See the [open issues](https://github.com/mkm29/valet/issues) for a detailed list of proposed features and known issues.
