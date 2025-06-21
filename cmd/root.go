@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -38,6 +39,8 @@ func NewRootCmd() *cobra.Command {
 			if cfg.Debug {
 				logConfig = zap.NewDevelopmentConfig()
 				logConfig.EncoderConfig.TimeKey = "timestamp"
+				// Use console encoder for more readable output
+				logConfig.Encoding = "console"
 			} else {
 				logConfig = zap.NewProductionConfig()
 			}
@@ -50,7 +53,53 @@ func NewRootCmd() *cobra.Command {
 
 			// Log config if debug is enabled
 			if cfg.Debug {
-				zap.L().Debug("Config loaded", zap.Any("config", cfg))
+				// Pretty print configuration to stdout as JSON
+				configJSON, err := json.MarshalIndent(cfg, "", "  ")
+				if err != nil {
+					zap.L().Error("Failed to marshal config", zap.Error(err))
+				} else {
+					fmt.Println("=== Configuration ===")
+					fmt.Println(string(configJSON))
+					fmt.Println("===================")
+				}
+				
+				// Also log with structured fields for debugging
+				fields := []zap.Field{
+					zap.Bool("debug", cfg.Debug),
+					zap.String("context", cfg.Context),
+					zap.String("overrides", cfg.Overrides),
+					zap.String("output", cfg.Output),
+				}
+				
+				// Add telemetry config if present
+				if cfg.Telemetry != nil {
+					fields = append(fields, 
+						zap.Bool("telemetry.enabled", cfg.Telemetry.Enabled),
+						zap.String("telemetry.serviceName", cfg.Telemetry.ServiceName),
+						zap.String("telemetry.serviceVersion", cfg.Telemetry.ServiceVersion),
+						zap.String("telemetry.exporterType", cfg.Telemetry.ExporterType),
+						zap.String("telemetry.otlpEndpoint", cfg.Telemetry.OTLPEndpoint),
+						zap.Bool("telemetry.insecure", cfg.Telemetry.Insecure),
+						zap.Float64("telemetry.sampleRate", cfg.Telemetry.SampleRate),
+					)
+				}
+				
+				// Add helm config if present
+				if cfg.Helm != nil && cfg.Helm.Chart != nil {
+					fields = append(fields,
+						zap.String("helm.chart.name", cfg.Helm.Chart.Name),
+						zap.String("helm.chart.version", cfg.Helm.Chart.Version),
+					)
+					if cfg.Helm.Chart.Registry != nil {
+						fields = append(fields,
+							zap.String("helm.chart.registry.url", cfg.Helm.Chart.Registry.URL),
+							zap.String("helm.chart.registry.type", cfg.Helm.Chart.Registry.Type),
+							zap.Bool("helm.chart.registry.insecure", cfg.Helm.Chart.Registry.Insecure),
+						)
+					}
+				}
+				
+				zap.L().Debug("Configuration loaded", fields...)
 			}
 
 			// Initialize telemetry if enabled
