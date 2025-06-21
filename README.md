@@ -151,10 +151,10 @@ go install github.com/mkm29/valet@latest
 
 ## Usage
 
-Generate a JSON Schema from a `values.yaml` in the given `<context-dir>` using the `generate` command:
+Generate a JSON Schema from a `values.yaml` using the `generate` command:
 
 ```console
-valet [global options] generate [flags] <context-dir>
+valet [global options] generate [flags] [context-dir]
 
 Global options:
   --config-file string          config file path (default: .valet.yaml)
@@ -168,9 +168,27 @@ Global options:
 Generate flags:
   -f, --overrides string   path (relative to context dir) to an overrides YAML file (optional)
   -o, --output string      output file (default: values.schema.json)
+
+Remote chart flags:
+  --chart-name string            name of the remote Helm chart
+  --chart-version string         version of the remote Helm chart
+  --registry-url string          URL of the Helm chart registry
+  --registry-type string         type of registry (HTTP, HTTPS, OCI) (default: HTTPS)
+  --registry-insecure            allow insecure connections to the registry
+  --registry-username string     username for registry authentication
+  --registry-password string     password for registry authentication
+  --registry-token string        token for registry authentication
+  --registry-tls-skip-verify     skip TLS certificate verification
+  --registry-cert-file string    path to client certificate file
+  --registry-key-file string     path to client key file
+  --registry-ca-file string      path to CA certificate file
 ```
 
-The tool writes a `values.schema.json` (or custom output file) in the `<context-dir>`.
+The tool can generate schemas from:
+- **Local Helm charts**: Provide a context directory containing `values.yaml`
+- **Remote Helm charts**: Use `--chart-name` and related flags, or configure in a config file
+
+The tool writes a `values.schema.json` (or custom output file) in the context directory for local charts, or the current directory for remote charts.
 
 ### Configuration
 
@@ -274,7 +292,7 @@ github.com/mkm29/valet@v0.1.1 (commit 9153c14b9ffddeaccba93268a0851d5da0ae8cbf)
 
 ### Observability
 
-Valet includes comprehensive observability capabilities through OpenTelemetry integration, providing distributed tracing, metrics, and structured logging for monitoring and debugging.
+Valet includes comprehensive observability capabilities through OpenTelemetry integration, providing distributed tracing and metrics for monitoring. Logging is always available independent of telemetry settings.
 
 #### Telemetry Configuration
 
@@ -366,14 +384,15 @@ All file path attributes in metrics are sanitized to protect sensitive informati
 
 #### Structured Logging
 
-Valet uses [Uber's zap](https://github.com/uber-go/zap) for high-performance structured logging with OpenTelemetry integration:
+Valet uses [Uber's zap](https://github.com/uber-go/zap) for high-performance structured logging:
 
+- **Always available**: Logging works regardless of telemetry settings
 - **Zero-allocation logging**: Zap's design ensures minimal performance overhead
 - **Structured fields**: All log data is structured for easy parsing and querying
-- **OpenTelemetry integration**: Log entries automatically include trace and span IDs
-- **Span events**: All logs are also recorded as events in the active span
+- **OpenTelemetry integration**: When telemetry is enabled, log entries automatically include trace and span IDs
+- **Span events**: When telemetry is enabled, logs are also recorded as events in the active span
 - **Level control**: Info level by default, Debug level when `--debug` flag is set
-- **JSON encoding**: Logs are emitted as JSON for compatibility with log aggregation systems
+- **Format control**: Development format (human-readable) when debug is enabled, JSON format otherwise
 
 Example log output:
 

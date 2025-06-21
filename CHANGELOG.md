@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Support for remote Helm charts configuration in `internal/helm` package
+- Helm chart configuration in config file and CLI flags for the `generate` command
+  - `--chart-name`: Name of the remote Helm chart
+  - `--chart-version`: Version of the remote Helm chart
+  - `--registry-url`: URL of the Helm chart registry
+  - `--registry-type`: Type of registry (HTTP, HTTPS, OCI) - defaults to HTTPS
+  - `--registry-insecure`: Allow insecure connections
+  - Authentication flags: `--registry-username`, `--registry-password`, `--registry-token`
+  - TLS flags: `--registry-tls-skip-verify`, `--registry-cert-file`, `--registry-key-file`, `--registry-ca-file`
+- Default values for Helm configuration structs (e.g., registry type defaults to "HTTPS")
+- Validation for Helm configuration to ensure required fields are present
+- Example configuration file `examples/helm-config.yaml` demonstrating remote chart usage
+- CUE language support added to roadmap for future schema generation
+
+### Changed
+
+- `generate` command now accepts optional context directory: `generate [context-dir]` instead of `generate <context-dir>`
+- `generate` command validates that either a local context directory OR remote chart configuration is provided (but not both)
+- Improved configuration file loading to properly detect and load config files when specified
+- Logging is now independent of telemetry - logger is always initialized based on debug setting
+- Debug logging is available whenever `debug: true` is set, regardless of telemetry state
+
+### Fixed
+
+- Configuration file loading when using `--config-file` flag with subcommands
+- Persistent flags are now properly accessible in subcommands using `cmd.Root().PersistentFlags()`
+- Logger initialization happens before telemetry to ensure debug logs are always available
+
 ## [v0.2.4] - 2025-06-19
 
 ### Changed

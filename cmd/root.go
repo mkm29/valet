@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/mkm29/valet/internal/config"
@@ -32,15 +33,33 @@ func NewRootCmd() *cobra.Command {
 				cfg = c
 			}
 
-			// Initialize telemetry if not already initialized
-			if tel == nil && cfg.Telemetry != nil {
+			// Initialize logger based on debug setting
+			var logConfig zap.Config
+			if cfg.Debug {
+				logConfig = zap.NewDevelopmentConfig()
+				logConfig.EncoderConfig.TimeKey = "timestamp"
+			} else {
+				logConfig = zap.NewProductionConfig()
+			}
+			
+			logger, err := logConfig.Build()
+			if err != nil {
+				return fmt.Errorf("failed to initialize logger: %w", err)
+			}
+			zap.ReplaceGlobals(logger)
+			
+			// Log config if debug is enabled
+			if cfg.Debug {
+				zap.L().Debug("Config loaded", zap.Any("config", cfg))
+			}
+
+			// Initialize telemetry if enabled
+			if tel == nil && cfg.Telemetry != nil && cfg.Telemetry.Enabled {
 				ctx := cmd.Context()
 				t, err := telemetry.Initialize(ctx, cfg.Telemetry)
 				if err != nil {
 					// Log error but don't fail - telemetry is optional
-					if cfg.Debug {
-						zap.L().Debug("Failed to initialize telemetry", zap.Error(err))
-					}
+					zap.L().Debug("Failed to initialize telemetry", zap.Error(err))
 				} else {
 					tel = t
 				}
@@ -103,15 +122,22 @@ func NewRootCmd() *cobra.Command {
 
 // initializeConfig loads configuration from file and applies CLI flags
 func initializeConfig(cmd *cobra.Command) (*config.Config, error) {
-	// Only read config file if flag explicitly set
+	// Load config file if specified
 	var c *config.Config
 	var err error
-	if cmd.PersistentFlags().Changed("config-file") {
-		cfgFile, _ := cmd.PersistentFlags().GetString("config-file")
+	// Get the root command to access persistent flags
+	rootCmd := cmd.Root()
+	cfgFile, _ := rootCmd.PersistentFlags().GetString("config-file")
+	
+	// Check if config file exists (either explicitly set or default)
+	if _, statErr := os.Stat(cfgFile); statErr == nil {
 		c, err = config.LoadConfig(cfgFile)
 		if err != nil {
 			return nil, err
 		}
+	} else if rootCmd.PersistentFlags().Changed("config-file") {
+		// Config file was explicitly specified but doesn't exist
+		return nil, fmt.Errorf("config file not found: %s", cfgFile)
 	} else {
 		// No config file: start with empty config
 		c = &config.Config{
@@ -169,9 +195,6 @@ func initializeConfig(cmd *cobra.Command) (*config.Config, error) {
 		c.Telemetry.SampleRate = rate
 	}
 
-	if c.Debug {
-		zap.L().Debug("Config loaded", zap.Any("config", c))
-	}
 	return c, nil
 }
 

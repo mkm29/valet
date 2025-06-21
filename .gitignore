@@ -6,4 +6,4 @@ bin/
 dist/
 *.log
 **/.claude/settings.local.json
-.helm
+charts/

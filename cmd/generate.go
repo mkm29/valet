@@ -730,6 +730,7 @@ You can generate a schema from either:
 		// Do not print usage on error; just show the error message
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			
 			// Get context directory if provided
 			var ctx string
 			if len(args) > 0 {
@@ -743,6 +744,17 @@ You can generate a schema from either:
 			hasRemoteChartFlags := chartName != ""
 			hasRemoteChartConfig := cfg != nil && cfg.Helm != nil && cfg.Helm.Chart != nil && cfg.Helm.Chart.Name != ""
 			hasLocalContext := ctx != ""
+			
+			// Debug output
+			if cfg != nil && cfg.Debug && zap.L() != nil {
+				zap.L().Debug("Generate command configuration",
+					zap.Bool("hasRemoteChartFlags", hasRemoteChartFlags),
+					zap.Bool("hasRemoteChartConfig", hasRemoteChartConfig),
+					zap.Bool("hasLocalContext", hasLocalContext),
+					zap.String("chartName", chartName),
+					zap.Any("helmConfig", cfg.Helm),
+				)
+			}
 
 			// Validate: must have either local context or remote chart config, but not both
 			if !hasLocalContext && !hasRemoteChartFlags && !hasRemoteChartConfig {

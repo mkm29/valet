@@ -67,12 +67,12 @@ func Initialize(ctx context.Context, cfg *config.TelemetryConfig) (*Telemetry, e
 	otel.SetMeterProvider(meterProvider)
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 
-	// Create structured logger
+	// Create structured logger for telemetry (but don't set as global)
 	logger, err := NewLogger(false) // Debug will be controlled by the caller
 	if err != nil {
 		return nil, fmt.Errorf("failed to create logger: %w", err)
 	}
-	logger.SetDefault()
+	// Don't override the global logger - it should be set by the main app
 
 	// Create telemetry instance
 	t := &Telemetry{
