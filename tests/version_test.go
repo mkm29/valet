@@ -7,7 +7,7 @@ func (ts *ValetTestSuite) TestNewVersionCmd() {
 	ts.Equal("version", cmd.Use, "expected Use 'version'")
 	ts.Equal("Print version information", cmd.Short, "expected Short 'Print version information'")
 	ts.NotEmpty(cmd.Long, "expected non-empty Long description")
-	ts.NotNil(cmd.Run, "expected Run function to be set")
+	ts.NotNil(cmd.RunE, "expected RunE function to be set")
 }
 
 func (ts *ValetTestSuite) TestGetBuildVersion() {

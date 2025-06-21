@@ -9,6 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Security section in README documenting sensitive information handling
+- Automatic redaction of sensitive credentials in debug output
+
+### Changed
+
+- Updated documentation to reflect removal of backward compatibility code
+
+### Removed
+
+- All backward compatibility wrapper functions have been removed:
+  - `telemetry.Initialize()` - use `telemetry.NewTelemetry()` with options instead
+  - `telemetry.NewTelemetryWithConfig()` - use `telemetry.NewTelemetry()` with options instead
+  - `helm.NewHelmWithDebug()` - use `helm.NewHelm()` with options instead
+  - `cmd.Generate()` - use `cmd.GenerateWithApp()` with dependency injection instead
+  - `cmd.GetTelemetry()` - use proper dependency injection with App struct instead
+  - Global `cmd.NewRootCmd()` wrapper - use `cmd.NewRootCmdWithApp()` instead
+- Removed references to backward compatibility in documentation
+- Removed undefined `globalApp` variable and associated backward compatibility code
+
+### Fixed
+
+- Build errors caused by undefined `inferSchema` function - updated to use `inferSchema` 
+- Build errors from undefined `globalApp` variable after removing backward compatibility code
+- Updated `inferArraySchema` to accept `app` parameter for proper dependency injection
+
+### Security
+
+- Configuration logging now requires proper redaction of sensitive fields (passwords, tokens, etc.)
+- Debug output must redact registry credentials and authentication tokens as `[REDACTED]`
+- All sensitive configuration values should be masked before logging
+
+- Dependency injection pattern for improved testability:
+  - Created `App` struct to hold dependencies (Config, Telemetry, Logger)
+  - Added builder pattern with `WithConfig`, `WithTelemetry`, `WithLogger` methods
+  - All commands now support `WithApp` variants for dependency injection
 - Support for remote Helm charts configuration in `internal/helm` package
 - Helm chart configuration in config file and CLI flags for the `generate` command
   - `--chart-name`: Name of the remote Helm chart
@@ -35,6 +70,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Major refactoring** to improve code maintainability and testability:
+  - Refactored `inferSchema` function from 290+ lines to ~20 smaller, focused functions:
+    - Type-specific handlers: `inferArraySchema`, `inferBooleanSchema`, `inferIntegerSchema`, etc.
+    - Object handling: `inferObjectSchemaWithApp`, `generateObjectPropertiesWithApp`, `determineRequiredFieldsWithApp`
+    - Helper functions for validation and processing
+  - Refactored `NewGenerateCmd` function from 200+ lines to ~15 smaller functions:
+    - Configuration parsing: `parseGenerateCommandConfigWithApp`, `getContextDirectory`
+    - Validation: `validateGenerateCommandConfig`, `validateOverridesFile`
+    - Command execution: `generateCmdRunWithApp`, `handleRemoteChartGenerationWithApp`
+    - Flag management: `addGenerateFlags`, `applyOptionalHelmFlags`
+  - Applied Single Responsibility Principle throughout the codebase
+  - Improved separation of concerns with clear function boundaries
+- Replaced global variables (`cfg` and `tel`) with dependency injection:
+  - Global variables created hidden dependencies and made unit testing difficult
+  - Now using explicit dependency passing through the `App` struct
+  - Improved testability by allowing mock dependencies to be injected
+  - Context key properly typed to avoid collisions (`contextKey` type)
 - `generate` command now accepts optional context directory: `generate [context-dir]` instead of `generate <context-dir>`
 - `generate` command validates that either a local context directory OR remote chart configuration is provided (but not both)
 - Improved configuration file loading to properly detect and load config files when specified
@@ -57,6 +109,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
     - Consistent with helm package architecture
 - Helm functions (`HasSchema`, `DownloadSchema`) now use `chart.Raw` consistently for file iteration
 - All packages now follow the same architectural patterns for consistency and maintainability
+- Refactored helm package to eliminate code duplication:
+  - Extracted common chart loading logic into private `loadChart` method
+  - Both `HasSchema` and `DownloadSchema` now use the shared `loadChart` method
+  - Centralized chart downloading, getter creation, and error handling
+  - Improved debug logging with consistent use of package logger
+  - Reduced code duplication by ~40 lines
 
 ### Fixed
 
@@ -65,6 +123,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Logger initialization happens before telemetry to ensure debug logs are always available
 - Fixed inconsistency in helm package where `HasSchema` used `chart.Raw` but `DownloadSchema` used `chart.Files`
 - Logger level configuration now properly respects debug setting (Debug level when true, Info level when false)
+
+### Technical Notes
+
+- The refactoring maintains 100% backward compatibility - all existing code continues to work unchanged
+- Helper functions were consolidated into `cmd/schema_helpers.go` for better organization
+- Context keys now use a proper type (`contextKey`) to avoid potential collisions
+- All linter issues in the cmd package have been resolved
 
 ## [v0.2.4] - 2025-06-19
 

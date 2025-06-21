@@ -8,8 +8,15 @@ import (
 
 	"github.com/mkm29/valet/internal/config"
 	"go.uber.org/zap"
+	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/getter"
+)
+
+const (
+	RegistryTypeHTTP  = "HTTP"
+	RegistryTypeHTTPS = "HTTPS"
+	RegistryTypeOCI   = "OCI"
 )
 
 // Helm provides functionality for working with Helm charts
@@ -48,7 +55,7 @@ func NewHelmWithDebug(debug bool) *Helm {
 func (h *Helm) GetOptions(c *config.HelmChart) []getter.Option {
 	var getterOpts []getter.Option
 
-	if c.Registry.Type == "HTTP" {
+	if c.Registry.Type == RegistryTypeHTTP {
 		getterOpts = append(getterOpts, getter.WithPlainHTTP(true))
 	}
 	if c.Registry.Auth != nil && c.Registry.Auth.Username != "" && c.Registry.Auth.Password != "" {
@@ -65,38 +72,66 @@ func (h *Helm) GetOptions(c *config.HelmChart) []getter.Option {
 	return getterOpts
 }
 
-// HasSchema checks if a chart has a values.schema.json file
-func (h *Helm) HasSchema(c *config.HelmChart) (bool, error) {
+// loadChart downloads and loads a Helm chart from the specified registry
+func (h *Helm) loadChart(c *config.HelmChart) (*chart.Chart, error) {
 	url := fmt.Sprintf("%s/%s-%s.tgz", c.Registry.URL, c.Name, c.Version)
 
-	// 1. Download the chart archive
-	var g getter.Getter
-	var e error
-	// Removed usage of getter.Options as it does not exist in the Helm getter package
-	switch c.Registry.Type {
-	case "HTTP":
-		g, e = getter.NewHTTPGetter()
-		if e != nil {
-			return false, fmt.Errorf("failed to create HTTP getter: %w", e)
-		}
-	case "OCI":
-		g, e = getter.NewOCIGetter()
-		if e != nil {
-			return false, fmt.Errorf("failed to create OCI getter: %w", e)
-		}
-	default:
-		return false, fmt.Errorf("unsupported registry type: %s", c.Registry.Type)
+	if h.debug {
+		h.logger.Debug("Loading chart",
+			zap.String("name", c.Name),
+			zap.String("version", c.Version),
+			zap.String("url", url),
+		)
 	}
 
+	// Create appropriate getter based on registry type
+	var g getter.Getter
+	var err error
+
+	switch c.Registry.Type {
+	case RegistryTypeHTTP, RegistryTypeHTTPS:
+		g, err = getter.NewHTTPGetter()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create HTTP getter: %w", err)
+		}
+	case RegistryTypeOCI:
+		g, err = getter.NewOCIGetter()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create OCI getter: %w", err)
+		}
+	default:
+		return nil, fmt.Errorf("unsupported registry type: %s", c.Registry.Type)
+	}
+
+	// Get the chart using configured options
 	getterOpts := h.GetOptions(c)
 	provider, err := g.Get(url, getterOpts...)
 	if err != nil {
-		return false, fmt.Errorf("failed to get chart: %w", err)
+		return nil, fmt.Errorf("failed to get chart: %w", err)
 	}
 
+	// Load the chart archive
 	chart, err := loader.LoadArchive(provider)
 	if err != nil {
-		return false, fmt.Errorf("failed to load chart: %w", err)
+		return nil, fmt.Errorf("failed to load chart: %w", err)
+	}
+
+	if h.debug {
+		h.logger.Debug("Chart loaded successfully",
+			zap.String("name", chart.Name()),
+			zap.String("version", chart.Metadata.Version),
+		)
+	}
+
+	return chart, nil
+}
+
+// HasSchema checks if a chart has a values.schema.json file
+func (h *Helm) HasSchema(c *config.HelmChart) (bool, error) {
+	// Load the chart using common logic
+	chart, err := h.loadChart(c)
+	if err != nil {
+		return false, err
 	}
 
 	// Check if the chart has a values.schema.json file
@@ -113,51 +148,17 @@ func (h *Helm) HasSchema(c *config.HelmChart) (bool, error) {
 	}
 
 	if h.debug {
-		zap.L().Debug("Chart does not have values.schema.json")
+		h.logger.Debug("Chart does not have values.schema.json")
 	}
 	return false, nil
 }
 
 // DownloadSchema retrieves the values.schema.json file from the chart and saves to temporary file
 func (h *Helm) DownloadSchema(c *config.HelmChart) (string, error) {
-	hasSchema, err := h.HasSchema(c)
+	// Load the chart using common logic
+	chart, err := h.loadChart(c)
 	if err != nil {
-		return "", fmt.Errorf("error checking for schema: %w", err)
-	}
-	if !hasSchema {
-		// TODO: generate a schema
-		return "", fmt.Errorf("chart does not have values.schema.json")
-	}
-
-	url := fmt.Sprintf("%s/%s-%s.tgz", c.Registry.URL, c.Name, c.Version)
-
-	// 1. Download the chart archive
-	var g getter.Getter
-	var e error
-	switch c.Registry.Type {
-	case "HTTP":
-		g, e = getter.NewHTTPGetter()
-		if e != nil {
-			return "", fmt.Errorf("failed to create HTTP getter: %w", e)
-		}
-	case "OCI":
-		g, e = getter.NewOCIGetter()
-		if e != nil {
-			return "", fmt.Errorf("failed to create OCI getter: %w", e)
-		}
-	default:
-		return "", fmt.Errorf("unsupported registry type: %s", c.Registry.Type)
-	}
-
-	getterOpts := h.GetOptions(c)
-	provider, err := g.Get(url, getterOpts...)
-	if err != nil {
-		return "", fmt.Errorf("failed to get chart: %w", err)
-	}
-
-	chart, err := loader.LoadArchive(provider)
-	if err != nil {
-		return "", fmt.Errorf("failed to load chart: %w", err)
+		return "", fmt.Errorf("error loading chart: %w", err)
 	}
 
 	for _, file := range chart.Raw {

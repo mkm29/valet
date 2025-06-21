@@ -11,7 +11,7 @@ import (
 
 func (ts *ValetTestSuite) TestNewGenerateCmd() {
 	cmd := cmd.NewGenerateCmd()
-	ts.Equal("generate <context-dir>", cmd.Use, "Command use should be 'generate <context-dir>'")
+	ts.Equal("generate [context-dir]", cmd.Use, "Command use should be 'generate [context-dir]'")
 	ts.Equal("Generate JSON Schema from values.yaml", cmd.Short, "unexpected Short description")
 	ts.NotNil(cmd.Args, "expected Args validator to be set")
 }
