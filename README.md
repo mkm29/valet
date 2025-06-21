@@ -596,7 +596,7 @@ Our development roadmap reflects our commitment to making Valet the most powerfu
   - [ ] Required field inference from templates
 
 - [ ] **CUE Integration**
-  - [ ] See HEP [13260](https://github.com/helm/helm/issues/13260)
+  - [ ] See [HIP Draft](https://github.com/helm/helm/issues/13260) for details
   - [ ] Generate CUE schemas from Helm values
   - [ ] Support CUE validation in CLI
   - [ ] CUE-based schema merging and overrides
