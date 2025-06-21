@@ -766,7 +766,7 @@ You can generate a schema from either:
 					chartVersion, _ := cmd.Flags().GetString("chart-version")
 					registryURL, _ := cmd.Flags().GetString("registry-url")
 					registryType, _ := cmd.Flags().GetString("registry-type")
-					
+
 					if chartName == "" {
 						return fmt.Errorf("--chart-name is required when using remote chart")
 					}
@@ -796,7 +796,7 @@ You can generate a schema from either:
 					if insecure, _ := cmd.Flags().GetBool("registry-insecure"); cmd.Flags().Changed("registry-insecure") {
 						helmConfig.Chart.Registry.Insecure = insecure
 					}
-					
+
 					// Authentication flags
 					if username, _ := cmd.Flags().GetString("registry-username"); username != "" {
 						helmConfig.Chart.Registry.Auth.Username = username
@@ -807,7 +807,7 @@ You can generate a schema from either:
 					if token, _ := cmd.Flags().GetString("registry-token"); token != "" {
 						helmConfig.Chart.Registry.Auth.Token = token
 					}
-					
+
 					// TLS flags
 					if skipVerify, _ := cmd.Flags().GetBool("registry-tls-skip-verify"); cmd.Flags().Changed("registry-tls-skip-verify") {
 						helmConfig.Chart.Registry.TLS.InsecureSkipTLSVerify = skipVerify
