@@ -15,9 +15,9 @@ telemetry:
 helm:
   chart:
     # Chart name (e.g., "postgresql" or "nginx")
-    name: postgresql
+    name: prometheus
     # Chart version (e.g., "12.1.9" or "latest")
-    version: 16.7.10
+    version: 2.1.4
     # Registry configuration
     registry:
       # Registry URL
@@ -25,6 +25,6 @@ helm:
       # - Bitnami: https://charts.bitnami.com/bitnami
       # - Prometheus Community: https://prometheus-community.github.io/helm-charts
       # - Ingress Nginx: https://kubernetes.github.io/ingress-nginx
-      url: oci://registry-1.docker.io/bitnamicharts
+      url: https://charts.bitnami.com/bitnami
       # Registry type: HTTP, HTTPS, or OCI (defaults to HTTPS if not specified)
-      type: OCI
+      type: HTTP

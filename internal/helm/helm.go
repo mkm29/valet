@@ -68,7 +68,8 @@ func HasSchema(c *config.HelmChart) (bool, error) {
 	}
 
 	// Check if the chart has a values.schema.json file
-	for _, file := range chart.Files {
+	for _, file := range chart.Raw {
+		log.Printf("Checking file: %s", file.Name)
 		if file.Name == "values.schema.json" {
 			log.Println("Chart has values.schema.json")
 			return true, nil
@@ -121,7 +122,7 @@ func DownloadSchema(c *config.HelmChart) (string, error) {
 		return "", fmt.Errorf("failed to load chart: %w", err)
 	}
 
-	for _, file := range chart.Files {
+	for _, file := range chart.Raw {
 		if file.Name == "values.schema.json" {
 			log.Println("Found values.schema.json in chart")
 			// write the schema to a temporary file
