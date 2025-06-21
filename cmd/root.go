@@ -11,6 +11,7 @@ import (
 	"github.com/mkm29/valet/internal/telemetry"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 var (
@@ -39,6 +40,7 @@ func NewRootCmd() *cobra.Command {
 			if cfg.Debug {
 				logConfig = zap.NewDevelopmentConfig()
 				logConfig.EncoderConfig.TimeKey = "timestamp"
+				logConfig.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 				// Use console encoder for more readable output
 				logConfig.Encoding = "console"
 			} else {
@@ -62,7 +64,7 @@ func NewRootCmd() *cobra.Command {
 					fmt.Println(string(configJSON))
 					fmt.Println("===================")
 				}
-				
+
 				// Also log with structured fields for debugging
 				fields := []zap.Field{
 					zap.Bool("debug", cfg.Debug),
@@ -70,10 +72,10 @@ func NewRootCmd() *cobra.Command {
 					zap.String("overrides", cfg.Overrides),
 					zap.String("output", cfg.Output),
 				}
-				
+
 				// Add telemetry config if present
 				if cfg.Telemetry != nil {
-					fields = append(fields, 
+					fields = append(fields,
 						zap.Bool("telemetry.enabled", cfg.Telemetry.Enabled),
 						zap.String("telemetry.serviceName", cfg.Telemetry.ServiceName),
 						zap.String("telemetry.serviceVersion", cfg.Telemetry.ServiceVersion),
@@ -83,7 +85,7 @@ func NewRootCmd() *cobra.Command {
 						zap.Float64("telemetry.sampleRate", cfg.Telemetry.SampleRate),
 					)
 				}
-				
+
 				// Add helm config if present
 				if cfg.Helm != nil && cfg.Helm.Chart != nil {
 					fields = append(fields,
@@ -98,7 +100,7 @@ func NewRootCmd() *cobra.Command {
 						)
 					}
 				}
-				
+
 				zap.L().Debug("Configuration loaded", fields...)
 			}
 
