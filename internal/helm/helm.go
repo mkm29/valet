@@ -49,6 +49,7 @@ func (c *Chart) GetOptions() []getter.Option {
 	}
 	if c.Registry.TLS.CertFile != "" && c.Registry.TLS.KeyFile != "" && c.Registry.TLS.CaFile != "" {
 		getterOpts = append(getterOpts, getter.WithTLSClientConfig(c.Registry.TLS.CertFile, c.Registry.TLS.KeyFile, c.Registry.TLS.CaFile))
+		getterOpts = append(getterOpts, getter.WithURL(c.Registry.URL))
 	}
 
 	return getterOpts
