@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/mkm29/valet/internal/config"
 	"github.com/mkm29/valet/internal/telemetry"
 	"github.com/spf13/cobra"
 	"go.opentelemetry.io/otel/attribute"
@@ -718,25 +719,131 @@ func processProperties(schema map[string]any, defaults map[string]any) {
 
 func NewGenerateCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "generate <context-dir>",
+		Use:   "generate [context-dir]",
 		Short: "Generate JSON Schema from values.yaml",
-		Long:  `Generate JSON Schema from values.yaml, optionally merging an overrides YAML file.`,
-		Args:  cobra.ExactArgs(1),
+		Long: `Generate JSON Schema from values.yaml, optionally merging an overrides YAML file.
+
+You can generate a schema from either:
+- A local Helm chart directory (provide context-dir)
+- A remote Helm chart (use --chart-name and related flags, or helm config in config file)`,
+		Args: cobra.MaximumNArgs(1),
 		// Do not print usage on error; just show the error message
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := args[0]
+			// Get context directory if provided
+			var ctx string
+			if len(args) > 0 {
+				ctx = args[0]
+			}
+
+			// Check if this is a remote chart request via CLI flags
+			chartName, _ := cmd.Flags().GetString("chart-name")
+
+			// Determine if we have remote chart config (either from flags or config file)
+			hasRemoteChartFlags := chartName != ""
+			hasRemoteChartConfig := cfg != nil && cfg.Helm != nil && cfg.Helm.Chart != nil && cfg.Helm.Chart.Name != ""
+			hasLocalContext := ctx != ""
+
+			// Validate: must have either local context or remote chart config, but not both
+			if !hasLocalContext && !hasRemoteChartFlags && !hasRemoteChartConfig {
+				return fmt.Errorf("must provide either a context directory for local chart or remote chart configuration (via --chart-name or helm config in config file)")
+			}
+
+			if hasLocalContext && (hasRemoteChartFlags || hasRemoteChartConfig) {
+				return fmt.Errorf("cannot specify both local context directory and remote chart configuration")
+			}
+
 			// Validate overrides file if provided
 			overridesFlag, err := cmd.Flags().GetString("overrides")
 			if err != nil {
 				return err
 			}
+
+			// Handle remote chart case
+			if hasRemoteChartFlags || hasRemoteChartConfig {
+				// Build helm config from flags if provided
+				if hasRemoteChartFlags {
+					chartVersion, _ := cmd.Flags().GetString("chart-version")
+					registryURL, _ := cmd.Flags().GetString("registry-url")
+					registryType, _ := cmd.Flags().GetString("registry-type")
+					
+					if chartName == "" {
+						return fmt.Errorf("--chart-name is required when using remote chart")
+					}
+					if chartVersion == "" {
+						return fmt.Errorf("--chart-version is required when using remote chart")
+					}
+					if registryURL == "" {
+						return fmt.Errorf("--registry-url is required when using remote chart")
+					}
+
+					// Build HelmConfig from flags
+					helmConfig := &config.HelmConfig{
+						Chart: &config.HelmChartConfig{
+							Name:    chartName,
+							Version: chartVersion,
+							Registry: &config.HelmRegistryConfig{
+								URL:      registryURL,
+								Type:     registryType,
+								Insecure: false,
+								Auth:     config.NewHelmAuthConfig(),
+								TLS:      config.NewHelmTLSConfig(),
+							},
+						},
+					}
+
+					// Get optional flags
+					if insecure, _ := cmd.Flags().GetBool("registry-insecure"); cmd.Flags().Changed("registry-insecure") {
+						helmConfig.Chart.Registry.Insecure = insecure
+					}
+					
+					// Authentication flags
+					if username, _ := cmd.Flags().GetString("registry-username"); username != "" {
+						helmConfig.Chart.Registry.Auth.Username = username
+					}
+					if password, _ := cmd.Flags().GetString("registry-password"); password != "" {
+						helmConfig.Chart.Registry.Auth.Password = password
+					}
+					if token, _ := cmd.Flags().GetString("registry-token"); token != "" {
+						helmConfig.Chart.Registry.Auth.Token = token
+					}
+					
+					// TLS flags
+					if skipVerify, _ := cmd.Flags().GetBool("registry-tls-skip-verify"); cmd.Flags().Changed("registry-tls-skip-verify") {
+						helmConfig.Chart.Registry.TLS.InsecureSkipTLSVerify = skipVerify
+					}
+					if certFile, _ := cmd.Flags().GetString("registry-cert-file"); certFile != "" {
+						helmConfig.Chart.Registry.TLS.CertFile = certFile
+					}
+					if keyFile, _ := cmd.Flags().GetString("registry-key-file"); keyFile != "" {
+						helmConfig.Chart.Registry.TLS.KeyFile = keyFile
+					}
+					if caFile, _ := cmd.Flags().GetString("registry-ca-file"); caFile != "" {
+						helmConfig.Chart.Registry.TLS.CaFile = caFile
+					}
+
+					// Validate the helm config
+					if err := helmConfig.Validate(); err != nil {
+						return fmt.Errorf("invalid helm configuration: %w", err)
+					}
+
+					// TODO: Use helmConfig to generate schema from remote chart
+					return fmt.Errorf("remote chart support not yet implemented")
+				} else {
+					// Use config file helm configuration
+					// TODO: Use cfg.Helm to generate schema from remote chart
+					return fmt.Errorf("remote chart support via config file not yet implemented")
+				}
+			}
+
+			// Handle local chart case
 			if overridesFlag != "" {
 				overridePath := filepath.Join(ctx, overridesFlag)
 				if _, err := os.Stat(overridePath); err != nil {
 					return fmt.Errorf("overrides file %s not found in %s", overridesFlag, ctx)
 				}
 			}
+
 			msg, err := Generate(ctx, overridesFlag)
 			if err != nil {
 				return err
@@ -746,5 +853,24 @@ func NewGenerateCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringP("overrides", "f", "", "path (relative to context dir) to overrides YAML (optional)")
+
+	// Remote chart flags
+	cmd.Flags().String("chart-name", "", "name of the remote Helm chart")
+	cmd.Flags().String("chart-version", "", "version of the remote Helm chart")
+	cmd.Flags().String("registry-url", "", "URL of the Helm chart registry")
+	cmd.Flags().String("registry-type", "HTTPS", "type of registry (HTTP, HTTPS, OCI)")
+	cmd.Flags().Bool("registry-insecure", false, "allow insecure connections to the registry")
+
+	// Authentication flags
+	cmd.Flags().String("registry-username", "", "username for registry authentication")
+	cmd.Flags().String("registry-password", "", "password for registry authentication")
+	cmd.Flags().String("registry-token", "", "token for registry authentication")
+
+	// TLS flags
+	cmd.Flags().Bool("registry-tls-skip-verify", false, "skip TLS certificate verification")
+	cmd.Flags().String("registry-cert-file", "", "path to client certificate file")
+	cmd.Flags().String("registry-key-file", "", "path to client key file")
+	cmd.Flags().String("registry-ca-file", "", "path to CA certificate file")
+
 	return cmd
 }

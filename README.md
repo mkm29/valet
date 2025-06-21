@@ -198,6 +198,25 @@ The CLI supports a YAML configuration file (default: `.valet.yaml`) in the curre
   - `insecure`: use insecure connection for OTLP
   - `sampleRate`: trace sampling rate (0.0 to 1.0)
   - `headers`: additional headers for OTLP requests (map)
+- `helm`: Helm chart configuration for remote charts (object)
+  - `chart`: chart details (object)
+    - `name`: chart name (e.g., `postgresql`)
+    - `version`: chart version (e.g., `12.1.9`)
+    - `registry`: registry configuration (object)
+      - `url`: registry URL (e.g., `https://charts.bitnami.com/bitnami`)
+      - `type`: registry type (`HTTP`, `HTTPS`, `OCI`)
+      - `insecure`: allow insecure connections
+      - `auth`: authentication configuration (object)
+        - `username`: username for basic auth
+        - `password`: password for basic auth
+        - `token`: token for token-based auth
+      - `tls`: TLS configuration (object)
+        - `insecureSkipTLSVerify`: skip TLS verification
+        - `certFile`: path to client certificate
+        - `keyFile`: path to client key
+        - `caFile`: path to CA certificate
+
+See `examples/helm-config.yaml` for a complete example of working with remote Helm charts.
 
 #### Environment Variables
 
@@ -220,6 +239,27 @@ Generate schema merging an override file:
 
 ```bash
 ./bin/valet generate --overrides override.yaml charts/mychart
+```
+
+Generate schema from a remote Helm chart:
+
+```bash
+# Using CLI flags
+./bin/valet generate --chart-name postgresql --chart-version 12.1.9 \
+  --registry-url https://charts.bitnami.com/bitnami .
+
+# Using configuration file
+./bin/valet generate --config-file helm-config.yaml .
+
+# With authentication for private registries
+./bin/valet generate --chart-name my-chart --chart-version 1.0.0 \
+  --registry-url https://private.registry.com/charts \
+  --registry-username myuser --registry-password mypass .
+
+# With OCI registry
+./bin/valet generate --chart-name my-chart --chart-version 1.0.0 \
+  --registry-url oci://registry.example.com/charts \
+  --registry-type OCI .
 ```
 
 Print version/build information:
