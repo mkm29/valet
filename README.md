@@ -48,7 +48,6 @@ A command-line tool to generate a JSON Schema from a YAML `values.yaml` file, op
       - [Short-term (Q2-Q3 2025)](#short-term-q2-q3-2025)
       - [Medium-term (Q3-Q4 2025)](#medium-term-q3-q4-2025)
       - [Long-term (2026 and beyond)](#long-term-2026-and-beyond)
-    - [🎯 Community Requested Features](#-community-requested-features)
     - [🤝 Get Involved](#-get-involved)
 
 ## Overview
@@ -635,16 +634,6 @@ Our development roadmap reflects our commitment to making Valet the most powerfu
   - [ ] Incremental schema generation
   - [ ] Distributed caching support
   - [ ] WebAssembly runtime for browser usage
-
-### 🎯 Community Requested Features
-
-These features have been requested by our users. Vote with 👍 on [issues](https://github.com/mkm29/valet/issues) to help prioritize!
-
-- [ ] Support for Kustomize overlays
-- [ ] Integration with popular Helm chart repositories
-- [ ] Schema validation GitHub Action
-- [ ] Terraform provider for schema management
-- [ ] GraphQL API for schema queries
 
 ### 🤝 Get Involved
 
