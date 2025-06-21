@@ -4,16 +4,49 @@ package helm
 
 import (
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/mkm29/valet/internal/config"
+	"go.uber.org/zap"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/getter"
 )
 
+// Helm provides functionality for working with Helm charts
+type Helm struct {
+	logger *zap.Logger
+	debug  bool
+}
+
+// HelmOptions configures a Helm instance
+type HelmOptions struct {
+	Debug  bool
+	Logger *zap.Logger
+	// Add more options as needed in the future
+}
+
+// NewHelm creates a new Helm instance with options
+func NewHelm(opts HelmOptions) *Helm {
+	logger := opts.Logger
+	if logger == nil {
+		logger = zap.L().Named("helm")
+	}
+
+	return &Helm{
+		logger: logger,
+		debug:  opts.Debug,
+	}
+}
+
+// NewHelmWithDebug creates a new Helm instance with just debug flag (convenience function)
+func NewHelmWithDebug(debug bool) *Helm {
+	return NewHelm(HelmOptions{
+		Debug: debug,
+	})
+}
+
 // GetOptions builds getter options from a HelmChart configuration
-func GetOptions(c *config.HelmChart) []getter.Option {
+func (h *Helm) GetOptions(c *config.HelmChart) []getter.Option {
 	var getterOpts []getter.Option
 
 	if c.Registry.Type == "HTTP" {
@@ -34,7 +67,7 @@ func GetOptions(c *config.HelmChart) []getter.Option {
 }
 
 // HasSchema checks if a chart has a values.schema.json file
-func HasSchema(c *config.HelmChart) (bool, error) {
+func (h *Helm) HasSchema(c *config.HelmChart) (bool, error) {
 	url := fmt.Sprintf("%s/%s-%s.tgz", c.Registry.URL, c.Name, c.Version)
 
 	// 1. Download the chart archive
@@ -56,7 +89,7 @@ func HasSchema(c *config.HelmChart) (bool, error) {
 		return false, fmt.Errorf("unsupported registry type: %s", c.Registry.Type)
 	}
 
-	getterOpts := GetOptions(c)
+	getterOpts := h.GetOptions(c)
 	provider, err := g.Get(url, getterOpts...)
 	if err != nil {
 		return false, fmt.Errorf("failed to get chart: %w", err)
@@ -69,20 +102,26 @@ func HasSchema(c *config.HelmChart) (bool, error) {
 
 	// Check if the chart has a values.schema.json file
 	for _, file := range chart.Raw {
-		log.Printf("Checking file: %s", file.Name)
+		if h.debug {
+			h.logger.Debug("Checking file", zap.String("file", file.Name))
+		}
 		if file.Name == "values.schema.json" {
-			log.Println("Chart has values.schema.json")
+			if h.debug {
+				h.logger.Debug("Chart has values.schema.json")
+			}
 			return true, nil
 		}
 	}
 
-	log.Println("Chart does not have values.schema.json")
+	if h.debug {
+		zap.L().Debug("Chart does not have values.schema.json")
+	}
 	return false, nil
 }
 
 // DownloadSchema retrieves the values.schema.json file from the chart and saves to temporary file
-func DownloadSchema(c *config.HelmChart) (string, error) {
-	hasSchema, err := HasSchema(c)
+func (h *Helm) DownloadSchema(c *config.HelmChart) (string, error) {
+	hasSchema, err := h.HasSchema(c)
 	if err != nil {
 		return "", fmt.Errorf("error checking for schema: %w", err)
 	}
@@ -111,7 +150,7 @@ func DownloadSchema(c *config.HelmChart) (string, error) {
 		return "", fmt.Errorf("unsupported registry type: %s", c.Registry.Type)
 	}
 
-	getterOpts := GetOptions(c)
+	getterOpts := h.GetOptions(c)
 	provider, err := g.Get(url, getterOpts...)
 	if err != nil {
 		return "", fmt.Errorf("failed to get chart: %w", err)
@@ -124,7 +163,9 @@ func DownloadSchema(c *config.HelmChart) (string, error) {
 
 	for _, file := range chart.Raw {
 		if file.Name == "values.schema.json" {
-			log.Println("Found values.schema.json in chart")
+			if h.debug {
+				h.logger.Debug("Found values.schema.json in chart")
+			}
 			// write the schema to a temporary file
 			tmp, err := os.CreateTemp("", "values.schema.json")
 			if err != nil {
@@ -134,7 +175,9 @@ func DownloadSchema(c *config.HelmChart) (string, error) {
 			if _, err := tmp.Write(file.Data); err != nil {
 				return "", fmt.Errorf("failed to write to temporary file: %w", err)
 			}
-			log.Printf("Schema saved to temporary file: %s", tmp.Name())
+			if h.debug {
+				h.logger.Debug("Schema saved to temporary file", zap.String("path", tmp.Name()))
+			}
 			// return the path to the temporary file
 			// or return the schema as a string
 			return tmp.Name(), nil

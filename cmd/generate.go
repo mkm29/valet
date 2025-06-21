@@ -845,8 +845,13 @@ You can generate a schema from either:
 				} else {
 					// Use config file helm configuration
 					// TODO: Use cfg.Helm to generate schema from remote chart
+					// Create Helm instance with options
+					h := helm.NewHelm(helm.HelmOptions{
+						Debug: cfg.Debug,
+						// Logger will use the default zap.L().Named("helm")
+					})
 					// execute DownloadSchema() just for testing
-					loc, err := helm.DownloadSchema(cfg.Helm.Chart)
+					loc, err := h.DownloadSchema(cfg.Helm.Chart)
 					if err != nil {
 						return fmt.Errorf("error downloading remote chart schema: %w", err)
 					}

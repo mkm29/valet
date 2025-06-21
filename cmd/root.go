@@ -43,8 +43,10 @@ func NewRootCmd() *cobra.Command {
 				logConfig.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 				// Use console encoder for more readable output
 				logConfig.Encoding = "console"
+				logConfig.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
 			} else {
 				logConfig = zap.NewProductionConfig()
+				logConfig.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
 			}
 
 			logger, err := logConfig.Build()

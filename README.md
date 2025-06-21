@@ -85,12 +85,19 @@ graph TD
     GenerateCmd --> Config[internal/config]
     GenerateCmd --> |schema generation| SchemaGen[Schema Generator]
     GenerateCmd --> Telemetry[internal/telemetry]
+    GenerateCmd --> Helm[internal/helm]
     Config --> |config loading| YAML[YAML Config Files]
+    Helm --> |chart operations| HelmSDK[Helm SDK]
 
     subgraph "Core Functionality"
         SchemaGen --> TypeInference[Type Inference]
         SchemaGen --> ComponentHandling[Component Processing]
         SchemaGen --> OverrideMerging[Override Merging]
+    end
+
+    subgraph "Helm Integration"
+        Helm
+        HelmSDK
     end
 
     subgraph "CLI Interface"
@@ -121,13 +128,47 @@ graph TD
     classDef config fill:#98c379,stroke:#56b6c2,stroke-width:1px,color:#282c34;
     classDef fang fill:#e06c75,stroke:#56b6c2,stroke-width:2px,color:#efefef;
     classDef telemetry fill:#56b6c2,stroke:#61afef,stroke-width:1px,color:#efefef;
+    classDef helm fill:#e5c07b,stroke:#61afef,stroke-width:1px,color:#282c34;
 
     class SchemaGen,TypeInference,ComponentHandling,OverrideMerging core;
     class Main,Cmd,RootCmd,GenerateCmd,VersionCmd cli;
     class Config,YAML config;
     class Fang fang;
     class Telemetry,Tracing,Metrics,Logging,OTLP telemetry;
+    class Helm,HelmSDK helm;
 ```
+
+### Package Design
+
+Valet follows Go best practices with well-structured packages:
+
+#### internal/config
+- Centralized configuration management
+- All configuration structs (including Helm configuration)
+- YAML marshaling/unmarshaling support
+- Default values and validation
+
+#### internal/helm
+- Helm chart operations
+- Struct-based design with `Helm` type and `NewHelm` constructor
+- Flexible initialization via `HelmOptions` pattern
+- Named logger for better debugging (`helm`)
+- Methods for checking and downloading schemas from remote charts
+
+#### internal/telemetry
+- OpenTelemetry integration
+- Structured logging with zap
+- Metrics and tracing support
+- Configurable exporters
+
+### Logging
+
+Valet uses [Uber's zap](https://github.com/uber-go/zap) throughout for high-performance structured logging:
+
+- **Named loggers**: Each package has its own named logger (e.g., `helm`, `telemetry`)
+- **Structured fields**: All log data uses typed fields for consistency
+- **Level control**: Debug logs only shown when debug mode is enabled
+- **Integration**: Logs include trace/span IDs when telemetry is enabled
 
 ## Installation
 
@@ -288,6 +329,20 @@ Print version/build information:
 
 ```text
 github.com/mkm29/valet@v0.1.1 (commit 9153c14b9ffddeaccba93268a0851d5da0ae8cbf)
+```
+
+### Debug Mode
+
+When debug mode is enabled (`--debug` flag or `debug: true` in config), Valet provides:
+
+- Pretty-printed configuration output to stdout
+- Detailed debug logging from all components
+- Verbose Helm operations logging
+- Human-readable console output format
+
+Example:
+```bash
+./bin/valet generate --config-file examples/helm-config.yaml --debug
 ```
 
 ### Observability

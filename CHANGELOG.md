@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Validation for Helm configuration to ensure required fields are present
 - Example configuration file `examples/helm-config.yaml` demonstrating remote chart usage
 - CUE language support added to roadmap for future schema generation
+- Pretty printing of configuration to stdout when debug mode is enabled
+- `HelmOptions` pattern for flexible helm package configuration
+- Named logger for helm package (`helm`) for better log organization
 
 ### Changed
 
@@ -30,13 +33,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Improved configuration file loading to properly detect and load config files when specified
 - Logging is now independent of telemetry - logger is always initialized based on debug setting
 - Debug logging is available whenever `debug: true` is set, regardless of telemetry state
-- Consolidated Helm configuration structs in the `internal/helm` package to avoid duplication
+- Consolidated Helm configuration structs in the `internal/config` package to avoid duplication
+- Migrated helm package from standard `log` to `zap` for consistent structured logging
+- Refactored helm package to follow Go best practices with struct-based design
+  - Created `Helm` struct with encapsulated logger and configuration
+  - Added `NewHelm` constructor with `HelmOptions` for flexible initialization
+  - Converted functions to methods on the `Helm` struct
+  - Added `NewHelmWithDebug` convenience function for simple use cases
+- Helm functions (`HasSchema`, `DownloadSchema`) now use `chart.Raw` consistently for file iteration
 
 ### Fixed
 
 - Configuration file loading when using `--config-file` flag with subcommands
 - Persistent flags are now properly accessible in subcommands using `cmd.Root().PersistentFlags()`
 - Logger initialization happens before telemetry to ensure debug logs are always available
+- Fixed inconsistency in helm package where `HasSchema` used `chart.Raw` but `DownloadSchema` used `chart.Files`
+- Logger level configuration now properly respects debug setting (Debug level when true, Info level when false)
 
 ## [v0.2.4] - 2025-06-19
 

@@ -1,0 +1,43 @@
+# Example Valet configuration for working with remote Helm charts
+
+# Debug logging
+debug: false
+
+# Output file name
+output: values.schema.json
+
+# Telemetry configuration
+telemetry:
+  enabled: false
+  exporterType: none
+
+# Helm chart configuration for remote charts
+helm:
+  chart:
+    # Chart name (e.g., "postgresql" or "nginx")
+    name: prometheus
+    # Chart version (e.g., "12.1.9" or "latest")
+    version: 2.1.4
+    # Registry configuration
+    registry:
+      # Registry URL
+      # Examples:
+      # - Bitnami: https://charts.bitnami.com/bitnami
+      # - Prometheus Community: https://prometheus-community.github.io/helm-charts
+      # - Ingress Nginx: https://kubernetes.github.io/ingress-nginx
+      url: https://charts.bitnami.com/bitnami
+      # Registry type: HTTP, HTTPS, or OCI (defaults to HTTPS if not specified)
+      type: HTTP
+      # Allow insecure connections (default: false)
+      insecure: false
+      # Authentication (optional)
+      auth:
+        username: ""
+        password: ""
+        token: ""
+      # TLS configuration (optional)
+      tls:
+        insecureSkipTLSVerify: false
+        certFile: ""
+        keyFile: ""
+        caFile: ""
