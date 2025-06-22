@@ -11,7 +11,6 @@ import (
 	"github.com/mkm29/valet/internal/telemetry"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 // CommandContext extends cobra.Command to carry dependencies
@@ -44,12 +43,9 @@ func NewRootCmdWithApp(app *App) *cobra.Command {
 			}
 
 			// Initialize logger based on debug setting
-			logger, err := initializeLogger(app.Config.Debug)
-			if err != nil {
+			if err := app.InitializeLogger(app.Config.Debug); err != nil {
 				return fmt.Errorf("failed to initialize logger: %w", err)
 			}
-			app.Logger = logger
-			zap.ReplaceGlobals(logger)
 
 			// Log config if debug is enabled
 			if app.Config.Debug {
@@ -116,23 +112,6 @@ func NewRootCmdWithApp(app *App) *cobra.Command {
 	return cmd
 }
 
-// initializeLogger creates a new logger based on debug setting
-func initializeLogger(debug bool) (*zap.Logger, error) {
-	var logConfig zap.Config
-	if debug {
-		logConfig = zap.NewDevelopmentConfig()
-		logConfig.EncoderConfig.TimeKey = "timestamp"
-		logConfig.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-		// Use console encoder for more readable output
-		logConfig.Encoding = "console"
-		logConfig.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
-	} else {
-		logConfig = zap.NewProductionConfig()
-		logConfig.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
-	}
-
-	return logConfig.Build()
-}
 
 // logDebugConfiguration logs the configuration in debug mode
 func logDebugConfiguration(logger *zap.Logger, cfg *config.Config) {
@@ -141,9 +120,9 @@ func logDebugConfiguration(logger *zap.Logger, cfg *config.Config) {
 	if err != nil {
 		logger.Error("Failed to marshal config", zap.Error(err))
 	} else {
-		fmt.Println("=== Configuration ===")
+		fmt.Println("=== Valet Configuration ===")
 		fmt.Println(string(configJSON))
-		fmt.Println("===================")
+		fmt.Println("===========================")
 	}
 
 	// Also log with structured fields for debugging

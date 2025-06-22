@@ -27,4 +27,4 @@ helm:
       # - Ingress Nginx: https://kubernetes.github.io/ingress-nginx
       url: https://charts.bitnami.com/bitnami
       # Registry type: HTTP, HTTPS, or OCI (defaults to HTTPS if not specified)
-      type: HTTP
+      type: HTTPS

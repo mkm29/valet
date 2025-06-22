@@ -692,7 +692,16 @@ Valet uses dependency injection for better testability and maintainability:
    rootCmd := cmd.NewRootCmdWithApp(app)
    ```
 
-3. **Benefits**:
+3. **Logger Initialization**: The App struct includes a method to initialize the logger based on debug settings:
+   ```go
+   // Initialize logger internally based on configuration
+   app := cmd.NewApp().WithConfig(cfg)
+   if err := app.InitializeLogger(cfg.Debug); err != nil {
+       // handle error
+   }
+   ```
+
+4. **Benefits**:
    - Easy unit testing with mock dependencies
    - Clear dependency relationships
    - No hidden global state

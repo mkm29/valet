@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - Security section in README documenting sensitive information handling
+- `InitializeLogger` method to the `App` struct for centralized logger initialization
 - Automatic redaction of sensitive credentials in debug output
 - **Chart caching in helm package**: Remote charts are now cached in memory to avoid redundant downloads
   - Thread-safe implementation using read-write locks
@@ -27,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 
 - Updated documentation to reflect removal of backward compatibility code
+- Refactored logger initialization logic from `cmd/root.go` to `cmd/app.go`
+  - Moved `initializeLogger` function to `App.InitializeLogger()` method
+  - Improved separation of concerns by centralizing dependency initialization in the App struct
+  - Logger creation logic now uses private `createLogger` helper function
 - `Helm` struct now includes a `cache` field for storing downloaded charts and `maxChartSize` field for size limits
 - `HasSchema` and `DownloadSchema` methods now use `getOrLoadChart` instead of `loadChart` directly
 - `HelmOptions` now includes `MaxChartSize` field for configuring the maximum allowed chart size

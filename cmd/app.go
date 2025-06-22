@@ -4,6 +4,7 @@ import (
 	"github.com/mkm29/valet/internal/config"
 	"github.com/mkm29/valet/internal/telemetry"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // contextKey is a type for context keys to avoid collisions
@@ -40,4 +41,33 @@ func (a *App) WithTelemetry(tel *telemetry.Telemetry) *App {
 func (a *App) WithLogger(logger *zap.Logger) *App {
 	a.Logger = logger
 	return a
+}
+
+// InitializeLogger creates a new logger based on debug setting
+func (a *App) InitializeLogger(debug bool) error {
+	logger, err := createLogger(debug)
+	if err != nil {
+		return err
+	}
+	a.Logger = logger
+	zap.ReplaceGlobals(logger)
+	return nil
+}
+
+// createLogger creates a new zap logger based on debug setting
+func createLogger(debug bool) (*zap.Logger, error) {
+	var logConfig zap.Config
+	if debug {
+		logConfig = zap.NewDevelopmentConfig()
+		logConfig.EncoderConfig.TimeKey = "timestamp"
+		logConfig.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+		// Use console encoder for more readable output
+		logConfig.Encoding = "console"
+		logConfig.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
+	} else {
+		logConfig = zap.NewProductionConfig()
+		logConfig.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
+	}
+
+	return logConfig.Build()
 }
