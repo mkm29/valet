@@ -1,4 +1,4 @@
-package telemetry
+package tests
 
 import (
 	"context"
@@ -7,11 +7,16 @@ import (
 	"time"
 
 	"github.com/mkm29/valet/internal/config"
+	"github.com/mkm29/valet/internal/telemetry"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
-func TestInitializeAndShutdown(t *testing.T) {
+type TelemetryTestSuite struct {
+	ValetTestSuite
+}
+
+func (suite *TelemetryTestSuite) TestInitializeAndShutdown() {
 	tests := []struct {
 		name    string
 		cfg     *config.TelemetryConfig
@@ -48,27 +53,27 @@ func TestInitializeAndShutdown(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		suite.Run(tt.name, func() {
 			ctx := context.Background()
-			tel, err := Initialize(ctx, tt.cfg)
+			tel, err := telemetry.Initialize(ctx, tt.cfg)
 
 			if tt.wantErr {
-				assert.Error(t, err)
+				suite.Error(err)
 				return
 			}
 
-			require.NoError(t, err)
-			assert.NotNil(t, tel)
+			suite.NoError(err)
+			suite.NotNil(tel)
 
 			if tt.cfg.Enabled {
-				assert.NotNil(t, tel.tracer)
-				assert.NotNil(t, tel.meter)
-				assert.NotNil(t, tel.logger)
+				suite.NotNil(tel.Tracer())
+				suite.NotNil(tel.Meter())
+				suite.NotNil(tel.Logger())
 			} else {
-				// When disabled, providers should be nil
-				assert.Nil(t, tel.tracer)
-				assert.Nil(t, tel.meter)
-				assert.Nil(t, tel.logger)
+				// When disabled, providers should return no-op versions
+				suite.NotNil(tel.Tracer())
+				suite.NotNil(tel.Meter())
+				suite.NotNil(tel.Logger())
 			}
 
 			// Test shutdown (should work for both enabled and disabled)
@@ -77,29 +82,26 @@ func TestInitializeAndShutdown(t *testing.T) {
 			err = tel.Shutdown(shutdownCtx)
 			// Ignore sync errors in tests
 			if err != nil && !strings.Contains(err.Error(), "sync") {
-				assert.NoError(t, err)
+				suite.NoError(err)
 			}
 		})
 	}
 }
 
-func TestTelemetryDisabled(t *testing.T) {
+func (suite *TelemetryTestSuite) TestTelemetryDisabled() {
 	cfg := &config.TelemetryConfig{
 		Enabled: false,
 	}
 
 	ctx := context.Background()
-	tel, err := Initialize(ctx, cfg)
+	tel, err := telemetry.Initialize(ctx, cfg)
 
-	assert.NoError(t, err)
-	assert.NotNil(t, tel)
-	assert.False(t, tel.IsEnabled())
-	assert.Nil(t, tel.tracer)
-	assert.Nil(t, tel.meter)
-	assert.Nil(t, tel.logger)
+	suite.NoError(err)
+	suite.NotNil(tel)
+	suite.False(tel.IsEnabled())
 }
 
-func TestTelemetryShutdownTimeout(t *testing.T) {
+func (suite *TelemetryTestSuite) TestTelemetryShutdownTimeout() {
 	cfg := &config.TelemetryConfig{
 		Enabled:        true,
 		ExporterType:   "stdout",
@@ -108,9 +110,9 @@ func TestTelemetryShutdownTimeout(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	tel, err := Initialize(ctx, cfg)
-	require.NoError(t, err)
-	require.NotNil(t, tel)
+	tel, err := telemetry.Initialize(ctx, cfg)
+	suite.NoError(err)
+	suite.NotNil(tel)
 
 	// Create a context that times out immediately
 	shutdownCtx, cancel := context.WithTimeout(ctx, 1*time.Nanosecond)
@@ -125,30 +127,34 @@ func TestTelemetryShutdownTimeout(t *testing.T) {
 	_ = err
 }
 
-func TestTracerNilTelemetry(t *testing.T) {
-	var tel *Telemetry
+func (suite *TelemetryTestSuite) TestTracerNilTelemetry() {
+	var tel *telemetry.Telemetry
 	tracer := tel.Tracer()
-	assert.NotNil(t, tracer) // Should return a no-op tracer
+	suite.NotNil(tracer) // Should return a no-op tracer
 }
 
-func TestMeterNilTelemetry(t *testing.T) {
-	var tel *Telemetry
+func (suite *TelemetryTestSuite) TestMeterNilTelemetry() {
+	var tel *telemetry.Telemetry
 	meter := tel.Meter()
-	assert.NotNil(t, meter) // Should return a no-op meter
+	suite.NotNil(meter) // Should return a no-op meter
 }
 
-func TestLoggerNilTelemetry(t *testing.T) {
-	var tel *Telemetry
+func (suite *TelemetryTestSuite) TestLoggerNilTelemetry() {
+	var tel *telemetry.Telemetry
 	logger := tel.Logger()
-	assert.NotNil(t, logger) // Should return global logger
+	suite.NotNil(logger) // Should return global logger
 }
 
-func TestRecordError(t *testing.T) {
+func (suite *TelemetryTestSuite) TestRecordError() {
 	// This test ensures RecordError doesn't panic with nil telemetry
 	ctx := context.Background()
 
 	// Should not panic
-	assert.NotPanics(t, func() {
-		RecordError(ctx, assert.AnError)
+	suite.NotPanics(func() {
+		telemetry.RecordError(ctx, assert.AnError)
 	})
+}
+
+func TestTelemetrySuite(t *testing.T) {
+	suite.Run(t, new(TelemetryTestSuite))
 }

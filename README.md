@@ -174,6 +174,9 @@ Valet follows Go best practices with well-structured packages using a consistent
   - **Size limits**: Charts exceeding the configured size limit (default 1MB) are rejected to prevent memory issues
   - **LRU eviction**: Prevents unbounded memory growth with configurable cache limits
   - **Cache monitoring**: Track hit rates, evictions, and usage statistics
+  - **Metadata caching**: Separate cache for chart metadata enabling fast `HasSchema` checks without loading full charts
+  - **Dual-cache architecture**: Chart cache for full data, metadata cache for quick lookups
+  - **Enhanced error messages**: Detailed troubleshooting hints for common remote chart issues
   - Thread-safe concurrent access with read-write locks
   - Comprehensive debug logging including cache hit/miss, size information, and eviction events
 - Cache features:
@@ -182,6 +185,14 @@ Valet follows Go best practices with well-structured packages using a consistent
   - Automatic eviction of least recently used entries
   - Charts larger than the total cache size are not cached
   - Statistics tracking: hits, misses, evictions, hit rate
+  - Metadata cache capacity is 2x chart cache for better hit rates
+  - Independent LRU eviction for both caches
+- Error handling features:
+  - Context-aware error messages with troubleshooting hints
+  - Registry-specific guidance (HTTP/HTTPS/OCI)
+  - Authentication configuration validation with clear feedback
+  - Network connectivity and URL format troubleshooting
+  - Helpful suggestions when charts lack schema files
 - Example usage:
   ```go
   // Using options pattern with custom limits
@@ -197,6 +208,8 @@ Valet follows Go best practices with well-structured packages using a consistent
   stats := h.GetCacheStats()
   fmt.Printf("Cache hit rate: %.2f%%, Usage: %.2f%%\n", 
       stats.HitRate, stats.UsagePercent)
+  fmt.Printf("Metadata cache hit rate: %.2f%%, Entries: %d\n",
+      stats.MetadataHitRate, stats.MetadataEntries)
   
   // Clear cache if needed
   h.ClearCache()
@@ -261,6 +274,7 @@ Valet uses [Uber's zap](https://github.com/uber-go/zap) throughout for high-perf
 - **Level control**: Debug logs only shown when debug mode is enabled
 - **Integration**: Logs include trace/span IDs when telemetry is enabled
 - **Performance**: Zero-allocation logging in hot paths
+- **Automatic flushing**: Logger buffers are automatically flushed on program exit to prevent log loss
 
 ## Installation
 
@@ -715,9 +729,11 @@ Valet uses dependency injection for better testability and maintainability:
    ```go
    // Initialize logger internally based on configuration
    app := cmd.NewApp().WithConfig(cfg)
-   if err := app.InitializeLogger(cfg.LogLevel); err != nil {
+   cleanup, err := app.InitializeLogger(cfg.LogLevel)
+   if err != nil {
        // handle error
    }
+   defer cleanup() // Ensures buffered logs are flushed
    ```
 
 4. **Benefits**:
@@ -807,11 +823,17 @@ go tool cover -html=coverage.out
 
 #### Test Organization
 
-All tests are located in the `tests` directory and use the `ValetTestSuite` struct which provides:
+All tests are located in the `tests` directory and use the `ValetTestSuite` as the base test suite which provides:
 
 - Setup and teardown functionality
 - Helper methods like `CopyDir` for test fixtures
 - Consistent assertion methods via Testify
+
+Test structure:
+- All test files belong to the `tests` package
+- Tests either embed `ValetTestSuite` directly or use specialized suites that embed it
+- Specialized test suites (e.g., `HelmTestSuite`, `ConfigValidationTestSuite`) provide domain-specific test helpers
+- Tests follow testify/suite patterns for better organization and reusability
 
 The project maintains high test coverage standards:
 

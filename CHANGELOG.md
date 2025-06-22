@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Security section in README documenting sensitive information handling
 - `InitializeLogger` method to the `App` struct for centralized logger initialization
 - Automatic redaction of sensitive credentials in debug output
+- Logger flush logic with `defer logger.Sync()` to ensure buffered logs are written before exit
+  - `InitializeLogger` now returns a cleanup function that should be deferred
+  - Cleanup function is automatically called in `PersistentPostRunE`
 - **Chart caching in helm package**: Remote charts are now cached in memory to avoid redundant downloads
   - Thread-safe implementation using read-write locks
   - Cache key includes registry URL, chart name, and version
@@ -35,6 +38,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - `ClearCache()` method to manually clear all cache entries
   - Enhanced debug logging with cache usage metrics
   - Hit rate and cache utilization tracking
+- **Chart metadata caching for faster schema checks**:
+  - Separate metadata cache that stores just the `hasSchema` flag and basic chart info
+  - `HasSchema()` method now checks metadata cache first before loading full chart
+  - Metadata cache capacity is 2x chart cache size for better hit rates
+  - Independent LRU eviction for metadata cache
+  - Metadata cache statistics: hits, misses, entries, hit rate
+  - Significantly improves performance for repeated `HasSchema()` calls
+- **Enhanced error messages for remote chart troubleshooting**:
+  - Detailed error messages when chart download fails with context-specific hints
+  - Registry-type specific troubleshooting suggestions (HTTP/HTTPS/OCI)
+  - Common issues highlighted: network, authentication, URL format
+  - Improved validation error messages with examples and current state
+  - Better guidance for authentication configuration conflicts
+  - Clear instructions when charts don't contain schema files
 
 ### Changed
 
@@ -43,6 +60,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Moved `initializeLogger` function to `App.InitializeLogger()` method
   - Improved separation of concerns by centralizing dependency initialization in the App struct
   - Logger creation logic now uses private `createLogger` helper function
+  - **BREAKING**: `InitializeLogger` now returns `(func(), error)` instead of just `error`
+    - The returned cleanup function ensures logs are properly flushed
+    - Prevents potential loss of buffered log entries on program exit
 - **BREAKING**: Replaced `Debug` boolean field in Config with `LogLevel` field that accepts zapcore.Level values
   - CLI flag changed from `--debug` (`-d`) to `--log-level` (`-l`)
   - Config file field changed from `debug: true/false` to `logLevel: debug/info/warn/error/dpanic/panic/fatal`
@@ -66,6 +86,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - LRU eviction based on both size and entry count
   - Cache statistics tracking for monitoring
   - Enhanced debug logging with hit rates and usage metrics
+- **Test Suite Migration**:
+  - All test files moved from internal package directories to centralized `tests` directory
+  - All tests now use `ValetTestSuite` as the base test suite
+  - Test files updated to belong to the `tests` package
+  - Specialized test suites (e.g., `HelmTestSuite`, `ConfigValidationTestSuite`) embed `ValetTestSuite`
+  - Maintains consistent test patterns and improved test organization
+  - Fixed compilation issues after migration and updated function calls to new APIs
 
 ### Removed
 

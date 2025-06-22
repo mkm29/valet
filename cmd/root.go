@@ -44,9 +44,12 @@ func NewRootCmdWithApp(app *App) *cobra.Command {
 			}
 
 			// Initialize logger based on log level
-			if err := app.InitializeLogger(app.Config.LogLevel.Level); err != nil {
+			cleanup, err := app.InitializeLogger(app.Config.LogLevel.Level)
+			if err != nil {
 				return fmt.Errorf("failed to initialize logger: %w", err)
 			}
+			// Store the cleanup function in the app for later use
+			app.loggerCleanup = cleanup
 
 			// Log config if debug level is enabled
 			if app.Config.LogLevel.Level == zapcore.DebugLevel {
@@ -80,9 +83,14 @@ func NewRootCmdWithApp(app *App) *cobra.Command {
 					if app.Logger != nil {
 						app.Logger.Error("Error shutting down telemetry", zap.Error(err))
 					}
-					// Don't return error - telemetry shutdown failure shouldn't fail the command
 				}
 			}
+
+			// Flush logger if it was initialized
+			if app.loggerCleanup != nil {
+				app.loggerCleanup()
+			}
+
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {

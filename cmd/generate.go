@@ -625,15 +625,34 @@ func handleRemoteChartFromConfigWithApp(app *App) error {
 		// Logger will use the default zap.L().Named("helm")
 	})
 
-	// Execute DownloadSchema() just for testing
+	// First check if the chart has a schema
+	hasSchema, err := h.HasSchema(app.Config.Helm.Chart)
+	if err != nil {
+		errMsg := fmt.Sprintf("error checking for schema in remote chart %s/%s: %v",
+			app.Config.Helm.Chart.Name, app.Config.Helm.Chart.Version, err)
+		errMsg += "\n\nPlease check your helm configuration in the config file"
+		return fmt.Errorf("%s", errMsg)
+	}
+
+	if !hasSchema {
+		errMsg := fmt.Sprintf("no values.schema.json found in chart %s/%s",
+			app.Config.Helm.Chart.Name, app.Config.Helm.Chart.Version)
+		errMsg += "\n\nThis chart does not include a JSON schema file."
+		errMsg += "\nYou may need to:"
+		errMsg += "\n- Create a schema manually based on the chart's values.yaml"
+		errMsg += "\n- Check if a newer version of the chart includes a schema"
+		errMsg += "\n- Contact the chart maintainer to request a schema be added"
+		return fmt.Errorf("%s", errMsg)
+	}
+
+	// Download the schema
 	loc, cleanup, err := h.DownloadSchema(app.Config.Helm.Chart)
 	if err != nil {
-		return fmt.Errorf("error downloading remote chart schema: %w", err)
+		errMsg := fmt.Sprintf("error downloading schema from chart %s/%s: %v",
+			app.Config.Helm.Chart.Name, app.Config.Helm.Chart.Version, err)
+		return fmt.Errorf("%s", errMsg)
 	}
 	defer cleanup() // Clean up the temporary file
-	if loc == "" {
-		return fmt.Errorf("no schema found for remote chart %s", app.Config.Helm.Chart.Name)
-	}
 
 	// Print out the location of the downloaded schema
 	fmt.Printf("Downloaded remote chart schema to: %s\n", loc)

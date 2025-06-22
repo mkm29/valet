@@ -10,10 +10,11 @@ import (
 )
 
 func (ts *ValetTestSuite) TestNewGenerateCmd() {
-	cmd := cmd.NewGenerateCmd()
-	ts.Equal("generate [context-dir]", cmd.Use, "Command use should be 'generate [context-dir]'")
-	ts.Equal("Generate JSON Schema from values.yaml", cmd.Short, "unexpected Short description")
-	ts.NotNil(cmd.Args, "expected Args validator to be set")
+	app := cmd.NewApp()
+	generateCmd := cmd.NewGenerateCmdWithApp(app)
+	ts.Equal("generate [context-dir]", generateCmd.Use, "Command use should be 'generate [context-dir]'")
+	ts.Equal("Generate JSON Schema from values.yaml", generateCmd.Short, "unexpected Short description")
+	ts.NotNil(generateCmd.Args, "expected Args validator to be set")
 }
 
 // TestGenerateCmd_OverrideFileNotFound ensures error if overrides flag points to non-existent file
@@ -21,12 +22,13 @@ func (ts *ValetTestSuite) TestGenerateCmd_OverrideFileNotFound() {
 	tmp := ts.T().TempDir()
 	// Create values.yaml to pass values check
 	os.WriteFile(filepath.Join(tmp, "values.yaml"), []byte("x: 1\n"), 0644)
-	cmd := cmd.NewGenerateCmd()
-	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetErr(new(bytes.Buffer))
+	app := cmd.NewApp()
+	generateCmd := cmd.NewGenerateCmdWithApp(app)
+	generateCmd.SetOut(new(bytes.Buffer))
+	generateCmd.SetErr(new(bytes.Buffer))
 	// Set overrides flag to non-existent file
-	cmd.SetArgs([]string{"--overrides", "nofile.yaml", tmp})
-	err := cmd.Execute()
+	generateCmd.SetArgs([]string{"--overrides", "nofile.yaml", tmp})
+	err := generateCmd.Execute()
 	ts.Error(err)
 	ts.Contains(err.Error(), "overrides file nofile.yaml not found")
 }
@@ -34,10 +36,11 @@ func (ts *ValetTestSuite) TestGenerateCmd_OverrideFileNotFound() {
 // TestGenerateCmd_NoValues tests generate fails when no values file present
 func (ts *ValetTestSuite) TestGenerateCmd_NoValues() {
 	tmp := ts.T().TempDir()
-	cmd := cmd.NewGenerateCmd()
+	app := cmd.NewApp()
+	generateCmd := cmd.NewGenerateCmdWithApp(app)
 	// Capture error from Execute
-	cmd.SetArgs([]string{tmp})
-	err := cmd.Execute()
+	generateCmd.SetArgs([]string{tmp})
+	err := generateCmd.Execute()
 	ts.Error(err)
 	ts.Contains(err.Error(), "no values.yaml or values.yml found in")
 }
@@ -55,7 +58,8 @@ func (ts *ValetTestSuite) TestGenerate_Simple() {
 	ts.Require().NoError(err, "failed to write values.yaml")
 
 	// Run Generate
-	msg, err := cmd.Generate(tmp, "")
+	app := cmd.NewApp()
+	msg, err := cmd.GenerateWithApp(app, tmp, "")
 	ts.Require().NoError(err, "Generate failed")
 
 	// Expect message about generation
@@ -100,10 +104,11 @@ func (ts *ValetTestSuite) TestGenerateCommand_Execute() {
 	err := os.WriteFile(filepath.Join(tmp, "values.yaml"), yaml, 0644)
 	ts.Require().NoError(err, "write values.yaml failed")
 
-	cmd := cmd.NewGenerateCmd()
+	app := cmd.NewApp()
+	generateCmd := cmd.NewGenerateCmdWithApp(app)
 	// Use absolute path to temp dir
-	cmd.SetArgs([]string{tmp})
-	err = cmd.Execute()
+	generateCmd.SetArgs([]string{tmp})
+	err = generateCmd.Execute()
 	ts.Require().NoError(err, "GenerateCmd.Execute failed")
 
 	// Check file exists at expected location
@@ -114,22 +119,24 @@ func (ts *ValetTestSuite) TestGenerateCommand_Execute() {
 
 // TestGenerateCmd_MissingArg ensures subcommand errors on missing context arg
 func (ts *ValetTestSuite) TestGenerateCmd_MissingArg() {
-	cmd := cmd.NewGenerateCmd()
-	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetErr(new(bytes.Buffer))
-	cmd.SetArgs([]string{})
-	err := cmd.Execute()
+	app := cmd.NewApp()
+	generateCmd := cmd.NewGenerateCmdWithApp(app)
+	generateCmd.SetOut(new(bytes.Buffer))
+	generateCmd.SetErr(new(bytes.Buffer))
+	generateCmd.SetArgs([]string{})
+	err := generateCmd.Execute()
 	ts.Error(err, "expected error when missing context argument")
 }
 
 // TestGenerateCmd_Help ensures help text is shown without error
 func (ts *ValetTestSuite) TestGenerateCmd_Help() {
-	cmd := cmd.NewGenerateCmd()
+	app := cmd.NewApp()
+	generateCmd := cmd.NewGenerateCmdWithApp(app)
 	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"-h"})
-	err := cmd.Execute()
+	generateCmd.SetOut(&out)
+	generateCmd.SetErr(&out)
+	generateCmd.SetArgs([]string{"-h"})
+	err := generateCmd.Execute()
 	ts.NoError(err, "expected help to succeed")
 	ts.Contains(out.String(), "Generate JSON Schema", "unexpected help output")
 }
@@ -147,7 +154,8 @@ func (ts *ValetTestSuite) TestGenerate_Override() {
 	err = os.WriteFile(filepath.Join(tmp, "over.yaml"), yaml2, 0644)
 	ts.Require().NoError(err, "failed to write overrides")
 
-	msg, err := cmd.Generate(tmp, "over.yaml")
+	app := cmd.NewApp()
+	msg, err := cmd.GenerateWithApp(app, tmp, "over.yaml")
 	ts.Require().NoError(err, "Generate failed")
 
 	expectedMsg := filepath.Join(tmp, "values.schema.json")
@@ -181,7 +189,8 @@ func (ts *ValetTestSuite) TestGenerate_EmptyValues() {
 	ts.Require().NoError(err, "failed to write values.yaml")
 
 	// Run Generate - don't check the message since it's already tested elsewhere
-	_, err = cmd.Generate(tmp, "")
+	app := cmd.NewApp()
+	_, err = cmd.GenerateWithApp(app, tmp, "")
 	ts.Require().NoError(err, "Generate failed")
 
 	// Read schema and check
@@ -209,7 +218,8 @@ func (ts *ValetTestSuite) TestGenerate_ValuesYml() {
 	ts.Require().NoError(err, "failed to write values.yml")
 
 	// Run Generate
-	_, err = cmd.Generate(tmp, "")
+	app := cmd.NewApp()
+	_, err = cmd.GenerateWithApp(app, tmp, "")
 	ts.Require().NoError(err, "Generate failed")
 
 	// Check schema was created
@@ -228,7 +238,8 @@ func (ts *ValetTestSuite) TestGenerate_InvalidYAML() {
 	ts.Require().NoError(err, "failed to write values.yaml")
 
 	// Run Generate - expect error
-	_, err = cmd.Generate(tmp, "")
+	app := cmd.NewApp()
+	_, err = cmd.GenerateWithApp(app, tmp, "")
 	ts.Error(err)
 	ts.Contains(err.Error(), "error", "expected error for invalid YAML")
 }
@@ -248,7 +259,8 @@ func (ts *ValetTestSuite) TestGenerate_InvalidOverrides() {
 	ts.Require().NoError(err, "failed to write overrides.yaml")
 
 	// Run Generate - expect error
-	_, err = cmd.Generate(tmp, "overrides.yaml")
+	app := cmd.NewApp()
+	_, err = cmd.GenerateWithApp(app, tmp, "overrides.yaml")
 	ts.Error(err)
 	ts.Contains(err.Error(), "error", "expected error for invalid overrides")
 }

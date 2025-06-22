@@ -101,7 +101,7 @@ telemetry:
 
 	// Run the command with config file flag
 	rootCmd := cmd.NewRootCmd()
-	rootCmd.SetArgs([]string{"--config-file", ".valet.yaml", "--debug"})
+	rootCmd.SetArgs([]string{"--config-file", ".valet.yaml", "--log-level", "debug"})
 
 	// Execute and this should initialize the config with proper service version
 	err = rootCmd.Execute()

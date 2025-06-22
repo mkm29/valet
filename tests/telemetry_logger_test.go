@@ -1,17 +1,22 @@
-package telemetry
+package tests
 
 import (
 	"context"
 	"testing"
 
+	"github.com/mkm29/valet/internal/telemetry"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
-func TestNewLogger(t *testing.T) {
+type TelemetryLoggerTestSuite struct {
+	ValetTestSuite
+}
+
+func (suite *TelemetryLoggerTestSuite) TestNewLogger() {
 	tests := []struct {
 		name      string
 		debug     bool
@@ -30,11 +35,11 @@ func TestNewLogger(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			logger, err := NewLogger(tt.debug)
-			require.NoError(t, err)
-			assert.NotNil(t, logger)
-			assert.NotNil(t, logger.Logger)
+		suite.Run(tt.name, func() {
+			logger, err := telemetry.NewLogger(tt.debug)
+			suite.NoError(err)
+			suite.NotNil(logger)
+			suite.NotNil(logger.Logger)
 
 			// Replace global logger for test
 			oldLogger := zap.L()
@@ -42,14 +47,14 @@ func TestNewLogger(t *testing.T) {
 			zap.ReplaceGlobals(logger.Logger)
 
 			// Verify it was set
-			assert.Equal(t, logger.Logger, zap.L())
+			suite.Equal(logger.Logger, zap.L())
 		})
 	}
 }
 
-func TestLoggerWithContext(t *testing.T) {
-	logger, err := NewLogger(true)
-	require.NoError(t, err)
+func (suite *TelemetryLoggerTestSuite) TestLoggerWithContext() {
+	logger, err := telemetry.NewLogger(true)
+	suite.NoError(err)
 
 	// Create a real tracer with a noop provider to get recording spans
 	tracerProvider := trace.NewNoopTracerProvider()
@@ -61,22 +66,22 @@ func TestLoggerWithContext(t *testing.T) {
 
 	// Get logger with context
 	ctxLogger := logger.WithContext(ctx)
-	assert.NotNil(t, ctxLogger)
+	suite.NotNil(ctxLogger)
 
 	// For non-recording spans, should return the same logger
-	assert.Equal(t, logger.Logger, ctxLogger)
+	suite.Equal(logger.Logger, ctxLogger)
 }
 
-func TestLoggerWithSpanContext(t *testing.T) {
-	logger, err := NewLogger(true)
-	require.NoError(t, err)
+func (suite *TelemetryLoggerTestSuite) TestLoggerWithSpanContext() {
+	logger, err := telemetry.NewLogger(true)
+	suite.NoError(err)
 
 	// Create a mock span context
 	ctx := context.Background()
 
 	// Test with no span in context - should return the same logger
 	ctxLogger := logger.WithContext(ctx)
-	assert.Equal(t, logger.Logger, ctxLogger)
+	suite.Equal(logger.Logger, ctxLogger)
 
 	// With noop tracer, spans are not recording
 	tracerProvider := trace.NewNoopTracerProvider()
@@ -86,42 +91,42 @@ func TestLoggerWithSpanContext(t *testing.T) {
 
 	// Test with non-recording span - should still return the same logger
 	ctxLogger = logger.WithContext(ctx)
-	assert.Equal(t, logger.Logger, ctxLogger)
+	suite.Equal(logger.Logger, ctxLogger)
 }
 
-func TestLoggerMethods(t *testing.T) {
+func (suite *TelemetryLoggerTestSuite) TestLoggerMethods() {
 	// Create a noop tracer for testing
 	tracer := trace.NewNoopTracerProvider().Tracer("test")
 	ctx, span := tracer.Start(context.Background(), "test-span")
 	defer span.End()
 
-	logger, err := NewLogger(true)
-	require.NoError(t, err)
+	logger, err := telemetry.NewLogger(true)
+	suite.NoError(err)
 
 	// Test Info level
-	assert.NotPanics(t, func() {
+	suite.NotPanics(func() {
 		logger.Info(ctx, "test message", zap.String("key", "value"))
 	})
 
 	// Test Error level
-	assert.NotPanics(t, func() {
+	suite.NotPanics(func() {
 		logger.Error(ctx, "error message", zap.Error(assert.AnError))
 	})
 
 	// Test Debug level
-	assert.NotPanics(t, func() {
+	suite.NotPanics(func() {
 		logger.Debug(ctx, "debug message", zap.Int("count", 42))
 	})
 
 	// Test Warn level
-	assert.NotPanics(t, func() {
+	suite.NotPanics(func() {
 		logger.Warn(ctx, "warning message", zap.Float64("ratio", 0.5))
 	})
 }
 
-func TestSetDefault(t *testing.T) {
-	logger, err := NewLogger(true)
-	require.NoError(t, err)
+func (suite *TelemetryLoggerTestSuite) TestSetDefault() {
+	logger, err := telemetry.NewLogger(true)
+	suite.NoError(err)
 
 	// Store the original global logger
 	originalLogger := zap.L()
@@ -131,5 +136,9 @@ func TestSetDefault(t *testing.T) {
 	logger.SetDefault()
 
 	// Verify it was set
-	assert.Equal(t, logger.Logger, zap.L())
+	suite.Equal(logger.Logger, zap.L())
+}
+
+func TestTelemetryLoggerSuite(t *testing.T) {
+	suite.Run(t, new(TelemetryLoggerTestSuite))
 }

@@ -15,9 +15,10 @@ const appContextKey contextKey = "app"
 
 // App holds the application dependencies
 type App struct {
-	Config    *config.Config
-	Telemetry *telemetry.Telemetry
-	Logger    *zap.Logger
+	Config        *config.Config
+	Telemetry     *telemetry.Telemetry
+	Logger        *zap.Logger
+	loggerCleanup func()
 }
 
 // NewApp creates a new App instance
@@ -44,14 +45,22 @@ func (a *App) WithLogger(logger *zap.Logger) *App {
 }
 
 // InitializeLogger creates a new logger based on log level
-func (a *App) InitializeLogger(level zapcore.Level) error {
+// Returns a cleanup function that should be deferred to ensure logs are flushed
+func (a *App) InitializeLogger(level zapcore.Level) (func(), error) {
 	logger, err := createLogger(level)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	a.Logger = logger
 	zap.ReplaceGlobals(logger)
-	return nil
+
+	// Return a cleanup function that syncs the logger
+	cleanup := func() {
+		// Sync flushes any buffered log entries
+		_ = logger.Sync()
+	}
+
+	return cleanup, nil
 }
 
 // createLogger creates a new zap logger based on log level

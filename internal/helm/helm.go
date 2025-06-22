@@ -59,6 +59,14 @@ type cacheEntry struct {
 	key        string
 }
 
+// metadataEntry represents cached chart metadata for faster schema checks
+type metadataEntry struct {
+	hasSchema    bool
+	chartName    string
+	chartVersion string
+	lastAccess   time.Time
+}
+
 type chartCache struct {
 	mu           sync.RWMutex
 	entries      map[string]*cacheEntry
@@ -68,6 +76,14 @@ type chartCache struct {
 	hits         int64                    // Cache hit count
 	misses       int64                    // Cache miss count
 	evictions    int64                    // Number of evictions
+
+	// Metadata cache for faster schema checks
+	metadataMu      sync.RWMutex
+	metadata        map[string]*metadataEntry
+	metadataLRU     *list.List
+	metadataKeyToEl map[string]*list.Element
+	metadataHits    int64
+	metadataMisses  int64
 }
 
 // NewHelm creates a new Helm instance with options
@@ -106,6 +122,12 @@ func NewHelm(opts HelmOptions) *Helm {
 			hits:         0,
 			misses:       0,
 			evictions:    0,
+			// Initialize metadata cache
+			metadata:        make(map[string]*metadataEntry),
+			metadataLRU:     list.New(),
+			metadataKeyToEl: make(map[string]*list.Element),
+			metadataHits:    0,
+			metadataMisses:  0,
 		},
 	}
 }
@@ -221,6 +243,85 @@ func (h *Helm) updateLRU(key string) {
 		elem := h.cache.lruList.PushFront(key)
 		// Store the list element reference for O(1) access later
 		h.cache.keyToElement[key] = elem
+	}
+}
+
+// updateMetadataLRU updates the metadata LRU list when an entry is accessed.
+// IMPORTANT: Must be called with write lock held on h.cache.metadataMu
+func (h *Helm) updateMetadataLRU(key string) {
+	if elem, exists := h.cache.metadataKeyToEl[key]; exists {
+		// Entry exists: move it to the front (mark as recently used)
+		h.cache.metadataLRU.MoveToFront(elem)
+	} else {
+		// New entry: add to the front of the list
+		elem := h.cache.metadataLRU.PushFront(key)
+		// Store the list element reference for O(1) access later
+		h.cache.metadataKeyToEl[key] = elem
+	}
+}
+
+// evictMetadataLRU evicts least recently used metadata entries
+// IMPORTANT: Must be called with write lock held on h.cache.metadataMu
+func (h *Helm) evictMetadataLRU() {
+	// Keep metadata cache at 2x the size of chart cache for better hit rate
+	maxMetadataEntries := h.maxCacheEntries * 2
+
+	for len(h.cache.metadata) >= maxMetadataEntries {
+		elem := h.cache.metadataLRU.Back()
+		if elem == nil {
+			break
+		}
+
+		key := elem.Value.(string)
+		delete(h.cache.metadata, key)
+		delete(h.cache.metadataKeyToEl, key)
+		h.cache.metadataLRU.Remove(elem)
+
+		if h.debug {
+			h.logger.Debug("Evicted metadata from cache",
+				zap.String("key", key),
+				zap.Int("remainingEntries", len(h.cache.metadata)),
+			)
+		}
+	}
+}
+
+// updateMetadataCache updates the metadata cache with chart information
+func (h *Helm) updateMetadataCache(cacheKey string, ch *chart.Chart, c *config.HelmChart) {
+	// Check if chart has schema
+	hasSchema := false
+	for _, file := range ch.Raw {
+		if file.Name == "values.schema.json" {
+			hasSchema = true
+			break
+		}
+	}
+
+	// Update metadata cache
+	h.cache.metadataMu.Lock()
+	defer h.cache.metadataMu.Unlock()
+
+	// Evict if necessary
+	maxMetadataEntries := h.maxCacheEntries * 2
+	if len(h.cache.metadata) >= maxMetadataEntries {
+		h.evictMetadataLRU()
+	}
+
+	// Add to metadata cache
+	h.cache.metadata[cacheKey] = &metadataEntry{
+		hasSchema:    hasSchema,
+		chartName:    c.Name,
+		chartVersion: c.Version,
+		lastAccess:   time.Now(),
+	}
+	h.updateMetadataLRU(cacheKey)
+
+	if h.debug {
+		h.logger.Debug("Updated metadata cache",
+			zap.String("chart", fmt.Sprintf("%s/%s", c.Name, c.Version)),
+			zap.Bool("hasSchema", hasSchema),
+			zap.Int("metadataEntries", len(h.cache.metadata)),
+		)
 	}
 }
 
@@ -350,6 +451,9 @@ func (h *Helm) getOrLoadChart(c *config.HelmChart) (*chart.Chart, error) {
 	h.cache.currentSize += chartSize
 	h.updateLRU(cacheKey)
 
+	// Also update metadata cache
+	h.updateMetadataCache(cacheKey, loadedChart, c)
+
 	// Calculate final cache state
 	cacheUsagePercent := float64(h.cache.currentSize) / float64(h.maxCacheSize) * 100
 	entriesUsagePercent := float64(len(h.cache.entries)) / float64(h.maxCacheEntries) * 100
@@ -408,7 +512,42 @@ func (h *Helm) loadChart(c *config.HelmChart) (*chart.Chart, error) {
 	getterOpts := h.GetOptions(c)
 	provider, err := g.Get(url, getterOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get chart: %w", err)
+		// Provide detailed error message for troubleshooting
+		errMsg := fmt.Sprintf("failed to download chart from %s: %v", url, err)
+
+		// Add context-specific troubleshooting hints
+		if c.Registry.Type == RegistryTypeHTTP || c.Registry.Type == RegistryTypeHTTPS {
+			errMsg += fmt.Sprintf("\n\nTroubleshooting hints for %s registry:", c.Registry.Type)
+			errMsg += fmt.Sprintf("\n- Verify the registry URL is correct: %s", c.Registry.URL)
+			errMsg += fmt.Sprintf("\n- Check if the chart exists: %s/%s", c.Name, c.Version)
+			errMsg += "\n- Ensure the registry is accessible from your network"
+
+			if c.Registry.Auth != nil && (c.Registry.Auth.Username != "" || c.Registry.Auth.Token != "") {
+				errMsg += "\n- Verify your authentication credentials are correct"
+			}
+
+			if c.Registry.Type == RegistryTypeHTTPS && c.Registry.Insecure {
+				errMsg += "\n- You're using insecure HTTPS, ensure the registry supports this"
+			}
+
+			if c.Registry.TLS != nil && c.Registry.TLS.InsecureSkipTLSVerify {
+				errMsg += "\n- TLS verification is disabled, this may cause security warnings"
+			}
+		} else if c.Registry.Type == RegistryTypeOCI {
+			errMsg += "\n\nTroubleshooting hints for OCI registry:"
+			errMsg += fmt.Sprintf("\n- Verify the OCI registry URL format: %s", c.Registry.URL)
+			errMsg += fmt.Sprintf("\n- Expected format: oci://registry.example.com/namespace/%s", c.Name)
+			errMsg += "\n- Ensure you have proper authentication for OCI registries"
+			errMsg += "\n- Check if the OCI registry requires specific authentication methods"
+		}
+
+		errMsg += "\n\nCommon issues:"
+		errMsg += "\n- Network connectivity problems"
+		errMsg += "\n- Incorrect chart name or version"
+		errMsg += "\n- Missing or incorrect authentication"
+		errMsg += "\n- Registry URL format issues"
+
+		return nil, fmt.Errorf("%s", errMsg)
 	}
 
 	// Check the size before loading
@@ -431,7 +570,14 @@ func (h *Helm) loadChart(c *config.HelmChart) (*chart.Chart, error) {
 	// Load the chart archive
 	chart, err := loader.LoadArchive(provider)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load chart: %w", err)
+		errMsg := fmt.Sprintf("failed to load chart archive for %s/%s: %v", c.Name, c.Version, err)
+		errMsg += "\n\nPossible causes:"
+		errMsg += "\n- The downloaded file is not a valid Helm chart archive"
+		errMsg += "\n- The chart archive is corrupted or incomplete"
+		errMsg += "\n- The chart format is incompatible with this version of Helm"
+		errMsg += fmt.Sprintf("\n- Downloaded size: %s", h.formatBytes(chartSize))
+
+		return nil, fmt.Errorf("%s", errMsg)
 	}
 
 	if h.debug {
@@ -453,7 +599,7 @@ func (h *Helm) getSchemaFile(c *config.HelmChart) (*chart.File, error) {
 	// Load the chart using caching logic
 	chart, err := h.getOrLoadChart(c)
 	if err != nil {
-		return nil, fmt.Errorf("error loading chart: %w", err)
+		return nil, fmt.Errorf("error loading chart %s/%s: %w", c.Name, c.Version, err)
 	}
 
 	// Find the values.schema.json file
@@ -476,7 +622,62 @@ func (h *Helm) getSchemaFile(c *config.HelmChart) (*chart.File, error) {
 }
 
 // HasSchema checks if a chart has a values.schema.json file
+// This method first checks the metadata cache for fast lookups
 func (h *Helm) HasSchema(c *config.HelmChart) (bool, error) {
+	// Create cache key
+	cacheKey := fmt.Sprintf("%s/%s@%s", c.Registry.URL, c.Name, c.Version)
+
+	// First check metadata cache for fast lookup
+	h.cache.metadataMu.RLock()
+	if entry, ok := h.cache.metadata[cacheKey]; ok {
+		// Found in metadata cache
+		h.cache.metadataMu.RUnlock()
+
+		// Update access time and stats
+		h.cache.metadataMu.Lock()
+		entry.lastAccess = time.Now()
+		h.updateMetadataLRU(cacheKey)
+		h.cache.metadataHits++
+
+		totalRequests := h.cache.metadataHits + h.cache.metadataMisses
+		hitRate := float64(0)
+		if totalRequests > 0 {
+			hitRate = float64(h.cache.metadataHits) / float64(totalRequests) * 100
+		}
+		h.cache.metadataMu.Unlock()
+
+		if h.debug {
+			h.logger.Debug("Metadata cache hit",
+				zap.String("chart", fmt.Sprintf("%s/%s", c.Name, c.Version)),
+				zap.Bool("hasSchema", entry.hasSchema),
+				zap.Int64("totalHits", h.cache.metadataHits),
+				zap.Float64("hitRate", hitRate),
+			)
+		}
+
+		return entry.hasSchema, nil
+	}
+	h.cache.metadataMu.RUnlock()
+
+	// Metadata cache miss - update stats
+	h.cache.metadataMu.Lock()
+	h.cache.metadataMisses++
+	totalRequests := h.cache.metadataHits + h.cache.metadataMisses
+	missRate := float64(0)
+	if totalRequests > 0 {
+		missRate = float64(h.cache.metadataMisses) / float64(totalRequests) * 100
+	}
+	h.cache.metadataMu.Unlock()
+
+	if h.debug {
+		h.logger.Debug("Metadata cache miss",
+			zap.String("chart", fmt.Sprintf("%s/%s", c.Name, c.Version)),
+			zap.Int64("totalMisses", h.cache.metadataMisses),
+			zap.Float64("missRate", missRate),
+		)
+	}
+
+	// Fall back to loading the chart
 	file, err := h.getSchemaFile(c)
 	if err != nil {
 		return false, err
@@ -558,6 +759,12 @@ type CacheStats struct {
 	Evictions    int64   `json:"evictions"`
 	HitRate      float64 `json:"hitRate"`
 	UsagePercent float64 `json:"usagePercent"`
+
+	// Metadata cache stats
+	MetadataEntries int     `json:"metadataEntries"`
+	MetadataHits    int64   `json:"metadataHits"`
+	MetadataMisses  int64   `json:"metadataMisses"`
+	MetadataHitRate float64 `json:"metadataHitRate"`
 }
 
 // GetCacheStats returns current cache statistics
@@ -576,16 +783,33 @@ func (h *Helm) GetCacheStats() CacheStats {
 		usagePercent = float64(h.cache.currentSize) / float64(h.maxCacheSize) * 100
 	}
 
+	// Get metadata cache stats
+	h.cache.metadataMu.RLock()
+	metadataEntries := len(h.cache.metadata)
+	metadataHits := h.cache.metadataHits
+	metadataMisses := h.cache.metadataMisses
+	h.cache.metadataMu.RUnlock()
+
+	metadataTotalRequests := metadataHits + metadataMisses
+	metadataHitRate := float64(0)
+	if metadataTotalRequests > 0 {
+		metadataHitRate = float64(metadataHits) / float64(metadataTotalRequests) * 100
+	}
+
 	return CacheStats{
-		Entries:      len(h.cache.entries),
-		CurrentSize:  h.cache.currentSize,
-		MaxSize:      h.maxCacheSize,
-		MaxEntries:   h.maxCacheEntries,
-		Hits:         h.cache.hits,
-		Misses:       h.cache.misses,
-		Evictions:    h.cache.evictions,
-		HitRate:      hitRate,
-		UsagePercent: usagePercent,
+		Entries:         len(h.cache.entries),
+		CurrentSize:     h.cache.currentSize,
+		MaxSize:         h.maxCacheSize,
+		MaxEntries:      h.maxCacheEntries,
+		Hits:            h.cache.hits,
+		Misses:          h.cache.misses,
+		Evictions:       h.cache.evictions,
+		HitRate:         hitRate,
+		UsagePercent:    usagePercent,
+		MetadataEntries: metadataEntries,
+		MetadataHits:    metadataHits,
+		MetadataMisses:  metadataMisses,
+		MetadataHitRate: metadataHitRate,
 	}
 }
 
@@ -600,7 +824,14 @@ func (h *Helm) ClearCache() {
 	h.cache.currentSize = 0
 	// Don't reset statistics, they're cumulative
 
+	// Also clear metadata cache
+	h.cache.metadataMu.Lock()
+	h.cache.metadata = make(map[string]*metadataEntry)
+	h.cache.metadataLRU = list.New()
+	h.cache.metadataKeyToEl = make(map[string]*list.Element)
+	h.cache.metadataMu.Unlock()
+
 	if h.debug {
-		h.logger.Debug("Cache cleared")
+		h.logger.Debug("Cache cleared (including metadata)")
 	}
 }

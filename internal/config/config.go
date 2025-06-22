@@ -10,6 +10,14 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// maskString returns a masked representation for logging
+func maskString(value, whenPresent, whenEmpty string) string {
+	if value != "" {
+		return whenPresent
+	}
+	return whenEmpty
+}
+
 // Config holds the configuration for the application
 type Config struct {
 	LogLevel  LogLevel         `yaml:"logLevel"`
@@ -232,11 +240,11 @@ func (r *HelmRegistry) Validate() error {
 
 	// Validate URL
 	if r.URL == "" {
-		return fmt.Errorf("registry URL is required")
+		return fmt.Errorf("registry URL is required - please provide the base URL of your Helm chart registry")
 	}
 	parsedURL, err := url.Parse(r.URL)
 	if err != nil {
-		return fmt.Errorf("invalid URL: %w", err)
+		return fmt.Errorf("invalid URL '%s': %w\nExpected format examples:\n- HTTP/HTTPS: https://charts.example.com/stable\n- OCI: oci://registry.example.com/charts", r.URL, err)
 	}
 
 	// Validate registry type
@@ -249,15 +257,15 @@ func (r *HelmRegistry) Validate() error {
 	switch r.Type {
 	case "HTTP":
 		if parsedURL.Scheme != "http" {
-			return fmt.Errorf("HTTP registry type requires http:// URL scheme")
+			return fmt.Errorf("HTTP registry type requires http:// URL scheme, but got '%s://'.\nPlease update your URL to start with 'http://' or change the registry type to 'HTTPS'", parsedURL.Scheme)
 		}
 	case "HTTPS":
 		if parsedURL.Scheme != "https" {
-			return fmt.Errorf("HTTPS registry type requires https:// URL scheme")
+			return fmt.Errorf("HTTPS registry type requires https:// URL scheme, but got '%s://'.\nPlease update your URL to start with 'https://' or change the registry type to 'HTTP' if using an insecure registry", parsedURL.Scheme)
 		}
 	case "OCI":
 		if parsedURL.Scheme != "oci" && parsedURL.Scheme != "https" {
-			return fmt.Errorf("OCI registry type requires oci:// or https:// URL scheme")
+			return fmt.Errorf("OCI registry type requires oci:// or https:// URL scheme, but got '%s://'.\nExamples:\n- oci://ghcr.io/helm-charts\n- oci://registry.example.com/charts\n- https://registry.example.com (for OCI registries with HTTPS)", parsedURL.Scheme)
 		}
 	}
 
@@ -295,7 +303,9 @@ func (a *HelmAuth) Validate() error {
 		authMethods++
 		// Username and password must be provided together
 		if a.Username == "" || a.Password == "" {
-			return fmt.Errorf("both username and password must be provided for basic auth")
+			return fmt.Errorf("both username and password must be provided for basic auth.\nCurrent state: username=%s, password=%s",
+				maskString(a.Username, "provided", "missing"),
+				maskString(a.Password, "provided", "missing"))
 		}
 	}
 	if a.Token != "" {
@@ -303,7 +313,9 @@ func (a *HelmAuth) Validate() error {
 	}
 
 	if authMethods > 1 {
-		return fmt.Errorf("only one authentication method can be used at a time")
+		return fmt.Errorf("only one authentication method can be used at a time.\nFound multiple methods:\n- Basic auth: %s\n- Token auth: %s\nPlease use either username/password OR token, not both",
+			maskString(a.Username, "configured", "not configured"),
+			maskString(a.Token, "configured", "not configured"))
 	}
 
 	return nil

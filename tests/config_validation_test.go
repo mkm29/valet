@@ -1,19 +1,28 @@
-package config
+package tests
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/mkm29/valet/internal/config"
+	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap/zapcore"
 )
 
-func TestHelmConfig_Validate(t *testing.T) {
+type ConfigValidationTestSuite struct {
+	ValetTestSuite
+	tempDir string
+}
+
+func (suite *ConfigValidationTestSuite) SetupSuite() {
+	suite.tempDir = suite.T().TempDir()
+}
+
+func (suite *ConfigValidationTestSuite) TestHelmConfig_Validate() {
 	tests := []struct {
 		name    string
-		config  *HelmConfig
+		config  *config.HelmConfig
 		wantErr bool
 		errMsg  string
 	}{
@@ -24,16 +33,16 @@ func TestHelmConfig_Validate(t *testing.T) {
 		},
 		{
 			name:    "nil chart is valid",
-			config:  &HelmConfig{Chart: nil},
+			config:  &config.HelmConfig{Chart: nil},
 			wantErr: false,
 		},
 		{
 			name: "valid config",
-			config: &HelmConfig{
-				Chart: &HelmChart{
+			config: &config.HelmConfig{
+				Chart: &config.HelmChart{
 					Name:    "my-chart",
 					Version: "1.2.3",
-					Registry: &HelmRegistry{
+					Registry: &config.HelmRegistry{
 						URL:  "https://example.com",
 						Type: "HTTPS",
 					},
@@ -44,24 +53,24 @@ func TestHelmConfig_Validate(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		suite.Run(tt.name, func() {
 			err := tt.config.Validate()
 			if tt.wantErr {
-				assert.Error(t, err)
+				suite.Error(err)
 				if tt.errMsg != "" {
-					assert.Contains(t, err.Error(), tt.errMsg)
+					suite.Contains(err.Error(), tt.errMsg)
 				}
 			} else {
-				assert.NoError(t, err)
+				suite.NoError(err)
 			}
 		})
 	}
 }
 
-func TestHelmChart_Validate(t *testing.T) {
+func (suite *ConfigValidationTestSuite) TestHelmChart_Validate() {
 	tests := []struct {
 		name    string
-		chart   *HelmChart
+		chart   *config.HelmChart
 		wantErr bool
 		errMsg  string
 	}{
@@ -73,97 +82,97 @@ func TestHelmChart_Validate(t *testing.T) {
 		},
 		{
 			name: "empty name",
-			chart: &HelmChart{
+			chart: &config.HelmChart{
 				Name:     "",
 				Version:  "1.0.0",
-				Registry: &HelmRegistry{URL: "https://example.com", Type: "HTTPS"},
+				Registry: &config.HelmRegistry{URL: "https://example.com", Type: "HTTPS"},
 			},
 			wantErr: true,
 			errMsg:  "helm chart name is required",
 		},
 		{
 			name: "invalid name with path traversal",
-			chart: &HelmChart{
+			chart: &config.HelmChart{
 				Name:     "../../../etc/passwd",
 				Version:  "1.0.0",
-				Registry: &HelmRegistry{URL: "https://example.com", Type: "HTTPS"},
+				Registry: &config.HelmRegistry{URL: "https://example.com", Type: "HTTPS"},
 			},
 			wantErr: true,
 			errMsg:  "name contains path traversal",
 		},
 		{
 			name: "invalid name with absolute path",
-			chart: &HelmChart{
+			chart: &config.HelmChart{
 				Name:     "/etc/passwd",
 				Version:  "1.0.0",
-				Registry: &HelmRegistry{URL: "https://example.com", Type: "HTTPS"},
+				Registry: &config.HelmRegistry{URL: "https://example.com", Type: "HTTPS"},
 			},
 			wantErr: true,
 			errMsg:  "name cannot be an absolute path",
 		},
 		{
 			name: "invalid name with special chars",
-			chart: &HelmChart{
+			chart: &config.HelmChart{
 				Name:     "my-chart|echo test",
 				Version:  "1.0.0",
-				Registry: &HelmRegistry{URL: "https://example.com", Type: "HTTPS"},
+				Registry: &config.HelmRegistry{URL: "https://example.com", Type: "HTTPS"},
 			},
 			wantErr: true,
 			errMsg:  "name contains invalid character",
 		},
 		{
 			name: "name too long",
-			chart: &HelmChart{
+			chart: &config.HelmChart{
 				Name:     string(make([]byte, 256)),
 				Version:  "1.0.0",
-				Registry: &HelmRegistry{URL: "https://example.com", Type: "HTTPS"},
+				Registry: &config.HelmRegistry{URL: "https://example.com", Type: "HTTPS"},
 			},
 			wantErr: true,
 			errMsg:  "name is too long",
 		},
 		{
 			name: "empty version",
-			chart: &HelmChart{
+			chart: &config.HelmChart{
 				Name:     "my-chart",
 				Version:  "",
-				Registry: &HelmRegistry{URL: "https://example.com", Type: "HTTPS"},
+				Registry: &config.HelmRegistry{URL: "https://example.com", Type: "HTTPS"},
 			},
 			wantErr: true,
 			errMsg:  "helm chart version is required",
 		},
 		{
 			name: "invalid version with command injection",
-			chart: &HelmChart{
+			chart: &config.HelmChart{
 				Name:     "my-chart",
 				Version:  "1.0.0; rm -rf /",
-				Registry: &HelmRegistry{URL: "https://example.com", Type: "HTTPS"},
+				Registry: &config.HelmRegistry{URL: "https://example.com", Type: "HTTPS"},
 			},
 			wantErr: true,
 			errMsg:  "version contains invalid character",
 		},
 		{
 			name: "version too long",
-			chart: &HelmChart{
+			chart: &config.HelmChart{
 				Name:     "my-chart",
 				Version:  string(make([]byte, 129)),
-				Registry: &HelmRegistry{URL: "https://example.com", Type: "HTTPS"},
+				Registry: &config.HelmRegistry{URL: "https://example.com", Type: "HTTPS"},
 			},
 			wantErr: true,
 			errMsg:  "version is too long",
 		},
 		{
 			name: "invalid version format",
-			chart: &HelmChart{
+			chart: &config.HelmChart{
 				Name:     "my-chart",
 				Version:  "not-a-version",
-				Registry: &HelmRegistry{URL: "https://example.com", Type: "HTTPS"},
+				Registry: &config.HelmRegistry{URL: "https://example.com", Type: "HTTPS"},
 			},
 			wantErr: true,
 			errMsg:  "version does not appear to be a valid semantic version",
 		},
 		{
 			name: "nil registry",
-			chart: &HelmChart{
+			chart: &config.HelmChart{
 				Name:     "my-chart",
 				Version:  "1.0.0",
 				Registry: nil,
@@ -173,34 +182,34 @@ func TestHelmChart_Validate(t *testing.T) {
 		},
 		{
 			name: "valid semantic versions",
-			chart: &HelmChart{
+			chart: &config.HelmChart{
 				Name:     "my-chart",
 				Version:  "v1.2.3-alpha.1+build.123",
-				Registry: &HelmRegistry{URL: "https://example.com", Type: "HTTPS"},
+				Registry: &config.HelmRegistry{URL: "https://example.com", Type: "HTTPS"},
 			},
 			wantErr: false,
 		},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		suite.Run(tt.name, func() {
 			err := tt.chart.Validate()
 			if tt.wantErr {
-				assert.Error(t, err)
+				suite.Error(err)
 				if tt.errMsg != "" {
-					assert.Contains(t, err.Error(), tt.errMsg)
+					suite.Contains(err.Error(), tt.errMsg)
 				}
 			} else {
-				assert.NoError(t, err)
+				suite.NoError(err)
 			}
 		})
 	}
 }
 
-func TestHelmRegistry_Validate(t *testing.T) {
+func (suite *ConfigValidationTestSuite) TestHelmRegistry_Validate() {
 	tests := []struct {
 		name    string
-		reg     *HelmRegistry
+		reg     *config.HelmRegistry
 		wantErr bool
 		errMsg  string
 	}{
@@ -212,7 +221,7 @@ func TestHelmRegistry_Validate(t *testing.T) {
 		},
 		{
 			name: "empty URL",
-			reg: &HelmRegistry{
+			reg: &config.HelmRegistry{
 				URL:  "",
 				Type: "HTTPS",
 			},
@@ -221,7 +230,7 @@ func TestHelmRegistry_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid URL",
-			reg: &HelmRegistry{
+			reg: &config.HelmRegistry{
 				URL:  "not a url",
 				Type: "HTTPS",
 			},
@@ -230,7 +239,7 @@ func TestHelmRegistry_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid registry type",
-			reg: &HelmRegistry{
+			reg: &config.HelmRegistry{
 				URL:  "https://example.com",
 				Type: "FTP",
 			},
@@ -239,7 +248,7 @@ func TestHelmRegistry_Validate(t *testing.T) {
 		},
 		{
 			name: "HTTP type with HTTPS URL",
-			reg: &HelmRegistry{
+			reg: &config.HelmRegistry{
 				URL:  "https://example.com",
 				Type: "HTTP",
 			},
@@ -248,7 +257,7 @@ func TestHelmRegistry_Validate(t *testing.T) {
 		},
 		{
 			name: "HTTPS type with HTTP URL",
-			reg: &HelmRegistry{
+			reg: &config.HelmRegistry{
 				URL:  "http://example.com",
 				Type: "HTTPS",
 			},
@@ -257,7 +266,7 @@ func TestHelmRegistry_Validate(t *testing.T) {
 		},
 		{
 			name: "OCI type with invalid scheme",
-			reg: &HelmRegistry{
+			reg: &config.HelmRegistry{
 				URL:  "http://example.com",
 				Type: "OCI",
 			},
@@ -266,11 +275,11 @@ func TestHelmRegistry_Validate(t *testing.T) {
 		},
 		{
 			name: "conflicting TLS settings",
-			reg: &HelmRegistry{
+			reg: &config.HelmRegistry{
 				URL:      "https://example.com",
 				Type:     "HTTPS",
 				Insecure: true,
-				TLS: &HelmTLS{
+				TLS: &config.HelmTLS{
 					InsecureSkipTLSVerify: false,
 				},
 			},
@@ -279,7 +288,7 @@ func TestHelmRegistry_Validate(t *testing.T) {
 		},
 		{
 			name: "valid OCI registry with oci scheme",
-			reg: &HelmRegistry{
+			reg: &config.HelmRegistry{
 				URL:  "oci://example.com/charts",
 				Type: "OCI",
 			},
@@ -287,7 +296,7 @@ func TestHelmRegistry_Validate(t *testing.T) {
 		},
 		{
 			name: "valid OCI registry with https scheme",
-			reg: &HelmRegistry{
+			reg: &config.HelmRegistry{
 				URL:  "https://example.com/charts",
 				Type: "OCI",
 			},
@@ -296,24 +305,24 @@ func TestHelmRegistry_Validate(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		suite.Run(tt.name, func() {
 			err := tt.reg.Validate()
 			if tt.wantErr {
-				assert.Error(t, err)
+				suite.Error(err)
 				if tt.errMsg != "" {
-					assert.Contains(t, err.Error(), tt.errMsg)
+					suite.Contains(err.Error(), tt.errMsg)
 				}
 			} else {
-				assert.NoError(t, err)
+				suite.NoError(err)
 			}
 		})
 	}
 }
 
-func TestHelmAuth_Validate(t *testing.T) {
+func (suite *ConfigValidationTestSuite) TestHelmAuth_Validate() {
 	tests := []struct {
 		name    string
-		auth    *HelmAuth
+		auth    *config.HelmAuth
 		wantErr bool
 		errMsg  string
 	}{
@@ -324,12 +333,12 @@ func TestHelmAuth_Validate(t *testing.T) {
 		},
 		{
 			name:    "empty auth is valid",
-			auth:    &HelmAuth{},
+			auth:    &config.HelmAuth{},
 			wantErr: false,
 		},
 		{
 			name: "username without password",
-			auth: &HelmAuth{
+			auth: &config.HelmAuth{
 				Username: "user",
 				Password: "",
 			},
@@ -338,7 +347,7 @@ func TestHelmAuth_Validate(t *testing.T) {
 		},
 		{
 			name: "password without username",
-			auth: &HelmAuth{
+			auth: &config.HelmAuth{
 				Username: "",
 				Password: "pass",
 			},
@@ -347,7 +356,7 @@ func TestHelmAuth_Validate(t *testing.T) {
 		},
 		{
 			name: "valid basic auth",
-			auth: &HelmAuth{
+			auth: &config.HelmAuth{
 				Username: "user",
 				Password: "pass",
 			},
@@ -355,14 +364,14 @@ func TestHelmAuth_Validate(t *testing.T) {
 		},
 		{
 			name: "valid token auth",
-			auth: &HelmAuth{
+			auth: &config.HelmAuth{
 				Token: "my-token",
 			},
 			wantErr: false,
 		},
 		{
 			name: "conflicting auth methods",
-			auth: &HelmAuth{
+			auth: &config.HelmAuth{
 				Username: "user",
 				Password: "pass",
 				Token:    "token",
@@ -373,34 +382,33 @@ func TestHelmAuth_Validate(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		suite.Run(tt.name, func() {
 			err := tt.auth.Validate()
 			if tt.wantErr {
-				assert.Error(t, err)
+				suite.Error(err)
 				if tt.errMsg != "" {
-					assert.Contains(t, err.Error(), tt.errMsg)
+					suite.Contains(err.Error(), tt.errMsg)
 				}
 			} else {
-				assert.NoError(t, err)
+				suite.NoError(err)
 			}
 		})
 	}
 }
 
-func TestHelmTLS_Validate(t *testing.T) {
+func (suite *ConfigValidationTestSuite) TestHelmTLS_Validate() {
 	// Create temporary files for testing
-	tempDir := t.TempDir()
-	certFile := filepath.Join(tempDir, "cert.pem")
-	keyFile := filepath.Join(tempDir, "key.pem")
-	caFile := filepath.Join(tempDir, "ca.pem")
+	certFile := filepath.Join(suite.tempDir, "cert.pem")
+	keyFile := filepath.Join(suite.tempDir, "key.pem")
+	caFile := filepath.Join(suite.tempDir, "ca.pem")
 
-	require.NoError(t, os.WriteFile(certFile, []byte("cert"), 0600))
-	require.NoError(t, os.WriteFile(keyFile, []byte("key"), 0600))
-	require.NoError(t, os.WriteFile(caFile, []byte("ca"), 0600))
+	suite.NoError(os.WriteFile(certFile, []byte("cert"), 0600))
+	suite.NoError(os.WriteFile(keyFile, []byte("key"), 0600))
+	suite.NoError(os.WriteFile(caFile, []byte("ca"), 0600))
 
 	tests := []struct {
 		name    string
-		tls     *HelmTLS
+		tls     *config.HelmTLS
 		wantErr bool
 		errMsg  string
 	}{
@@ -411,12 +419,12 @@ func TestHelmTLS_Validate(t *testing.T) {
 		},
 		{
 			name:    "empty TLS is valid",
-			tls:     &HelmTLS{},
+			tls:     &config.HelmTLS{},
 			wantErr: false,
 		},
 		{
 			name: "cert without key",
-			tls: &HelmTLS{
+			tls: &config.HelmTLS{
 				CertFile: certFile,
 				KeyFile:  "",
 			},
@@ -425,7 +433,7 @@ func TestHelmTLS_Validate(t *testing.T) {
 		},
 		{
 			name: "key without cert",
-			tls: &HelmTLS{
+			tls: &config.HelmTLS{
 				CertFile: "",
 				KeyFile:  keyFile,
 			},
@@ -434,7 +442,7 @@ func TestHelmTLS_Validate(t *testing.T) {
 		},
 		{
 			name: "valid client TLS",
-			tls: &HelmTLS{
+			tls: &config.HelmTLS{
 				CertFile: certFile,
 				KeyFile:  keyFile,
 				CaFile:   caFile,
@@ -443,7 +451,7 @@ func TestHelmTLS_Validate(t *testing.T) {
 		},
 		{
 			name: "non-existent cert file",
-			tls: &HelmTLS{
+			tls: &config.HelmTLS{
 				CertFile: "/non/existent/cert.pem",
 				KeyFile:  keyFile,
 			},
@@ -452,7 +460,7 @@ func TestHelmTLS_Validate(t *testing.T) {
 		},
 		{
 			name: "non-existent key file",
-			tls: &HelmTLS{
+			tls: &config.HelmTLS{
 				CertFile: certFile,
 				KeyFile:  "/non/existent/key.pem",
 			},
@@ -461,7 +469,7 @@ func TestHelmTLS_Validate(t *testing.T) {
 		},
 		{
 			name: "non-existent CA file",
-			tls: &HelmTLS{
+			tls: &config.HelmTLS{
 				CaFile: "/non/existent/ca.pem",
 			},
 			wantErr: true,
@@ -469,7 +477,7 @@ func TestHelmTLS_Validate(t *testing.T) {
 		},
 		{
 			name: "insecure skip TLS verify",
-			tls: &HelmTLS{
+			tls: &config.HelmTLS{
 				InsecureSkipTLSVerify: true,
 			},
 			wantErr: false,
@@ -477,193 +485,23 @@ func TestHelmTLS_Validate(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		suite.Run(tt.name, func() {
 			err := tt.tls.Validate()
 			if tt.wantErr {
-				assert.Error(t, err)
+				suite.Error(err)
 				if tt.errMsg != "" {
-					assert.Contains(t, err.Error(), tt.errMsg)
+					suite.Contains(err.Error(), tt.errMsg)
 				}
 			} else {
-				assert.NoError(t, err)
+				suite.NoError(err)
 			}
 		})
 	}
 }
 
-func TestValidateChartName(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   string
-		wantErr bool
-		errMsg  string
-	}{
-		{
-			name:    "valid name",
-			input:   "my-chart",
-			wantErr: false,
-		},
-		{
-			name:    "valid name with numbers",
-			input:   "chart-123",
-			wantErr: false,
-		},
-		{
-			name:    "empty name",
-			input:   "",
-			wantErr: true,
-			errMsg:  "cannot be empty",
-		},
-		{
-			name:    "path traversal",
-			input:   "../../../etc/passwd",
-			wantErr: true,
-			errMsg:  "path traversal",
-		},
-		{
-			name:    "absolute path unix",
-			input:   "/etc/passwd",
-			wantErr: true,
-			errMsg:  "absolute path",
-		},
-		{
-			name:    "absolute path windows",
-			input:   "\\windows\\system32",
-			wantErr: true,
-			errMsg:  "absolute path",
-		},
-		{
-			name:    "contains backslash",
-			input:   "my\\chart",
-			wantErr: true,
-			errMsg:  "invalid character: \\",
-		},
-		{
-			name:    "contains pipe",
-			input:   "my|chart",
-			wantErr: true,
-			errMsg:  "invalid character: |",
-		},
-		{
-			name:    "contains newline",
-			input:   "my\nchart",
-			wantErr: true,
-			errMsg:  "invalid character: \n",
-		},
-		{
-			name:    "too long",
-			input:   string(make([]byte, 256)),
-			wantErr: true,
-			errMsg:  "too long",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validateChartName(tt.input)
-			if tt.wantErr {
-				assert.Error(t, err)
-				if tt.errMsg != "" {
-					assert.Contains(t, err.Error(), tt.errMsg)
-				}
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
-}
-
-func TestValidateChartVersion(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   string
-		wantErr bool
-		errMsg  string
-	}{
-		{
-			name:    "valid semver",
-			input:   "1.2.3",
-			wantErr: false,
-		},
-		{
-			name:    "valid semver with v prefix",
-			input:   "v1.2.3",
-			wantErr: false,
-		},
-		{
-			name:    "valid semver with prerelease",
-			input:   "1.2.3-alpha.1",
-			wantErr: false,
-		},
-		{
-			name:    "valid semver with metadata",
-			input:   "1.2.3+build.123",
-			wantErr: false,
-		},
-		{
-			name:    "empty version",
-			input:   "",
-			wantErr: true,
-			errMsg:  "cannot be empty",
-		},
-		{
-			name:    "command injection semicolon",
-			input:   "1.0.0; rm -rf /",
-			wantErr: true,
-			errMsg:  "invalid character: ;",
-		},
-		{
-			name:    "command injection pipe",
-			input:   "1.0.0 | echo test",
-			wantErr: true,
-			errMsg:  "invalid character: |",
-		},
-		{
-			name:    "contains backtick",
-			input:   "1.0.0`echo test`",
-			wantErr: true,
-			errMsg:  "invalid character: `",
-		},
-		{
-			name:    "too long",
-			input:   string(make([]byte, 129)),
-			wantErr: true,
-			errMsg:  "too long",
-		},
-		{
-			name:    "not starting with digit",
-			input:   "alpha-1.2.3",
-			wantErr: true,
-			errMsg:  "not appear to be a valid semantic version",
-		},
-		{
-			name:    "contains space",
-			input:   "1.2.3 alpha",
-			wantErr: true,
-			errMsg:  "not appear to be a valid semantic version",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validateChartVersion(tt.input)
-			if tt.wantErr {
-				assert.Error(t, err)
-				if tt.errMsg != "" {
-					assert.Contains(t, err.Error(), tt.errMsg)
-				}
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
-}
-
-func TestLoadConfig_WithValidation(t *testing.T) {
-	tempDir := t.TempDir()
-
-	t.Run("invalid helm config", func(t *testing.T) {
-		configFile := filepath.Join(tempDir, "invalid-helm.yaml")
+func (suite *ConfigValidationTestSuite) TestLoadConfig_WithValidation() {
+	suite.Run("invalid helm config", func() {
+		configFile := filepath.Join(suite.tempDir, "invalid-helm.yaml")
 		content := `
 helm:
   chart:
@@ -673,31 +511,31 @@ helm:
       url: "https://example.com"
       type: "HTTPS"
 `
-		require.NoError(t, os.WriteFile(configFile, []byte(content), 0644))
+		suite.NoError(os.WriteFile(configFile, []byte(content), 0644))
 
-		_, err := LoadConfig(configFile)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid helm configuration")
-		assert.Contains(t, err.Error(), "path traversal")
+		_, err := config.LoadConfig(configFile)
+		suite.Error(err)
+		suite.Contains(err.Error(), "invalid helm configuration")
+		suite.Contains(err.Error(), "path traversal")
 	})
 
-	t.Run("invalid telemetry config", func(t *testing.T) {
-		configFile := filepath.Join(tempDir, "invalid-telemetry.yaml")
+	suite.Run("invalid telemetry config", func() {
+		configFile := filepath.Join(suite.tempDir, "invalid-telemetry.yaml")
 		content := `
 telemetry:
   enabled: true
   exporterType: "invalid"
   sampleRate: 2.0
 `
-		require.NoError(t, os.WriteFile(configFile, []byte(content), 0644))
+		suite.NoError(os.WriteFile(configFile, []byte(content), 0644))
 
-		_, err := LoadConfig(configFile)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid telemetry configuration")
+		_, err := config.LoadConfig(configFile)
+		suite.Error(err)
+		suite.Contains(err.Error(), "invalid telemetry configuration")
 	})
 
-	t.Run("valid config", func(t *testing.T) {
-		configFile := filepath.Join(tempDir, "valid.yaml")
+	suite.Run("valid config", func() {
+		configFile := filepath.Join(suite.tempDir, "valid.yaml")
 		content := `
 debug: true
 telemetry:
@@ -712,12 +550,16 @@ helm:
       url: "https://charts.example.com"
       type: "HTTPS"
 `
-		require.NoError(t, os.WriteFile(configFile, []byte(content), 0644))
+		suite.NoError(os.WriteFile(configFile, []byte(content), 0644))
 
-		cfg, err := LoadConfig(configFile)
-		assert.NoError(t, err)
-		assert.NotNil(t, cfg)
-		assert.Equal(t, zapcore.DebugLevel, cfg.LogLevel.Level)
-		assert.Equal(t, "my-chart", cfg.Helm.Chart.Name)
+		cfg, err := config.LoadConfig(configFile)
+		suite.NoError(err)
+		suite.NotNil(cfg)
+		suite.Equal(zapcore.DebugLevel, cfg.LogLevel.Level)
+		suite.Equal("my-chart", cfg.Helm.Chart.Name)
 	})
+}
+
+func TestConfigValidationSuite(t *testing.T) {
+	suite.Run(t, new(ConfigValidationTestSuite))
 }

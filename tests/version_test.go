@@ -3,11 +3,12 @@ package tests
 import "github.com/mkm29/valet/cmd"
 
 func (ts *ValetTestSuite) TestNewVersionCmd() {
-	cmd := cmd.NewVersionCmd()
-	ts.Equal("version", cmd.Use, "expected Use 'version'")
-	ts.Equal("Print version information", cmd.Short, "expected Short 'Print version information'")
-	ts.NotEmpty(cmd.Long, "expected non-empty Long description")
-	ts.NotNil(cmd.RunE, "expected RunE function to be set")
+	app := cmd.NewApp()
+	versionCmd := cmd.NewVersionCmdWithApp(app)
+	ts.Equal("version", versionCmd.Use, "expected Use 'version'")
+	ts.Equal("Print version information", versionCmd.Short, "expected Short 'Print version information'")
+	ts.NotEmpty(versionCmd.Long, "expected non-empty Long description")
+	ts.NotNil(versionCmd.RunE, "expected RunE function to be set")
 }
 
 func (ts *ValetTestSuite) TestGetBuildVersion() {
