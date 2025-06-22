@@ -359,7 +359,7 @@ Remote chart flags:
 ```
 
 The tool can generate schemas from:
-- **Local Helm charts**: Provide a context directory containing `values.yaml`
+- **Local Helm charts**: Provide a context directory containing `values.yaml` (defaults to current directory if not specified)
 - **Remote Helm charts**: Use `--chart-name` and related flags, or configure in a config file
 
 The tool writes a `values.schema.json` (or custom output file) in the context directory for local charts, or the current directory for remote charts.
@@ -425,6 +425,12 @@ Generate schema from a directory containing `values.yaml`:
 
 ```bash
 ./bin/valet generate charts/mychart
+```
+
+Generate schema from the current directory (if it contains `values.yaml`):
+
+```bash
+./bin/valet generate
 ```
 
 Generate schema merging an override file:
@@ -817,6 +823,25 @@ When contributing to Valet, please follow these architectural patterns:
 
 1. **Package Structure**: Each package should have:
    - A main struct type (e.g., `Helm`, `Telemetry`)
+   - Clear separation of concerns between packages
+   
+2. **Utils Package**: The `internal/utils` package contains shared utility functions organized by domain:
+   - `schema.go`: Schema generation utilities (`InferBooleanSchema`, `InferArraySchema`, etc.)
+   - `yaml.go`: YAML processing functions (`DeepMerge`, `LoadYAML`)
+   - `string.go`: String manipulation utilities (`MaskString`, `FormatBytes`)
+   - `reflection.go`: Reflection helpers for struct field extraction
+   - `build.go`: Build information utilities (`GetBuildVersion`)
+
+3. **Command Package Organization**: The `cmd` package focuses on CLI orchestration:
+   - Command setup and flag management
+   - Dependency injection through the `App` struct
+   - Minimal business logic (delegated to internal packages)
+   - Command-specific helpers remain in `schema_helpers.go`
+
+4. **Helm Package**: The `internal/helm` package handles all Helm-related functionality:
+   - Chart downloading and caching
+   - Schema extraction from charts
+   - Configuration building from CLI flags (`config_builder.go`)
    - An Options struct for configuration (e.g., `HelmOptions`, `TelemetryOptions`)
    - A primary constructor `New<Package>(opts <Package>Options)`
    - Convenience constructors for common use cases

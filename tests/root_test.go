@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/mkm29/valet/cmd"
+	"github.com/mkm29/valet/internal/utils"
 )
 
 func (ts *ValetTestSuite) TestNewRootCmd() {
@@ -97,7 +98,7 @@ telemetry:
 	os.Chdir(tmp)
 
 	// Get the expected version
-	expectedVersion := cmd.GetBuildVersion()
+	expectedVersion := utils.GetBuildVersion()
 
 	// Run the command with config file flag
 	rootCmd := cmd.NewRootCmd()

@@ -222,7 +222,9 @@ func inferSchema(app *App, val, defaultVal any) map[string]any {
 	case map[string]any:
 		return inferObjectSchemaWithApp(app, v, defaultVal)
 	case []any:
-		return inferArraySchema(app, v, defaultVal)
+		return utils.InferArraySchema(v, defaultVal, func(item, defItem any) map[string]any {
+			return inferSchema(app, item, defItem)
+		})
 	case bool:
 		return utils.InferBooleanSchema(v)
 	case int, int64:

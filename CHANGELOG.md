@@ -83,6 +83,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Functions are now exported with capitalized names (e.g., `InferBooleanSchema`)
   - All calls updated to use `utils.InferXxxSchema()` pattern
   - Improves code organization by consolidating schema-related utilities
+- **Refactored schema_helpers.go for better organization**:
+  - Moved `inferArraySchema` to `utils/schema.go` as `InferArraySchema` with dependency injection support
+  - Moved Helm configuration building functions to `internal/helm/config_builder.go`:
+    - `BuildHelmConfigFromFlags`, `ValidateRequiredRemoteFlags`, `ApplyOptionalHelmFlags`
+    - `ApplyAuthenticationFlags`, `ApplyTLSFlags`
+  - Moved `GetBuildVersion` to `internal/utils/build.go` for general utility access
+  - Moved `GetContextDirectory` to `internal/utils/schema.go`
+    - Now returns current working directory if no context argument is provided
+    - Provides better default behavior for CLI usage
+  - Only command-specific orchestration functions remain in `cmd` package
+  - Improves separation of concerns and makes functions more reusable
   - Moved `initializeLogger` function to `App.InitializeLogger()` method
   - Improved separation of concerns by centralizing dependency initialization in the App struct
   - Logger creation logic now uses private `createLogger` helper function

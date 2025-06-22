@@ -163,7 +163,7 @@ func InferReflectedFloatSchema(floatVal float64) map[string]any {
 	}
 }
 
-// getContextDirectory extracts the context directory from arguments
+// GetContextDirectory extracts the context directory from arguments
 func GetContextDirectory(args []string) string {
 	if len(args) > 0 {
 		return args[0]
@@ -175,4 +175,26 @@ func GetContextDirectory(args []string) string {
 		return ""
 	}
 	return dir
+}
+
+// InferArraySchema processes array types and generates array schema
+// The inferItemSchema parameter should be a function that infers schema for array items
+func InferArraySchema(v []any, defaultVal any, inferItemSchema func(any, any) map[string]any) map[string]any {
+	var defItem any
+	if defArr, ok := defaultVal.([]any); ok && len(defArr) > 0 {
+		defItem = defArr[0]
+	}
+
+	var itemsSchema map[string]any
+	if len(v) > 0 {
+		itemsSchema = inferItemSchema(v[0], defItem)
+	} else {
+		itemsSchema = map[string]any{}
+	}
+
+	return map[string]any{
+		"type":    "array",
+		"items":   itemsSchema,
+		"default": v,
+	}
 }

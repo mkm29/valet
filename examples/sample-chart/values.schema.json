@@ -550,10 +550,10 @@
         }
       },
       "required": [
+        "replicaCount",
         "enabled",
         "name",
-        "version",
-        "replicaCount"
+        "version"
       ],
       "type": "object"
     },
@@ -807,14 +807,14 @@
         }
       },
       "required": [
-        "port",
-        "connectionPool",
-        "type",
-        "username",
-        "host",
-        "name",
         "secretKey",
-        "enabled"
+        "connectionPool",
+        "enabled",
+        "host",
+        "type",
+        "port",
+        "name",
+        "username"
       ],
       "type": "object"
     },
@@ -925,9 +925,9 @@
         }
       },
       "required": [
+        "newUI",
         "experimentalAPI",
-        "debugEndpoints",
-        "newUI"
+        "debugEndpoints"
       ],
       "type": "object"
     },
@@ -1118,8 +1118,8 @@
                     }
                   },
                   "required": [
-                    "path",
-                    "pathType"
+                    "pathType",
+                    "path"
                   ],
                   "type": "object"
                 },
@@ -1268,8 +1268,8 @@
             }
           },
           "required": [
-            "port",
-            "path"
+            "path",
+            "port"
           ],
           "type": "object"
         },
@@ -1389,10 +1389,10 @@
             }
           },
           "required": [
+            "path",
             "port",
             "interval",
-            "enabled",
-            "path"
+            "enabled"
           ],
           "type": "object"
         },
@@ -1423,8 +1423,8 @@
         }
       },
       "required": [
-        "enabled",
-        "metrics"
+        "metrics",
+        "enabled"
       ],
       "type": "object"
     },
@@ -1695,8 +1695,8 @@
             }
           },
           "required": [
-            "path",
-            "port"
+            "port",
+            "path"
           ],
           "type": "object"
         },
@@ -1710,9 +1710,9 @@
         }
       },
       "required": [
+        "httpGet",
         "initialDelaySeconds",
-        "periodSeconds",
-        "httpGet"
+        "periodSeconds"
       ],
       "type": "object"
     },
@@ -1800,15 +1800,15 @@
             }
           },
           "required": [
-            "cpu",
-            "memory"
+            "memory",
+            "cpu"
           ],
           "type": "object"
         }
       },
       "required": [
-        "limits",
-        "requests"
+        "requests",
+        "limits"
       ],
       "type": "object"
     },
@@ -1924,10 +1924,10 @@
         }
       },
       "required": [
+        "readOnlyRootFilesystem",
         "runAsNonRoot",
         "runAsUser",
-        "capabilities",
-        "readOnlyRootFilesystem"
+        "capabilities"
       ],
       "type": "object"
     },
@@ -1962,10 +1962,10 @@
         }
       },
       "required": [
+        "enabled",
         "type",
         "port",
-        "targetPort",
-        "enabled"
+        "targetPort"
       ],
       "type": "object"
     },
@@ -2140,9 +2140,9 @@
           }
         },
         "required": [
+          "name",
           "namespace",
-          "quota",
-          "name"
+          "quota"
         ],
         "type": "object"
       },
@@ -2155,29 +2155,29 @@
     }
   },
   "required": [
-    "livenessProbe",
-    "tenants",
-    "serviceAccount",
     "extraEnvVars",
-    "global",
-    "secrets",
-    "features",
-    "logging",
-    "monitoring",
-    "cronJobs",
-    "image",
-    "affinity",
-    "podSecurityContext",
-    "jobs",
-    "readinessProbe",
-    "app",
-    "securityContext",
     "database",
-    "externalServices",
+    "jobs",
+    "resources",
     "podAnnotations",
-    "service",
+    "readinessProbe",
+    "monitoring",
+    "features",
+    "livenessProbe",
+    "app",
+    "serviceAccount",
+    "secrets",
+    "tenants",
+    "affinity",
+    "cronJobs",
     "configMaps",
-    "resources"
+    "externalServices",
+    "podSecurityContext",
+    "securityContext",
+    "image",
+    "global",
+    "logging",
+    "service"
   ],
   "type": "object"
 }
