@@ -610,8 +610,10 @@ telemetry:
   enabled: true
   metrics:
     enabled: true
-    port: 9090      # Metrics server port
-    path: /metrics  # Metrics endpoint path
+    port: 9090                      # Metrics server port
+    path: /metrics                  # Metrics endpoint path
+    healthCheckMaxAttempts: 10      # Max health check attempts during startup
+    healthCheckBackoff: 50ms        # Backoff duration between health checks
 ```
 
 **Available Prometheus Metrics:**
@@ -641,6 +643,20 @@ telemetry:
   - `size_bytes` - File size distribution histogram
 
 See `examples/helm-config-with-metrics.yaml` for a complete configuration example.
+
+**Performance Optimizations:**
+
+- **Efficient metrics collection**: Uses interface-based approach (`CacheStatsProvider`) instead of reflection or JSON marshaling for optimal performance
+- **Counter reset detection**: Gracefully handles cache clearing and counter resets with automatic delta calculation
+- **Configurable health checks**: Tunable startup timing for different deployment environments
+- **Context-aware recording**: Enriches distributed traces with metrics-specific span attributes
+
+**Enhanced Observability Integration:**
+
+All metrics recording methods (`RecordCommandExecution`, `RecordSchemaGeneration`, `RecordFileRead`, `RecordFileWrite`) now automatically:
+- Extract and correlate with active OpenTelemetry spans from context
+- Add relevant span attributes for better trace correlation
+- Provide seamless integration between metrics and distributed tracing
 
 #### Structured Logging
 
@@ -1041,6 +1057,10 @@ Our development roadmap reflects our commitment to making Valet the most powerfu
   - [x] Schema generation metrics (field counts, timing)
   - [x] File operation metrics with size histograms
   - [x] Health check endpoint for monitoring
+  - [x] **Performance optimizations**: Interface-based metrics collection for optimal performance
+  - [x] **Counter reset detection**: Graceful handling of cache clearing and counter resets
+  - [x] **Configurable health checks**: Tunable startup timing and backoff strategies
+  - [x] **Enhanced trace correlation**: Context-aware metrics with automatic span attributes
 
 #### Code Quality & Architecture
 
@@ -1050,7 +1070,7 @@ Our development roadmap reflects our commitment to making Valet the most powerfu
   - [x] Comprehensive test coverage (>85%)
   - [x] Centralized utility functions in dedicated packages
   - [x] Thread-safe metrics collection
-  - [x] Optimized reflection usage with JSON marshaling
+  - [x] High-performance metrics collection with interface-based approach
   - [x] Proper error handling and context propagation
 
 - [x] **Security & Best Practices**

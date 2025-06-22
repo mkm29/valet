@@ -764,6 +764,21 @@ type CacheStats struct {
 	MetadataHitRate float64 `json:"metadataHitRate"`
 }
 
+// CacheStatsProvider interface implementation for efficient metrics collection
+func (c CacheStats) GetEntries() int             { return c.Entries }
+func (c CacheStats) GetCurrentSize() int64       { return c.CurrentSize }
+func (c CacheStats) GetMaxSize() int64           { return c.MaxSize }
+func (c CacheStats) GetMaxEntries() int          { return c.MaxEntries }
+func (c CacheStats) GetHits() int64              { return c.Hits }
+func (c CacheStats) GetMisses() int64            { return c.Misses }
+func (c CacheStats) GetEvictions() int64         { return c.Evictions }
+func (c CacheStats) GetHitRate() float64         { return c.HitRate }
+func (c CacheStats) GetUsagePercent() float64    { return c.UsagePercent }
+func (c CacheStats) GetMetadataEntries() int     { return c.MetadataEntries }
+func (c CacheStats) GetMetadataHits() int64      { return c.MetadataHits }
+func (c CacheStats) GetMetadataMisses() int64    { return c.MetadataMisses }
+func (c CacheStats) GetMetadataHitRate() float64 { return c.MetadataHitRate }
+
 // GetCacheStats returns current cache statistics
 func (h *Helm) GetCacheStats() CacheStats {
 	h.cache.mu.RLock()

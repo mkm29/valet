@@ -100,6 +100,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Helm Package Issues**:
   - Fixed inconsistency in helm package where `HasSchema` used `chart.Raw` but `DownloadSchema` used `chart.Files`
 
+- **Metrics and Observability Performance**:
+  - **Optimized metrics collection performance**: Replaced JSON marshaling/unmarshaling with efficient `CacheStatsProvider` interface
+  - **Enhanced tracing integration**: Metrics recording methods now use context for span correlation and add relevant attributes
+  - **Robust counter reset detection**: Added `calculateDelta()` method to gracefully handle cache clearing and counter resets
+  - **Configurable health checks**: Made metrics server startup timing configurable via `HealthCheckMaxAttempts` and `HealthCheckBackoff` settings
+
 ## [v0.2.4] - 2025-06-19
 
 ### Changed

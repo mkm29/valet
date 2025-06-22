@@ -11,6 +11,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -18,6 +20,7 @@ import (
 type MetricsServer struct {
 	server *http.Server
 	logger *zap.Logger
+	config *MetricsConfig
 	mu     sync.RWMutex
 
 	// Helm cache metrics
@@ -61,17 +64,21 @@ type MetricsServer struct {
 
 // MetricsConfig holds configuration for the metrics server
 type MetricsConfig struct {
-	Enabled bool   `yaml:"enabled"`
-	Port    int    `yaml:"port"`
-	Path    string `yaml:"path"`
+	Enabled                bool          `yaml:"enabled"`
+	Port                   int           `yaml:"port"`
+	Path                   string        `yaml:"path"`
+	HealthCheckMaxAttempts int           `yaml:"healthCheckMaxAttempts"`
+	HealthCheckBackoff     time.Duration `yaml:"healthCheckBackoff"`
 }
 
 // NewMetricsConfig returns a default metrics configuration
 func NewMetricsConfig() *MetricsConfig {
 	return &MetricsConfig{
-		Enabled: false,
-		Port:    9090,
-		Path:    "/metrics",
+		Enabled:                false,
+		Port:                   9090,
+		Path:                   "/metrics",
+		HealthCheckMaxAttempts: 10,
+		HealthCheckBackoff:     50 * time.Millisecond,
 	}
 }
 
@@ -83,6 +90,7 @@ func NewMetricsServer(config *MetricsConfig, logger *zap.Logger) *MetricsServer 
 
 	m := &MetricsServer{
 		logger: logger,
+		config: config,
 
 		// Initialize Helm cache metrics
 		helmCacheHits: promauto.NewCounter(prometheus.CounterOpts{
@@ -270,8 +278,8 @@ func (m *MetricsServer) Start(ctx context.Context) error {
 
 // waitForServerStartup waits for the server to start up using health check polling
 func (m *MetricsServer) waitForServerStartup(ctx context.Context, errCh chan error) error {
-	maxAttempts := 10
-	backoff := 50 * time.Millisecond
+	maxAttempts := m.config.HealthCheckMaxAttempts
+	backoff := m.config.HealthCheckBackoff
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		select {
@@ -312,9 +320,25 @@ func (m *MetricsServer) UpdateHelmCacheStats(stats interface{}) {
 	switch v := stats.(type) {
 	case HelmCacheStats:
 		helmStats = v
+	case CacheStatsProvider:
+		// Use interface methods for efficient access
+		helmStats = HelmCacheStats{
+			Entries:         v.GetEntries(),
+			CurrentSize:     v.GetCurrentSize(),
+			MaxSize:         v.GetMaxSize(),
+			MaxEntries:      v.GetMaxEntries(),
+			Hits:            v.GetHits(),
+			Misses:          v.GetMisses(),
+			Evictions:       v.GetEvictions(),
+			HitRate:         v.GetHitRate(),
+			UsagePercent:    v.GetUsagePercent(),
+			MetadataEntries: v.GetMetadataEntries(),
+			MetadataHits:    v.GetMetadataHits(),
+			MetadataMisses:  v.GetMetadataMisses(),
+			MetadataHitRate: v.GetMetadataHitRate(),
+		}
 	default:
-		// Try to convert using JSON marshaling/unmarshaling for better performance
-		// This avoids reflection and is more efficient
+		// Fall back to JSON marshaling/unmarshaling for compatibility
 		data, err := json.Marshal(stats)
 		if err != nil {
 			m.logger.Warn("Failed to marshal stats", zap.Error(err))
@@ -330,11 +354,17 @@ func (m *MetricsServer) UpdateHelmCacheStats(stats interface{}) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Update counters (these are cumulative, so we set them to the total values)
+	// Update counters with reset detection
 	// Prometheus counters can only increase, so we need to track deltas
-	m.helmCacheHits.Add(float64(helmStats.Hits - m.getLastHits()))
-	m.helmCacheMisses.Add(float64(helmStats.Misses - m.getLastMisses()))
-	m.helmCacheEvictions.Add(float64(helmStats.Evictions - m.getLastEvictions()))
+	hitsDelta := m.calculateDelta(helmStats.Hits, m.getLastHits())
+	missesDelta := m.calculateDelta(helmStats.Misses, m.getLastMisses())
+	evictionsDelta := m.calculateDelta(helmStats.Evictions, m.getLastEvictions())
+	metadataHitsDelta := m.calculateDelta(helmStats.MetadataHits, m.getLastMetadataHits())
+	metadataMissesDelta := m.calculateDelta(helmStats.MetadataMisses, m.getLastMetadataMisses())
+
+	m.helmCacheHits.Add(float64(hitsDelta))
+	m.helmCacheMisses.Add(float64(missesDelta))
+	m.helmCacheEvictions.Add(float64(evictionsDelta))
 
 	// Update gauges (these can go up or down)
 	m.helmCacheSize.Set(float64(helmStats.CurrentSize))
@@ -342,13 +372,30 @@ func (m *MetricsServer) UpdateHelmCacheStats(stats interface{}) {
 	m.helmCacheHitRate.Set(helmStats.HitRate)
 
 	// Update metadata cache metrics
-	m.helmMetadataHits.Add(float64(helmStats.MetadataHits - m.getLastMetadataHits()))
-	m.helmMetadataMisses.Add(float64(helmStats.MetadataMisses - m.getLastMetadataMisses()))
+	m.helmMetadataHits.Add(float64(metadataHitsDelta))
+	m.helmMetadataMisses.Add(float64(metadataMissesDelta))
 	m.helmMetadataEntries.Set(float64(helmStats.MetadataEntries))
 	m.helmMetadataHitRate.Set(helmStats.MetadataHitRate)
 
 	// Store last values for delta calculation
 	m.storeLastValues(helmStats)
+}
+
+// CacheStatsProvider defines an interface for cache statistics
+type CacheStatsProvider interface {
+	GetEntries() int
+	GetCurrentSize() int64
+	GetMaxSize() int64
+	GetMaxEntries() int
+	GetHits() int64
+	GetMisses() int64
+	GetEvictions() int64
+	GetHitRate() float64
+	GetUsagePercent() float64
+	GetMetadataEntries() int
+	GetMetadataHits() int64
+	GetMetadataMisses() int64
+	GetMetadataHitRate() float64
 }
 
 // Helper functions moved to utils package
@@ -379,7 +426,18 @@ func (m *MetricsServer) RecordCommandExecution(ctx context.Context, command stri
 	if err != nil {
 		m.commandErrors.WithLabelValues(command).Inc()
 	}
-	// Context can be used for distributed tracing integration
+
+	// Add span attributes for distributed tracing correlation
+	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		span.SetAttributes(
+			attribute.String("metrics.command", command),
+			attribute.Float64("metrics.duration_seconds", duration.Seconds()),
+			attribute.Bool("metrics.has_error", err != nil),
+		)
+		if err != nil {
+			span.SetAttributes(attribute.String("metrics.error", err.Error()))
+		}
+	}
 }
 
 // Schema generation metrics methods
@@ -392,7 +450,18 @@ func (m *MetricsServer) RecordSchemaGeneration(ctx context.Context, fieldCount i
 	if err != nil {
 		m.schemaGenerationErrors.Inc()
 	}
-	// Context can be used for distributed tracing integration
+
+	// Add span attributes for distributed tracing correlation
+	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		span.SetAttributes(
+			attribute.Int("metrics.schema_fields", fieldCount),
+			attribute.Float64("metrics.schema_duration_seconds", duration.Seconds()),
+			attribute.Bool("metrics.schema_has_error", err != nil),
+		)
+		if err != nil {
+			span.SetAttributes(attribute.String("metrics.schema_error", err.Error()))
+		}
+	}
 }
 
 // File operation metrics methods
@@ -405,7 +474,17 @@ func (m *MetricsServer) RecordFileRead(ctx context.Context, size int64, err erro
 	} else {
 		m.fileSize.Observe(float64(size))
 	}
-	// Context can be used for distributed tracing integration
+
+	// Add span attributes for distributed tracing correlation
+	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		span.SetAttributes(
+			attribute.Int64("metrics.file_size_bytes", size),
+			attribute.Bool("metrics.file_read_error", err != nil),
+		)
+		if err != nil {
+			span.SetAttributes(attribute.String("metrics.file_read_error_msg", err.Error()))
+		}
+	}
 }
 
 // RecordFileWrite records a file write operation
@@ -416,7 +495,31 @@ func (m *MetricsServer) RecordFileWrite(ctx context.Context, size int64, err err
 	} else {
 		m.fileSize.Observe(float64(size))
 	}
-	// Context can be used for distributed tracing integration
+
+	// Add span attributes for distributed tracing correlation
+	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		span.SetAttributes(
+			attribute.Int64("metrics.file_size_bytes", size),
+			attribute.Bool("metrics.file_write_error", err != nil),
+		)
+		if err != nil {
+			span.SetAttributes(attribute.String("metrics.file_write_error_msg", err.Error()))
+		}
+	}
+}
+
+// calculateDelta calculates the delta between current and last values,
+// handling counter resets gracefully
+func (m *MetricsServer) calculateDelta(current, last int64) int64 {
+	if current < last {
+		// Counter reset detected - use current value as the delta
+		m.logger.Debug("Counter reset detected",
+			zap.Int64("current", current),
+			zap.Int64("last", last),
+		)
+		return current
+	}
+	return current - last
 }
 
 // Internal state tracking for delta calculations
