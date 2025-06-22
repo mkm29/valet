@@ -9,374 +9,25 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/mkm29/valet/internal/helm"
 	"github.com/mkm29/valet/internal/telemetry"
 	"github.com/spf13/cobra"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
+	"go.uber.org/zap/zapcore"
 )
 
-// generate subcommand
-
-// deepMerge merges b into a (recursively for nested maps) and returns a new map.
-func deepMerge(a, b map[string]any) map[string]any {
-	out := make(map[string]any, len(a))
-	for k, v := range a {
-		out[k] = v
-	}
-	for k, vb := range b {
-		if va, ok := out[k]; ok {
-			ma, maOK := va.(map[string]any)
-			mb, mbOK := vb.(map[string]any)
-			if maOK && mbOK {
-				out[k] = deepMerge(ma, mb)
-				continue
-			}
-		}
-		out[k] = vb
-	}
-	return out
-}
-
-// inferSchema builds a JSON‐Schema fragment for val, using defaultVal
-// to determine which object keys are "required".
-func inferSchema(val, defaultVal any) map[string]any {
-	switch v := val.(type) {
-	case map[string]any:
-		defMap, _ := defaultVal.(map[string]any)
-		props := make(map[string]any, len(v))
-		for key, sub := range v {
-			// Ensure we pass the correct default value for the subfield
-			var defSubVal any
-			if defMap != nil {
-				defSubVal = defMap[key]
-			}
-			props[key] = inferSchema(sub, defSubVal)
-		}
-
-		// Build default object with actual values from the YAML
-		defaults := make(map[string]any, len(v))
-		for key, val := range v {
-			// Skip null values in defaults
-			if val == nil {
-				continue
-			}
-
-			// Process map values correctly for defaults
-			mapVal, isMap := val.(map[string]any)
-			if isMap {
-				// For maps, process the defaults recursively
-				nestedDefaults := make(map[string]any)
-				for k, v := range mapVal {
-					if v != nil {
-						nestedDefaults[k] = v
-					}
-				}
-				if len(nestedDefaults) > 0 {
-					defaults[key] = nestedDefaults
-				}
-			} else {
-				// For non-maps, include the value directly
-				defaults[key] = val
-			}
-		}
-
-		schema := map[string]any{
-			"type":       "object",
-			"properties": props,
-			"default":    defaults,
-		}
-
-		var required []string
-		for k, vDefault := range defMap {
-			// Only add to required if key exists, default is NOT nil and NOT null (in Go or YAML)
-			if _, exists := v[k]; exists {
-				isNil := vDefault == nil
-				isNullString := false
-				switch vDefault := vDefault.(type) {
-				case string:
-					// YAML nulls sometimes decode as string "null" or as empty string
-					isNullString = vDefault == "null" || vDefault == ""
-				}
-
-				// Special handling for components that can be enabled/disabled
-				if !isNil && !isNullString {
-					// Check for empty values (empty strings, arrays, objects)
-					// Skip fields with empty default values using the helper function
-					if isEmptyValue(vDefault) {
-						isDebug := cfg != nil && cfg.Debug
-						if isDebug {
-							zap.L().Debug("Skipping field because it has an empty default value",
-								zap.String("field", k),
-								zap.String("type", fmt.Sprintf("%T", vDefault)))
-						}
-						continue
-					}
-
-					// Check if this is a component that can be enabled/disabled
-					component, isComponent := v[k].(map[string]any)
-					if isComponent {
-						// Check if this component has an 'enabled' field
-						if enabled, exists := component["enabled"]; exists {
-							// Only add fields as required if the component is enabled by default
-							if enabledBool, isBool := enabled.(bool); isBool && !enabledBool {
-								// Component is disabled by default, don't add to required
-								continue
-							}
-						}
-
-						// Check if this is a property of a parent component with an enabled field
-						if parent, ok := v["enabled"]; ok {
-							if parentEnabled, ok := parent.(bool); ok && !parentEnabled {
-								// Parent component is disabled, don't mark this as required
-								continue
-							}
-						}
-					}
-
-					// Normal fields and enabled components are added as required
-					required = append(required, k)
-				}
-			}
-		}
-		if len(required) > 0 {
-			schema["required"] = required
-		}
-		return schema
-
-	case []any:
-		var defItem any
-		if defArr, ok := defaultVal.([]any); ok && len(defArr) > 0 {
-			defItem = defArr[0]
-		}
-		var itemsSchema map[string]any
-		if len(v) > 0 {
-			itemsSchema = inferSchema(v[0], defItem)
-		} else {
-			itemsSchema = map[string]any{}
-		}
-		return map[string]any{
-			"type":    "array",
-			"items":   itemsSchema,
-			"default": v,
-		}
-
-	case bool:
-		return map[string]any{
-			"type":    "boolean",
-			"default": v,
-		}
-
-	case int, int64:
-		return map[string]any{
-			"type":    "integer",
-			"default": v,
-		}
-
-	case float64:
-		if float64(int64(v)) == v {
-			return map[string]any{
-				"type":    "integer",
-				"default": int64(v),
-			}
-		}
-		return map[string]any{
-			"type":    "number",
-			"default": v,
-		}
-
-	case string:
-		// Handle null strings specially
-		if v == "null" || v == "<nil>" || v == "" {
-			typeArray := []string{"string", "null"}
-			return map[string]any{
-				"type":    typeArray,
-				"default": nil,
-			}
-		}
-		return map[string]any{
-			"type":    "string",
-			"default": v,
-		}
-
-	default:
-		// Handle unknown types more intelligently using reflection
-		rv := reflect.ValueOf(v)
-
-		// Handle nil values
-		if !rv.IsValid() || (rv.Kind() == reflect.Ptr && rv.IsNil()) {
-			typeArray := []string{"string", "null"}
-			return map[string]any{
-				"type":    typeArray,
-				"default": nil,
-			}
-		}
-
-		// Get the underlying value if it's a pointer
-		if rv.Kind() == reflect.Ptr {
-			rv = rv.Elem()
-		}
-
-		if rv.Kind() == reflect.Map {
-			// Convert maps to proper JSON objects
-			defMap := make(map[string]any)
-			for _, k := range rv.MapKeys() {
-				if k.Kind() == reflect.String {
-					mv := rv.MapIndex(k).Interface()
-					// Skip nil values
-					if mv != nil {
-						defMap[k.String()] = mv
-					}
-				}
-			}
-
-			// Recursively process properties
-			props := make(map[string]any)
-			for k, sub := range defMap {
-				// Get corresponding default value if available
-				var defVal any
-				if defaultMap, ok := defaultVal.(map[string]any); ok {
-					defVal = defaultMap[k]
-				}
-				props[k] = inferSchema(sub, defVal)
-			}
-
-			return map[string]any{
-				"type":       "object",
-				"properties": props,
-				"default":    defMap,
-			}
-		} else if rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array {
-			// Convert slices to proper arrays
-			var items []any
-			for i := 0; i < rv.Len(); i++ {
-				item := rv.Index(i).Interface()
-				if item != nil {
-					items = append(items, item)
-				}
-			}
-
-			var itemsSchema map[string]any
-			if len(items) > 0 {
-				// Use first item to infer schema
-				var defItem any
-				if defArr, ok := defaultVal.([]any); ok && len(defArr) > 0 {
-					defItem = defArr[0]
-				}
-				itemsSchema = inferSchema(items[0], defItem)
-			} else {
-				itemsSchema = map[string]any{}
-			}
-
-			return map[string]any{
-				"type":    "array",
-				"items":   itemsSchema,
-				"default": items,
-			}
-		} else if rv.Kind() == reflect.Bool {
-			return map[string]any{
-				"type":    "boolean",
-				"default": rv.Bool(),
-			}
-		} else if rv.Kind() == reflect.Int || rv.Kind() == reflect.Int8 ||
-			rv.Kind() == reflect.Int16 || rv.Kind() == reflect.Int32 ||
-			rv.Kind() == reflect.Int64 {
-			return map[string]any{
-				"type":    "integer",
-				"default": rv.Int(),
-			}
-		} else if rv.Kind() == reflect.Uint || rv.Kind() == reflect.Uint8 ||
-			rv.Kind() == reflect.Uint16 || rv.Kind() == reflect.Uint32 ||
-			rv.Kind() == reflect.Uint64 {
-			return map[string]any{
-				"type":    "integer",
-				"default": rv.Uint(),
-			}
-		} else if rv.Kind() == reflect.Float32 || rv.Kind() == reflect.Float64 {
-			floatVal := rv.Float()
-			// Check if it's actually an integer
-			if floatVal == float64(int64(floatVal)) {
-				return map[string]any{
-					"type":    "integer",
-					"default": int64(floatVal),
-				}
-			}
-			return map[string]any{
-				"type":    "number",
-				"default": floatVal,
-			}
-		} else if rv.Kind() == reflect.String {
-			strVal := rv.String()
-			// Handle "null" string representations
-			if strVal == "null" || strVal == "<nil>" {
-				typeArray := []string{"string", "null"}
-				return map[string]any{
-					"type":    typeArray,
-					"default": nil,
-				}
-			}
-			return map[string]any{
-				"type":    "string",
-				"default": strVal,
-			}
-		} else {
-			// Fall back to string representation for other types
-			return map[string]any{
-				"type":    "string",
-				"default": fmt.Sprintf("%v", v),
-			}
-		}
-	}
-}
-
-// convertToStringKeyMap recursively converts map[interface{}]interface{} to map[string]interface{}
-func convertToStringKeyMap(m interface{}) interface{} {
-	switch x := m.(type) {
-	case map[interface{}]interface{}:
-		result := make(map[string]interface{})
-		for k, v := range x {
-			result[fmt.Sprintf("%v", k)] = convertToStringKeyMap(v)
-		}
-		return result
-	case []interface{}:
-		for i, v := range x {
-			x[i] = convertToStringKeyMap(v)
-		}
-	}
-	return m
-}
-
-// loadYAML reads a YAML file into map[string]any (empty if missing)
-func loadYAML(path string) (map[string]any, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return map[string]any{}, nil
-		}
-		return nil, err
-	}
-	var m map[interface{}]interface{}
-	if err := yaml.Unmarshal(data, &m); err != nil {
-		return nil, err
-	}
-	if m == nil {
-		return map[string]any{}, nil
-	}
-
-	// Convert to map[string]any
-	result := convertToStringKeyMap(m).(map[string]interface{})
-	return result, nil
-}
-
-// Generate a JSON Schema for the values.yaml in ctx directory,
-// optionally merging an overrides YAML file relative to ctx.
-// It writes the schema to values.schema.json and returns a status message.
-func Generate(ctxDir, overridesFlag string) (string, error) {
+// GenerateWithApp is a version of Generate that accepts dependencies
+func GenerateWithApp(app *App, ctxDir, overridesFlag string) (string, error) {
 	// Create context for tracing
 	ctx := context.Background()
-	tel := GetTelemetry()
+	tel := app.Telemetry
+	if tel == nil {
+		// Create a no-op telemetry if not provided
+		tel = &telemetry.Telemetry{}
+	}
 
 	// Start main span
 	start := time.Now()
@@ -390,7 +41,7 @@ func Generate(ctxDir, overridesFlag string) (string, error) {
 
 	// Function to execute the actual generation
 	executeGenerate := func() (string, error) {
-		return generateInternal(ctx, tel, ctxDir, overridesFlag)
+		return generateInternalWithApp(ctx, app, tel, ctxDir, overridesFlag)
 	}
 
 	// Execute with telemetry wrapper if enabled
@@ -418,8 +69,8 @@ func Generate(ctxDir, overridesFlag string) (string, error) {
 	return executeGenerate()
 }
 
-// generateInternal contains the actual generation logic
-func generateInternal(ctx context.Context, tel *telemetry.Telemetry, ctxDir, overridesFlag string) (string, error) {
+// generateInternalWithApp contains the actual generation logic with dependency injection
+func generateInternalWithApp(ctx context.Context, app *App, tel *telemetry.Telemetry, ctxDir, overridesFlag string) (string, error) {
 	// Locate values file (values.yaml or values.yml)
 	valuesPath := filepath.Join(ctxDir, "values.yaml")
 	if _, err := os.Stat(valuesPath); os.IsNotExist(err) {
@@ -452,40 +103,9 @@ func generateInternal(ctx context.Context, tel *telemetry.Telemetry, ctxDir, ove
 	}
 
 	// Log some of the top-level default values to help with debugging
-	// Use safe debugging to handle cases when cfg is nil (testing environment)
-	isDebug := cfg != nil && cfg.Debug
-	if isDebug && tel.IsEnabled() {
-		logger := tel.Logger()
-		logger.Debug(ctx, "Original YAML values loaded",
-			zap.String("file", valuesPath),
-			zap.Int("top_level_keys", len(yaml1)),
-		)
-
-		// Count components with enabled field
-		enabledComponentCount := 0
-		disabledComponentCount := 0
-		for key, compVal := range yaml1 {
-			if compMap, isMap := compVal.(map[string]any); isMap {
-				// Log components with enabled field
-				if enabled, hasEnabled := compMap["enabled"]; hasEnabled {
-					if enabledBool, isBool := enabled.(bool); isBool {
-						if enabledBool {
-							enabledComponentCount++
-						} else {
-							disabledComponentCount++
-						}
-						logger.Debug(ctx, "Component status",
-							zap.String("component", key),
-							zap.Bool("enabled", enabledBool),
-						)
-					}
-				}
-			}
-		}
-		logger.Debug(ctx, "Component summary",
-			zap.Int("enabled_count", enabledComponentCount),
-			zap.Int("disabled_count", disabledComponentCount),
-		)
+	isDebug := app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel
+	if isDebug && tel.IsEnabled() && app.Logger != nil {
+		logDefaultValues(ctx, app.Logger, valuesPath, yaml1)
 	}
 
 	var merged map[string]any
@@ -502,7 +122,7 @@ func generateInternal(ctx context.Context, tel *telemetry.Telemetry, ctxDir, ove
 		}
 
 		// Merge with tracing
-		ctx, mergeSpan := tel.StartSpan(ctx, "merge.yaml_files")
+		_, mergeSpan := tel.StartSpan(ctx, "merge.yaml_files")
 		merged = deepMerge(yaml1, yaml2)
 		mergeSpan.End()
 	} else {
@@ -512,11 +132,11 @@ func generateInternal(ctx context.Context, tel *telemetry.Telemetry, ctxDir, ove
 	// Generate schema with tracing
 	ctx, schemaSpan := tel.StartSpan(ctx, "generate.schema")
 	schemaStart := time.Now()
-	schema := inferSchema(merged, yaml1)
+	schema := inferSchema(app, merged, yaml1)
 	schema["$schema"] = "http://json-schema.org/schema#"
 
 	// Post-process the schema to ensure no empty fields are in the required lists
-	cleanupRequiredFields(schema, yaml1)
+	cleanupRequiredFieldsWithApp(app, schema, yaml1)
 	schemaSpan.End()
 
 	// Record schema generation metrics
@@ -561,43 +181,152 @@ func generateInternal(ctx context.Context, tel *telemetry.Telemetry, ctxDir, ove
 	return fmt.Sprintf("Generated %s from values.yaml", outPath), nil
 }
 
-// countSchemaFields counts the number of fields in a schema recursively
-func countSchemaFields(schema map[string]any) int {
-	count := 0
-	if props, ok := schema["properties"].(map[string]any); ok {
-		count += len(props)
-		for _, prop := range props {
-			if propMap, ok := prop.(map[string]any); ok {
-				count += countSchemaFields(propMap)
+// logDefaultValues logs debugging information about default values
+func logDefaultValues(_ context.Context, logger *zap.Logger, valuesPath string, yaml1 map[string]any) {
+	logger.Debug("Original YAML values loaded",
+		zap.String("file", valuesPath),
+		zap.Int("top_level_keys", len(yaml1)),
+	)
+
+	// Count components with enabled field
+	enabledComponentCount := 0
+	disabledComponentCount := 0
+	for key, compVal := range yaml1 {
+		if compMap, isMap := compVal.(map[string]any); isMap {
+			// Log components with enabled field
+			if enabled, hasEnabled := compMap["enabled"]; hasEnabled {
+				if enabledBool, isBool := enabled.(bool); isBool {
+					if enabledBool {
+						enabledComponentCount++
+					} else {
+						disabledComponentCount++
+					}
+					logger.Debug("Component status",
+						zap.String("component", key),
+						zap.Bool("enabled", enabledBool),
+					)
+				}
 			}
 		}
 	}
-	return count
+	logger.Debug("Component summary",
+		zap.Int("enabled_count", enabledComponentCount),
+		zap.Int("disabled_count", disabledComponentCount),
+	)
 }
 
-// isEmptyValue checks if a value represents an empty value (empty string, array, map)
-func isEmptyValue(val any) bool {
-	if val == nil {
-		return true
-	}
-
+// inferSchema builds a JSON‐Schema fragment with dependency injection
+func inferSchema(app *App, val, defaultVal any) map[string]any {
 	switch v := val.(type) {
-	case string:
-		return v == ""
-	case []any:
-		return len(v) == 0
 	case map[string]any:
-		return len(v) == 0
-	case map[interface{}]interface{}:
-		return len(v) == 0
+		return inferObjectSchemaWithApp(app, v, defaultVal)
+	case []any:
+		return inferArraySchema(app, v, defaultVal)
+	case bool:
+		return inferBooleanSchema(v)
+	case int, int64:
+		return inferIntegerSchema(v)
+	case float64:
+		return inferNumberSchema(v)
+	case string:
+		return inferStringSchema(v)
+	default:
+		return inferUnknownTypeSchemaWithApp(app, v, defaultVal)
+	}
+}
+
+// inferObjectSchemaWithApp processes map[string]any types with dependency injection
+func inferObjectSchemaWithApp(app *App, v map[string]any, defaultVal any) map[string]any {
+	defMap, _ := defaultVal.(map[string]any)
+
+	// Generate properties
+	props := generateObjectPropertiesWithApp(app, v, defMap)
+
+	// Build defaults
+	defaults := buildObjectDefaults(v)
+
+	// Create base schema
+	schema := map[string]any{
+		"type":       "object",
+		"properties": props,
+		"default":    defaults,
 	}
 
-	// Use reflection for other types
-	rv := reflect.ValueOf(val)
+	// Determine required fields
+	required := determineRequiredFieldsWithApp(app, v, defMap)
+	if len(required) > 0 {
+		schema["required"] = required
+	}
+
+	return schema
+}
+
+// generateObjectPropertiesWithApp recursively generates schema properties
+func generateObjectPropertiesWithApp(app *App, v map[string]any, defMap map[string]any) map[string]any {
+	props := make(map[string]any, len(v))
+	for key, sub := range v {
+		// Ensure we pass the correct default value for the subfield
+		var defSubVal any
+		if defMap != nil {
+			defSubVal = defMap[key]
+		}
+		props[key] = inferSchema(app, sub, defSubVal)
+	}
+	return props
+}
+
+// determineRequiredFieldsWithApp determines required fields with dependency injection
+func determineRequiredFieldsWithApp(app *App, v, defMap map[string]any) []string {
+	var required []string
+	for k, vDefault := range defMap {
+		// Only add to required if key exists, default is NOT nil and NOT null
+		if _, exists := v[k]; exists {
+			if shouldFieldBeRequiredWithApp(app, k, v[k], vDefault, v) {
+				required = append(required, k)
+			}
+		}
+	}
+	return required
+}
+
+// shouldFieldBeRequiredWithApp checks if a field should be required with dependency injection
+func shouldFieldBeRequiredWithApp(app *App, fieldName string, fieldValue, defaultValue any, parentObject map[string]any) bool {
+	// Check if default is nil or null string
+	if isNullValue(defaultValue) {
+		return false
+	}
+
+	// Check for empty values
+	if isEmptyValue(defaultValue) {
+		isDebug := app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel
+		if isDebug && app.Logger != nil {
+			app.Logger.Debug("Skipping field because it has an empty default value",
+				zap.String("field", fieldName),
+				zap.String("type", fmt.Sprintf("%T", defaultValue)))
+		}
+		return false
+	}
+
+	// Check if this is a component that can be enabled/disabled
+	if isDisabledComponent(fieldValue) {
+		return false
+	}
+
+	// Check if parent component is disabled
+	if isChildOfDisabledComponent(parentObject) {
+		return false
+	}
+
+	return true
+}
+
+// inferUnknownTypeSchemaWithApp handles unknown types with dependency injection
+func inferUnknownTypeSchemaWithApp(app *App, v any, defaultVal any) map[string]any {
+	rv := reflect.ValueOf(v)
 
 	// Handle nil values
 	if !rv.IsValid() || (rv.Kind() == reflect.Ptr && rv.IsNil()) {
-		return true
+		return inferNullSchema()
 	}
 
 	// Get the underlying value if it's a pointer
@@ -605,23 +334,100 @@ func isEmptyValue(val any) bool {
 		rv = rv.Elem()
 	}
 
-	if rv.Kind() == reflect.Map {
-		return rv.Len() == 0
-	} else if rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array {
-		return rv.Len() == 0
+	switch rv.Kind() {
+	case reflect.Map:
+		return inferReflectedMapSchemaWithApp(app, rv, defaultVal)
+	case reflect.Slice, reflect.Array:
+		return inferReflectedArraySchemaWithApp(app, rv, defaultVal)
+	case reflect.Bool:
+		return inferBooleanSchema(rv.Bool())
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return inferIntegerSchema(rv.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return inferIntegerSchema(rv.Uint())
+	case reflect.Float32, reflect.Float64:
+		return inferReflectedFloatSchema(rv.Float())
+	case reflect.String:
+		return inferStringSchema(rv.String())
+	default:
+		// Fall back to string representation for other types
+		return map[string]any{
+			"type":    "string",
+			"default": fmt.Sprintf("%v", v),
+		}
+	}
+}
+
+// inferReflectedMapSchemaWithApp handles reflected map types with dependency injection
+func inferReflectedMapSchemaWithApp(app *App, rv reflect.Value, defaultVal any) map[string]any {
+	// Convert maps to proper JSON objects
+	defMap := make(map[string]any)
+	for _, k := range rv.MapKeys() {
+		if k.Kind() == reflect.String {
+			mv := rv.MapIndex(k).Interface()
+			// Skip nil values
+			if mv != nil {
+				defMap[k.String()] = mv
+			}
+		}
 	}
 
-	return false
+	// Recursively process properties
+	props := make(map[string]any)
+	for k, sub := range defMap {
+		// Get corresponding default value if available
+		var defVal any
+		if defaultMap, ok := defaultVal.(map[string]any); ok {
+			defVal = defaultMap[k]
+		}
+		props[k] = inferSchema(app, sub, defVal)
+	}
+
+	return map[string]any{
+		"type":       "object",
+		"properties": props,
+		"default":    defMap,
+	}
 }
 
-// cleanupRequiredFields processes the generated schema to ensure no empty values are in required lists
-func cleanupRequiredFields(schema map[string]any, defaults map[string]any) {
+// inferReflectedArraySchemaWithApp handles reflected array/slice types with dependency injection
+func inferReflectedArraySchemaWithApp(app *App, rv reflect.Value, defaultVal any) map[string]any {
+	// Convert slices to proper arrays
+	var items []any
+	for i := 0; i < rv.Len(); i++ {
+		item := rv.Index(i).Interface()
+		if item != nil {
+			items = append(items, item)
+		}
+	}
+
+	var itemsSchema map[string]any
+	if len(items) > 0 {
+		// Use first item to infer schema
+		var defItem any
+		if defArr, ok := defaultVal.([]any); ok && len(defArr) > 0 {
+			defItem = defArr[0]
+		}
+		itemsSchema = inferSchema(app, items[0], defItem)
+	} else {
+		itemsSchema = map[string]any{}
+	}
+
+	return map[string]any{
+		"type":    "array",
+		"items":   itemsSchema,
+		"default": items,
+	}
+}
+
+// cleanupRequiredFieldsWithApp processes the schema with dependency injection
+func cleanupRequiredFieldsWithApp(app *App, schema map[string]any, defaults map[string]any) {
 	// Process the top-level schema
-	processProperties(schema, defaults)
+	processPropertiesWithApp(app, schema, defaults)
 }
 
-// processProperties handles each property in the schema, recursing into nested objects
-func processProperties(schema map[string]any, defaults map[string]any) {
+// processPropertiesWithApp handles each property with dependency injection
+func processPropertiesWithApp(app *App, schema map[string]any, defaults map[string]any) {
 	// Check if this is an object with properties
 	properties, hasProps := schema["properties"].(map[string]any)
 	if !hasProps {
@@ -637,9 +443,9 @@ func processProperties(schema map[string]any, defaults map[string]any) {
 	// Check if this object itself has an 'enabled' key that is false
 	if enabled, hasEnabled := defaults["enabled"]; hasEnabled {
 		if enabledBool, isBool := enabled.(bool); isBool && !enabledBool {
-			isDebug := cfg != nil && cfg.Debug
-			if isDebug {
-				zap.L().Debug("Post-processing: Removing required fields from component because it has enabled=false")
+			isDebug := app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel
+			if isDebug && app.Logger != nil {
+				app.Logger.Debug("Post-processing: Removing required fields from component because it has enabled=false")
 			}
 			delete(schema, "required")
 			return
@@ -654,9 +460,9 @@ func processProperties(schema map[string]any, defaults map[string]any) {
 
 		// If the default value is empty, don't include it in required
 		if hasDef && isEmptyValue(defVal) {
-			isDebug := cfg != nil && cfg.Debug
-			if isDebug {
-				zap.L().Debug("Post-processing: Removing field from required list because it has an empty default value",
+			isDebug := app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel
+			if isDebug && app.Logger != nil {
+				app.Logger.Debug("Post-processing: Removing field from required list because it has an empty default value",
 					zap.String("field", fieldName))
 			}
 			continue
@@ -668,9 +474,9 @@ func processProperties(schema map[string]any, defaults map[string]any) {
 			// Check if this component has an 'enabled' field
 			if enabled, hasEnabled := propObj["enabled"]; hasEnabled {
 				if enabledBool, isBool := enabled.(bool); isBool && !enabledBool {
-					isDebug := cfg != nil && cfg.Debug
-					if isDebug {
-						zap.L().Debug("Post-processing: Removing field from required list because it is disabled",
+					isDebug := app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel
+					if isDebug && app.Logger != nil {
+						app.Logger.Debug("Post-processing: Removing field from required list because it is disabled",
 							zap.String("field", fieldName))
 					}
 					continue
@@ -679,9 +485,9 @@ func processProperties(schema map[string]any, defaults map[string]any) {
 
 			// Also check if the component has a nil value by default
 			if isEmptyValue(propObj) {
-				isDebug := cfg != nil && cfg.Debug
-				if isDebug {
-					zap.L().Debug("Post-processing: Removing field from required list because it has a nil default value",
+				isDebug := app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel
+				if isDebug && app.Logger != nil {
+					app.Logger.Debug("Post-processing: Removing field from required list because it has a nil default value",
 						zap.String("field", fieldName))
 				}
 				continue
@@ -710,41 +516,160 @@ func processProperties(schema map[string]any, defaults map[string]any) {
 		if hasDef {
 			defMap, isMap := defVal.(map[string]any)
 			if isMap {
-				processProperties(propObj, defMap)
+				processPropertiesWithApp(app, propObj, defMap)
 			}
 		}
 	}
 }
 
-func NewGenerateCmd() *cobra.Command {
+// NewGenerateCmdWithApp creates generate command with dependency injection
+func NewGenerateCmdWithApp(app *App) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "generate <context-dir>",
+		Use:   "generate [context-dir]",
 		Short: "Generate JSON Schema from values.yaml",
-		Long:  `Generate JSON Schema from values.yaml, optionally merging an overrides YAML file.`,
-		Args:  cobra.ExactArgs(1),
+		Long: `Generate JSON Schema from values.yaml, optionally merging an overrides YAML file.
+
+You can generate a schema from either:
+- A local Helm chart directory (provide context-dir)
+- A remote Helm chart (use --chart-name and related flags, or helm config in config file)`,
+		Args: cobra.MaximumNArgs(1),
 		// Do not print usage on error; just show the error message
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := args[0]
-			// Validate overrides file if provided
-			overridesFlag, err := cmd.Flags().GetString("overrides")
-			if err != nil {
-				return err
+			// Get app from context if not provided
+			if app == nil {
+				app = GetAppFromContext(cmd)
 			}
-			if overridesFlag != "" {
-				overridePath := filepath.Join(ctx, overridesFlag)
-				if _, err := os.Stat(overridePath); err != nil {
-					return fmt.Errorf("overrides file %s not found in %s", overridesFlag, ctx)
-				}
-			}
-			msg, err := Generate(ctx, overridesFlag)
-			if err != nil {
-				return err
-			}
-			fmt.Println(msg)
-			return nil
+			return generateCmdRunWithApp(cmd, args, app)
 		},
 	}
-	cmd.Flags().StringP("overrides", "f", "", "path (relative to context dir) to overrides YAML (optional)")
+	addGenerateFlags(cmd)
 	return cmd
+}
+
+// generateCmdRunWithApp is the main execution function with dependency injection
+func generateCmdRunWithApp(cmd *cobra.Command, args []string, app *App) error {
+	// Get context directory if provided
+	ctx := getContextDirectory(args)
+
+	// Parse command configuration
+	cmdConfig, err := parseGenerateCommandConfigWithApp(cmd, ctx, app)
+	if err != nil {
+		return err
+	}
+
+	// Debug output
+	logGenerateCommandDebugWithApp(cmdConfig, app)
+
+	// Validate command configuration
+	if err := validateGenerateCommandConfig(cmdConfig); err != nil {
+		return err
+	}
+
+	// Handle remote or local chart generation
+	if cmdConfig.isRemote {
+		return handleRemoteChartGenerationWithApp(cmd, cmdConfig, app)
+	}
+
+	return handleLocalChartGenerationWithApp(cmdConfig, app)
+}
+
+// parseGenerateCommandConfigWithApp parses configuration with dependency injection
+func parseGenerateCommandConfigWithApp(cmd *cobra.Command, ctx string, app *App) (*generateCommandConfig, error) {
+	chartName, _ := cmd.Flags().GetString("chart-name")
+	overridesFlag, err := cmd.Flags().GetString("overrides")
+	if err != nil {
+		return nil, err
+	}
+
+	config := &generateCommandConfig{
+		ctx:                  ctx,
+		chartName:            chartName,
+		overridesFlag:        overridesFlag,
+		hasRemoteChartFlags:  chartName != "",
+		hasRemoteChartConfig: app.Config != nil && app.Config.Helm != nil && app.Config.Helm.Chart != nil && app.Config.Helm.Chart.Name != "",
+		hasLocalContext:      ctx != "",
+	}
+
+	config.isRemote = config.hasRemoteChartFlags || config.hasRemoteChartConfig
+
+	return config, nil
+}
+
+// logGenerateCommandDebugWithApp logs debug information with dependency injection
+func logGenerateCommandDebugWithApp(cmdConfig *generateCommandConfig, app *App) {
+	if app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel && app.Logger != nil {
+		app.Logger.Debug("Generate command configuration",
+			zap.Bool("hasRemoteChartFlags", cmdConfig.hasRemoteChartFlags),
+			zap.Bool("hasRemoteChartConfig", cmdConfig.hasRemoteChartConfig),
+			zap.Bool("hasLocalContext", cmdConfig.hasLocalContext),
+			zap.String("chartName", cmdConfig.chartName),
+			zap.Any("helmConfig", app.Config.Helm),
+		)
+	}
+}
+
+// handleRemoteChartGenerationWithApp handles remote chart generation with dependency injection
+func handleRemoteChartGenerationWithApp(cmd *cobra.Command, cmdConfig *generateCommandConfig, app *App) error {
+	if cmdConfig.hasRemoteChartFlags {
+		return handleRemoteChartFromFlags(cmd)
+	}
+	return handleRemoteChartFromConfigWithApp(app)
+}
+
+// handleRemoteChartFromConfigWithApp uses config file helm configuration with dependency injection
+func handleRemoteChartFromConfigWithApp(app *App) error {
+	// Create Helm instance with options
+	h := helm.NewHelm(helm.HelmOptions{
+		Debug: app.Config.LogLevel.Level == zapcore.DebugLevel,
+		// Logger will use the default zap.L().Named("helm")
+	})
+
+	// First check if the chart has a schema
+	hasSchema, err := h.HasSchema(app.Config.Helm.Chart)
+	if err != nil {
+		errMsg := fmt.Sprintf("error checking for schema in remote chart %s/%s: %v",
+			app.Config.Helm.Chart.Name, app.Config.Helm.Chart.Version, err)
+		errMsg += "\n\nPlease check your helm configuration in the config file"
+		return fmt.Errorf("%s", errMsg)
+	}
+
+	if !hasSchema {
+		errMsg := fmt.Sprintf("no values.schema.json found in chart %s/%s",
+			app.Config.Helm.Chart.Name, app.Config.Helm.Chart.Version)
+		errMsg += "\n\nThis chart does not include a JSON schema file."
+		errMsg += "\nYou may need to:"
+		errMsg += "\n- Create a schema manually based on the chart's values.yaml"
+		errMsg += "\n- Check if a newer version of the chart includes a schema"
+		errMsg += "\n- Contact the chart maintainer to request a schema be added"
+		return fmt.Errorf("%s", errMsg)
+	}
+
+	// Download the schema
+	loc, cleanup, err := h.DownloadSchema(app.Config.Helm.Chart)
+	if err != nil {
+		errMsg := fmt.Sprintf("error downloading schema from chart %s/%s: %v",
+			app.Config.Helm.Chart.Name, app.Config.Helm.Chart.Version, err)
+		return fmt.Errorf("%s", errMsg)
+	}
+	defer cleanup() // Clean up the temporary file
+
+	// Print out the location of the downloaded schema
+	fmt.Printf("Downloaded remote chart schema to: %s\n", loc)
+	return nil
+}
+
+// handleLocalChartGenerationWithApp handles local chart generation with dependency injection
+func handleLocalChartGenerationWithApp(cmdConfig *generateCommandConfig, app *App) error {
+	// Validate overrides file if provided
+	if err := validateOverridesFile(cmdConfig.ctx, cmdConfig.overridesFlag); err != nil {
+		return err
+	}
+
+	msg, err := GenerateWithApp(app, cmdConfig.ctx, cmdConfig.overridesFlag)
+	if err != nil {
+		return err
+	}
+	fmt.Println(msg)
+	return nil
 }

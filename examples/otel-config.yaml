@@ -39,19 +39,19 @@ exporters:
     loglevel: debug
     sampling_initial: 5
     sampling_thereafter: 200
-  
+
   # Prometheus exporter for metrics
   prometheus:
     endpoint: "0.0.0.0:8889"
     const_labels:
       service: "valet"
-  
+
   # Jaeger exporter for traces
   jaeger:
     endpoint: jaeger:14250
     tls:
       insecure: true
-  
+
   # OTLP exporter (can be used for various backends like Grafana Cloud, New Relic, etc.)
   otlp/backend:
     endpoint: "your-backend-endpoint:4317"

@@ -50,8 +50,6 @@ func (ts *ValetTestSuite) CopyDir(src, dst string) error {
 // SetupSuite is called before the suite starts running
 func (suite *ValetTestSuite) SetupSuite() {
 	suite.T().Log("Setting up Valet test suite")
-	// Note: We don't create a global config file or test directory here
-	// to avoid interfering with individual tests that need specific setups.
 }
 
 func TestValet(t *testing.T) {

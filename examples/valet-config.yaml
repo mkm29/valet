@@ -2,7 +2,7 @@
 # Place this file at ~/.valet.yaml or specify with --config flag
 
 # Enable debug mode for verbose logging
-debug: false
+logLevel: debug
 
 # Default output file for generated schemas
 output: "values.schema.json"

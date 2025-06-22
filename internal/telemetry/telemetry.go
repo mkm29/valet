@@ -34,8 +34,16 @@ type Telemetry struct {
 	logger         *Logger
 }
 
-// Initialize initializes the telemetry providers
-func Initialize(ctx context.Context, cfg *config.TelemetryConfig) (*Telemetry, error) {
+// TelemetryOptions configures a Telemetry instance
+type TelemetryOptions struct {
+	Config *config.TelemetryConfig
+	// Add more options as needed in the future
+	// For example: custom resource attributes, custom exporters, etc.
+}
+
+// NewTelemetry creates a new Telemetry instance with options
+func NewTelemetry(ctx context.Context, opts TelemetryOptions) (*Telemetry, error) {
+	cfg := opts.Config
 	if cfg == nil {
 		cfg = config.NewTelemetryConfig()
 	}
@@ -50,41 +58,62 @@ func Initialize(ctx context.Context, cfg *config.TelemetryConfig) (*Telemetry, e
 		return nil, fmt.Errorf("failed to create resource: %w", err)
 	}
 
-	// Initialize tracer provider
-	tracerProvider, err := initTracerProvider(ctx, cfg, res)
+	// Initialize trace provider
+	traceProvider, err := initTracerProvider(ctx, cfg, res)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize tracer provider: %w", err)
+		return nil, fmt.Errorf("failed to initialize trace provider: %w", err)
 	}
 
 	// Initialize meter provider
 	meterProvider, err := initMeterProvider(ctx, cfg, res)
 	if err != nil {
+		// If meter fails, cleanup trace provider
+		if traceProvider != nil {
+			_ = traceProvider.Shutdown(context.Background())
+		}
 		return nil, fmt.Errorf("failed to initialize meter provider: %w", err)
 	}
 
 	// Set global providers
-	otel.SetTracerProvider(tracerProvider)
+	otel.SetTracerProvider(traceProvider)
 	otel.SetMeterProvider(meterProvider)
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 
+	// Create tracer and meter
+	tracer := otel.Tracer("valet")
+	meter := otel.Meter("valet")
+
 	// Create structured logger
-	logger, err := NewLogger(false) // Debug will be controlled by the caller
+	logger, err := NewLogger(cfg.SampleRate > 0) // Use sample rate as debug indicator
 	if err != nil {
+		// Cleanup providers on error
+		_ = meterProvider.Shutdown(context.Background())
+		_ = traceProvider.Shutdown(context.Background())
 		return nil, fmt.Errorf("failed to create logger: %w", err)
 	}
-	logger.SetDefault()
 
-	// Create telemetry instance
-	t := &Telemetry{
+	return &Telemetry{
 		config:         cfg,
-		tracerProvider: tracerProvider,
+		tracerProvider: traceProvider,
 		meterProvider:  meterProvider,
-		tracer:         tracerProvider.Tracer(cfg.ServiceName),
-		meter:          meterProvider.Meter(cfg.ServiceName),
+		tracer:         tracer,
+		meter:          meter,
 		logger:         logger,
-	}
+	}, nil
+}
 
-	return t, nil
+// Initialize initializes the telemetry providers (backward compatibility)
+func Initialize(ctx context.Context, cfg *config.TelemetryConfig) (*Telemetry, error) {
+	return NewTelemetry(ctx, TelemetryOptions{
+		Config: cfg,
+	})
+}
+
+// NewTelemetryWithConfig creates a new Telemetry instance with just config (convenience function)
+func NewTelemetryWithConfig(ctx context.Context, cfg *config.TelemetryConfig) (*Telemetry, error) {
+	return NewTelemetry(ctx, TelemetryOptions{
+		Config: cfg,
+	})
 }
 
 // Shutdown shuts down the telemetry providers
