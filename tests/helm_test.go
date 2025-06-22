@@ -1,0 +1,606 @@
+package tests
+
+import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"testing"
+
+	"github.com/mkm29/valet/internal/config"
+	"github.com/mkm29/valet/internal/helm"
+	"github.com/stretchr/testify/suite"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
+	"helm.sh/helm/v3/pkg/chart"
+)
+
+type HelmTestSuite struct {
+	suite.Suite
+	logger  *zap.Logger
+	tempDir string
+}
+
+func (suite *HelmTestSuite) SetupSuite() {
+	suite.logger = zaptest.NewLogger(suite.T())
+	suite.tempDir = suite.T().TempDir()
+}
+
+func (suite *HelmTestSuite) TearDownSuite() {
+	if suite.tempDir != "" {
+		os.RemoveAll(suite.tempDir)
+	}
+}
+
+// TestHelm_HasSchema tests the HasSchema functionality
+func (suite *HelmTestSuite) TestHelm_HasSchema() {
+	tests := []struct {
+		name          string
+		chartName     string
+		chartVersion  string
+		hasSchema     bool
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:         "Chart with schema",
+			chartName:    "test-chart",
+			chartVersion: "1.0.0",
+			hasSchema:    true,
+			expectError:  false,
+		},
+		{
+			name:         "Chart without schema",
+			chartName:    "test-chart-no-schema",
+			chartVersion: "1.0.0",
+			hasSchema:    false,
+			expectError:  false,
+		},
+		{
+			name:          "Non-existent chart",
+			chartName:     "non-existent",
+			chartVersion:  "1.0.0",
+			hasSchema:     false,
+			expectError:   true,
+			errorContains: "failed to get chart",
+		},
+	}
+
+	for _, tt := range tests {
+		suite.Run(tt.name, func() {
+			// Create test server
+			server := suite.createTestServer(tt.chartName, tt.chartVersion, tt.hasSchema)
+			defer server.Close()
+
+			// Create Helm instance
+			h := helm.NewHelm(helm.HelmOptions{
+				Debug:  true,
+				Logger: suite.logger,
+			})
+
+			// Create chart config
+			chartConfig := &config.HelmChart{
+				Name:    tt.chartName,
+				Version: tt.chartVersion,
+				Registry: &config.HelmRegistry{
+					URL:  server.URL,
+					Type: "HTTP",
+				},
+			}
+
+			// Test HasSchema
+			hasSchema, err := h.HasSchema(chartConfig)
+
+			if tt.expectError {
+				suite.Error(err)
+				if tt.errorContains != "" {
+					suite.Contains(err.Error(), tt.errorContains)
+				}
+			} else {
+				suite.NoError(err)
+				suite.Equal(tt.hasSchema, hasSchema)
+			}
+		})
+	}
+}
+
+// TestHelm_DownloadSchema tests the DownloadSchema functionality
+func (suite *HelmTestSuite) TestHelm_DownloadSchema() {
+	tests := []struct {
+		name          string
+		chartName     string
+		chartVersion  string
+		hasSchema     bool
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:         "Download existing schema",
+			chartName:    "test-chart",
+			chartVersion: "1.0.0",
+			hasSchema:    true,
+			expectError:  false,
+		},
+		{
+			name:          "Download non-existent schema",
+			chartName:     "test-chart-no-schema",
+			chartVersion:  "1.0.0",
+			hasSchema:     false,
+			expectError:   true,
+			errorContains: "values.schema.json not found",
+		},
+	}
+
+	for _, tt := range tests {
+		suite.Run(tt.name, func() {
+			// Create test server
+			server := suite.createTestServer(tt.chartName, tt.chartVersion, tt.hasSchema)
+			defer server.Close()
+
+			// Create Helm instance
+			h := helm.NewHelm(helm.HelmOptions{
+				Debug:  true,
+				Logger: suite.logger,
+			})
+
+			// Create chart config
+			chartConfig := &config.HelmChart{
+				Name:    tt.chartName,
+				Version: tt.chartVersion,
+				Registry: &config.HelmRegistry{
+					URL:  server.URL,
+					Type: "HTTP",
+				},
+			}
+
+			// Test DownloadSchema
+			schemaPath, err := h.DownloadSchema(chartConfig)
+
+			if tt.expectError {
+				suite.Error(err)
+				if tt.errorContains != "" {
+					suite.Contains(err.Error(), tt.errorContains)
+				}
+			} else {
+				suite.NoError(err)
+				suite.NotEmpty(schemaPath)
+				
+				// Verify the file exists and has content
+				content, err := os.ReadFile(schemaPath)
+				suite.NoError(err)
+				suite.Contains(string(content), "$schema")
+				
+				// Clean up
+				os.Remove(schemaPath)
+			}
+		})
+	}
+}
+
+// TestHelm_CacheManagement tests the caching functionality
+func (suite *HelmTestSuite) TestHelm_CacheManagement() {
+	// Create test server with request counter
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		
+		// Create a test chart
+		testChart := suite.createTestChart("cache-test", "1.0.0", true)
+		
+		// Create tar.gz from chart
+		data, err := suite.createChartArchive(testChart)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		
+		w.Header().Set("Content-Type", "application/x-gzip")
+		w.Write(data)
+	}))
+	defer server.Close()
+
+	// Create Helm instance
+	h := helm.NewHelm(helm.HelmOptions{
+		Debug:  true,
+		Logger: suite.logger,
+	})
+
+	// Create chart config
+	chartConfig := &config.HelmChart{
+		Name:    "cache-test",
+		Version: "1.0.0",
+		Registry: &config.HelmRegistry{
+			URL:  server.URL,
+			Type: "HTTP",
+		},
+	}
+
+	// First call should hit the server
+	hasSchema1, err := h.HasSchema(chartConfig)
+	suite.NoError(err)
+	suite.True(hasSchema1)
+	suite.Equal(1, requestCount, "First call should hit the server")
+
+	// Second call should use cache
+	hasSchema2, err := h.HasSchema(chartConfig)
+	suite.NoError(err)
+	suite.True(hasSchema2)
+	suite.Equal(1, requestCount, "Second call should use cache")
+
+	// DownloadSchema should also use cache
+	schemaPath, err := h.DownloadSchema(chartConfig)
+	suite.NoError(err)
+	suite.NotEmpty(schemaPath)
+	suite.Equal(1, requestCount, "DownloadSchema should use cache")
+	
+	// Clean up
+	os.Remove(schemaPath)
+
+	// Different version should hit the server again
+	chartConfig.Version = "2.0.0"
+	_, err = h.HasSchema(chartConfig)
+	suite.NoError(err)
+	suite.Equal(2, requestCount, "Different version should hit the server")
+}
+
+// TestHelm_SizeLimits tests the size limit functionality
+func (suite *HelmTestSuite) TestHelm_SizeLimits() {
+	tests := []struct {
+		name          string
+		chartSize     int64
+		maxSize       int64
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:        "Chart within limit",
+			chartSize:   500 * 1024, // 500KB
+			maxSize:     1024 * 1024, // 1MB
+			expectError: false,
+		},
+		{
+			name:          "Chart exceeds limit",
+			chartSize:     2 * 1024 * 1024, // 2MB
+			maxSize:       1024 * 1024,     // 1MB
+			expectError:   true,
+			errorContains: "exceeds maximum allowed size",
+		},
+		{
+			name:        "Chart at exact limit",
+			chartSize:   1024 * 1024, // 1MB
+			maxSize:     1024 * 1024, // 1MB
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		suite.Run(tt.name, func() {
+			// Create test server that returns charts of specific sizes
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// Create a chart with padding to reach desired size
+				testChart := suite.createTestChartWithSize("size-test", "1.0.0", true, tt.chartSize)
+				
+				// Create tar.gz from chart
+				data, err := suite.createChartArchive(testChart)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				
+				// Ensure we're returning the expected size
+				if int64(len(data)) < tt.chartSize {
+					// Add padding if needed
+					padding := make([]byte, tt.chartSize-int64(len(data)))
+					data = append(data, padding...)
+				}
+				
+				w.Header().Set("Content-Type", "application/x-gzip")
+				w.Write(data)
+			}))
+			defer server.Close()
+
+			// Create Helm instance with size limit
+			h := helm.NewHelm(helm.HelmOptions{
+				Debug:        true,
+				Logger:       suite.logger,
+				MaxChartSize: tt.maxSize,
+			})
+
+			// Create chart config
+			chartConfig := &config.HelmChart{
+				Name:    "size-test",
+				Version: "1.0.0",
+				Registry: &config.HelmRegistry{
+					URL:  server.URL,
+					Type: "HTTP",
+				},
+			}
+
+			// Test HasSchema with size limits
+			_, err := h.HasSchema(chartConfig)
+
+			if tt.expectError {
+				suite.Error(err)
+				if tt.errorContains != "" {
+					suite.Contains(err.Error(), tt.errorContains)
+				}
+			} else {
+				suite.NoError(err)
+			}
+		})
+	}
+}
+
+// TestHelmConfig_Validation tests the HelmConfig validation
+func (suite *HelmTestSuite) TestHelmConfig_Validation() {
+	tests := []struct {
+		name          string
+		helmConfig    *config.HelmConfig
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name: "Valid config",
+			helmConfig: &config.HelmConfig{
+				Chart: &config.HelmChart{
+					Name:    "test-chart",
+					Version: "1.0.0",
+					Registry: &config.HelmRegistry{
+						URL:  "https://charts.example.com",
+						Type: "HTTPS",
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name:          "Nil config is valid",
+			helmConfig:    nil,
+			expectError:   false,
+		},
+		{
+			name: "Missing chart is valid",
+			helmConfig: &config.HelmConfig{
+				Chart: nil,
+			},
+			expectError:   false,
+		},
+		{
+			name: "Missing chart name",
+			helmConfig: &config.HelmConfig{
+				Chart: &config.HelmChart{
+					Name:    "",
+					Version: "1.0.0",
+					Registry: &config.HelmRegistry{
+						URL:  "https://charts.example.com",
+						Type: "HTTPS",
+					},
+				},
+			},
+			expectError:   true,
+			errorContains: "helm chart name is required",
+		},
+		{
+			name: "Missing chart version",
+			helmConfig: &config.HelmConfig{
+				Chart: &config.HelmChart{
+					Name:    "test-chart",
+					Version: "",
+					Registry: &config.HelmRegistry{
+						URL:  "https://charts.example.com",
+						Type: "HTTPS",
+					},
+				},
+			},
+			expectError:   true,
+			errorContains: "helm chart version is required",
+		},
+		{
+			name: "Missing registry",
+			helmConfig: &config.HelmConfig{
+				Chart: &config.HelmChart{
+					Name:     "test-chart",
+					Version:  "1.0.0",
+					Registry: nil,
+				},
+			},
+			expectError:   true,
+			errorContains: "helm registry configuration is required",
+		},
+		{
+			name: "Missing registry URL",
+			helmConfig: &config.HelmConfig{
+				Chart: &config.HelmChart{
+					Name:    "test-chart",
+					Version: "1.0.0",
+					Registry: &config.HelmRegistry{
+						URL:  "",
+						Type: "HTTPS",
+					},
+				},
+			},
+			expectError:   true,
+			errorContains: "helm registry URL is required",
+		},
+		{
+			name: "Invalid registry type",
+			helmConfig: &config.HelmConfig{
+				Chart: &config.HelmChart{
+					Name:    "test-chart",
+					Version: "1.0.0",
+					Registry: &config.HelmRegistry{
+						URL:  "https://charts.example.com",
+						Type: "INVALID",
+					},
+				},
+			},
+			expectError:   true,
+			errorContains: "invalid registry type",
+		},
+	}
+
+	for _, tt := range tests {
+		suite.Run(tt.name, func() {
+			err := tt.helmConfig.Validate()
+
+			if tt.expectError {
+				suite.Error(err)
+				if tt.errorContains != "" {
+					suite.Contains(err.Error(), tt.errorContains)
+				}
+			} else {
+				suite.NoError(err)
+			}
+		})
+	}
+}
+
+// Helper function to create a test HTTP server
+func (suite *HelmTestSuite) createTestServer(chartName, chartVersion string, includeSchema bool) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		expectedPath := fmt.Sprintf("/%s-%s.tgz", chartName, chartVersion)
+		if r.URL.Path != expectedPath {
+			http.NotFound(w, r)
+			return
+		}
+
+		// Create a test chart
+		testChart := suite.createTestChart(chartName, chartVersion, includeSchema)
+		
+		// Create tar.gz from chart
+		data, err := suite.createChartArchive(testChart)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		
+		w.Header().Set("Content-Type", "application/x-gzip")
+		w.Write(data)
+	}))
+}
+
+// Helper function to create a test chart
+func (suite *HelmTestSuite) createTestChart(name, version string, includeSchema bool) *chart.Chart {
+	metadata := &chart.Metadata{
+		Name:    name,
+		Version: version,
+	}
+
+	files := []*chart.File{
+		{
+			Name: "values.yaml",
+			Data: []byte("replicaCount: 1\nimage:\n  repository: nginx\n  tag: stable"),
+		},
+	}
+
+	if includeSchema {
+		files = append(files, &chart.File{
+			Name: "values.schema.json",
+			Data: []byte(`{
+  "$schema": "http://json-schema.org/schema#",
+  "type": "object",
+  "properties": {
+    "replicaCount": {
+      "type": "integer",
+      "default": 1
+    }
+  }
+}`),
+		})
+	}
+
+	return &chart.Chart{
+		Metadata: metadata,
+		Raw:      files,
+		Files:    files,
+	}
+}
+
+// Helper function to create a test chart with specific size
+func (suite *HelmTestSuite) createTestChartWithSize(name, version string, includeSchema bool, targetSize int64) *chart.Chart {
+	ch := suite.createTestChart(name, version, includeSchema)
+	
+	// Add a large file to reach target size
+	currentSize := int64(0)
+	for _, f := range ch.Files {
+		currentSize += int64(len(f.Data))
+	}
+	
+	if currentSize < targetSize {
+		paddingSize := targetSize - currentSize
+		padding := make([]byte, paddingSize)
+		ch.Files = append(ch.Files, &chart.File{
+			Name: "padding.data",
+			Data: padding,
+		})
+		ch.Raw = ch.Files
+	}
+	
+	return ch
+}
+
+// Helper function to create a tar.gz archive from a chart
+func (suite *HelmTestSuite) createChartArchive(ch *chart.Chart) ([]byte, error) {
+	// Create a buffer to write our archive to
+	buf := new(bytes.Buffer)
+	
+	// Create a new gzip writer
+	gw := gzip.NewWriter(buf)
+	
+	// Create a new tar writer
+	tw := tar.NewWriter(gw)
+	
+	// Write Chart.yaml
+	chartYaml := fmt.Sprintf(`apiVersion: v2
+name: %s
+version: %s
+description: A test Helm chart
+type: application
+`, ch.Metadata.Name, ch.Metadata.Version)
+	
+	hdr := &tar.Header{
+		Name: ch.Metadata.Name + "/Chart.yaml",
+		Mode: 0644,
+		Size: int64(len(chartYaml)),
+	}
+	if err := tw.WriteHeader(hdr); err != nil {
+		return nil, err
+	}
+	if _, err := tw.Write([]byte(chartYaml)); err != nil {
+		return nil, err
+	}
+	
+	// Write all files
+	for _, file := range ch.Files {
+		hdr := &tar.Header{
+			Name: ch.Metadata.Name + "/" + file.Name,
+			Mode: 0644,
+			Size: int64(len(file.Data)),
+		}
+		if err := tw.WriteHeader(hdr); err != nil {
+			return nil, err
+		}
+		if _, err := tw.Write(file.Data); err != nil {
+			return nil, err
+		}
+	}
+	
+	// Close the tar writer
+	if err := tw.Close(); err != nil {
+		return nil, err
+	}
+	
+	// Close the gzip writer
+	if err := gw.Close(); err != nil {
+		return nil, err
+	}
+	
+	return buf.Bytes(), nil
+}
+
+func TestHelmSuite(t *testing.T) {
+	suite.Run(t, new(HelmTestSuite))
+}
