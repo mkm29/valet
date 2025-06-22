@@ -92,11 +92,16 @@ graph TD
     GenerateCmd --> Helm[internal/helm]
     Config --> |config loading| YAML[YAML Config Files]
     Helm --> |chart operations| HelmSDK[Helm SDK]
+    Config --> Utils[internal/utils]
+    Helm --> Utils
+    Telemetry --> Utils
+    SchemaGen --> Utils
 
     subgraph "Core Functionality"
         SchemaGen --> TypeInference[Type Inference]
         SchemaGen --> ComponentHandling[Component Processing]
         SchemaGen --> OverrideMerging[Override Merging]
+        Utils
     end
 
     subgraph "Helm Integration"
@@ -143,6 +148,7 @@ graph TD
     class Telemetry,Tracing,Metrics,Logging,OTLP,Logger telemetry;
     class Helm,HelmSDK helm;
     class App app;
+    class Utils core;
 ```
 
 ### Package Design
@@ -235,6 +241,27 @@ Valet follows Go best practices with well-structured packages using a consistent
       Config: cfg,
   })
   ```
+
+#### internal/utils
+- Centralized utility functions for common operations
+- Organized into focused modules:
+  - `reflection.go`: Reflection utilities for struct field extraction and empty value detection
+    - `GetFieldInt`, `GetFieldInt64`, `GetFieldFloat64`: Extract typed values from reflect.Value
+    - `IsEmptyValue`: Check if a value is empty (nil, empty string/slice/map)
+  - `schema.go`: Schema generation helper functions
+    - `BuildNestedDefaults`, `BuildObjectDefaults`: Build default values for schemas
+    - `IsNullValue`, `IsDisabledComponent`: Check value states
+    - `CountSchemaFields`: Recursively count schema fields
+  - `yaml.go`: YAML processing utilities
+    - `DeepMerge`: Recursively merge YAML maps
+    - `ConvertToStringKeyMap`: Convert interface{} maps to string-keyed maps
+    - `LoadYAML`: Load and parse YAML files with proper type conversion
+  - `string.go`: String manipulation utilities
+    - `MaskString`: Mask sensitive values for logging
+    - `SanitizePath`: Remove sensitive path information
+    - `FormatBytes`: Convert bytes to human-readable format (KB, MB, GB, etc.)
+- All functions are exported and reusable across packages
+- Original packages maintain wrapper functions for backward compatibility
 
 ### Architectural Benefits
 
@@ -545,6 +572,48 @@ The following metrics are collected:
 
 All file path attributes in metrics are sanitized to protect sensitive information - only the filename and immediate parent directory are included in telemetry data.
 
+#### Prometheus Metrics Endpoint
+
+In addition to OpenTelemetry metrics, Valet can expose a Prometheus-compatible `/metrics` endpoint for direct scraping:
+
+**Configuration:**
+```yaml
+telemetry:
+  enabled: true
+  metrics:
+    enabled: true
+    port: 9090      # Metrics server port
+    path: /metrics  # Metrics endpoint path
+```
+
+**Available Prometheus Metrics:**
+
+- **Helm Cache Metrics** (`valet_helm_cache_*`):
+  - `hits_total`, `misses_total`, `evictions_total` - Cache operation counters
+  - `size_bytes`, `entries` - Current cache state gauges
+  - `hit_rate` - Cache effectiveness percentage
+
+- **Metadata Cache Metrics** (`valet_helm_metadata_cache_*`):
+  - Separate tracking for schema existence checks
+  - Similar metrics as main cache for performance analysis
+
+- **Command Metrics** (`valet_command_*`):
+  - `executions_total{command="..."}` - Execution count by command
+  - `duration_seconds{command="..."}` - Command duration histogram
+  - `errors_total{command="..."}` - Error count by command
+
+- **Schema Metrics** (`valet_schema_*`):
+  - `generations_total`, `generation_errors_total` - Generation counters
+  - `fields` - Field count distribution histogram
+  - `generation_duration_seconds` - Generation time histogram
+
+- **File Operation Metrics** (`valet_file_*`):
+  - `reads_total`, `writes_total` - Operation counters
+  - `read_errors_total`, `write_errors_total` - Error counters
+  - `size_bytes` - File size distribution histogram
+
+See `examples/helm-config-with-metrics.yaml` for a complete configuration example.
+
 #### Structured Logging
 
 Valet uses [Uber's zap](https://github.com/uber-go/zap) for high-performance structured logging:
@@ -834,6 +903,10 @@ Test structure:
 - Tests either embed `ValetTestSuite` directly or use specialized suites that embed it
 - Specialized test suites (e.g., `HelmTestSuite`, `ConfigValidationTestSuite`) provide domain-specific test helpers
 - Tests follow testify/suite patterns for better organization and reusability
+
+#### Known Test Environment Considerations
+
+- **Logger Sync**: The telemetry package includes special handling for logger sync errors that commonly occur in test environments when stdout/stderr are redirected or closed. These harmless errors are automatically filtered out to prevent spurious test failures.
 
 The project maintains high test coverage standards:
 

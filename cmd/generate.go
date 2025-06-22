@@ -11,6 +11,7 @@ import (
 
 	"github.com/mkm29/valet/internal/helm"
 	"github.com/mkm29/valet/internal/telemetry"
+	"github.com/mkm29/valet/internal/utils"
 	"github.com/spf13/cobra"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -88,7 +89,7 @@ func generateInternalWithApp(ctx context.Context, app *App, tel *telemetry.Telem
 	ctx, loadSpan := tel.StartSpan(ctx, "load.values_yaml",
 		trace.WithAttributes(attribute.String("file", valuesPath)),
 	)
-	yaml1, err := loadYAML(valuesPath)
+	yaml1, err := utils.LoadYAML(valuesPath)
 	loadSpan.End()
 	if err != nil {
 		telemetry.RecordError(ctx, err)
@@ -114,7 +115,7 @@ func generateInternalWithApp(ctx context.Context, app *App, tel *telemetry.Telem
 		ctx, overrideSpan := tel.StartSpan(ctx, "load.overrides_yaml",
 			trace.WithAttributes(attribute.String("file", overridesPath)),
 		)
-		yaml2, err := loadYAML(overridesPath)
+		yaml2, err := utils.LoadYAML(overridesPath)
 		overrideSpan.End()
 		if err != nil {
 			telemetry.RecordError(ctx, err)
@@ -123,7 +124,7 @@ func generateInternalWithApp(ctx context.Context, app *App, tel *telemetry.Telem
 
 		// Merge with tracing
 		_, mergeSpan := tel.StartSpan(ctx, "merge.yaml_files")
-		merged = deepMerge(yaml1, yaml2)
+		merged = utils.DeepMerge(yaml1, yaml2)
 		mergeSpan.End()
 	} else {
 		merged = yaml1
@@ -141,7 +142,7 @@ func generateInternalWithApp(ctx context.Context, app *App, tel *telemetry.Telem
 
 	// Record schema generation metrics
 	if schemaMetrics, metricsErr := tel.NewSchemaGenerationMetrics(); metricsErr == nil {
-		fieldCount := countSchemaFields(schema)
+		fieldCount := utils.CountSchemaFields(schema)
 		schemaMetrics.RecordSchemaGeneration(ctx, int64(fieldCount), time.Since(schemaStart), nil)
 	}
 
@@ -223,13 +224,13 @@ func inferSchema(app *App, val, defaultVal any) map[string]any {
 	case []any:
 		return inferArraySchema(app, v, defaultVal)
 	case bool:
-		return inferBooleanSchema(v)
+		return utils.InferBooleanSchema(v)
 	case int, int64:
-		return inferIntegerSchema(v)
+		return utils.InferIntegerSchema(v)
 	case float64:
-		return inferNumberSchema(v)
+		return utils.InferNumberSchema(v)
 	case string:
-		return inferStringSchema(v)
+		return utils.InferStringSchema(v)
 	default:
 		return inferUnknownTypeSchemaWithApp(app, v, defaultVal)
 	}
@@ -243,7 +244,7 @@ func inferObjectSchemaWithApp(app *App, v map[string]any, defaultVal any) map[st
 	props := generateObjectPropertiesWithApp(app, v, defMap)
 
 	// Build defaults
-	defaults := buildObjectDefaults(v)
+	defaults := utils.BuildObjectDefaults(v)
 
 	// Create base schema
 	schema := map[string]any{
@@ -292,12 +293,12 @@ func determineRequiredFieldsWithApp(app *App, v, defMap map[string]any) []string
 // shouldFieldBeRequiredWithApp checks if a field should be required with dependency injection
 func shouldFieldBeRequiredWithApp(app *App, fieldName string, fieldValue, defaultValue any, parentObject map[string]any) bool {
 	// Check if default is nil or null string
-	if isNullValue(defaultValue) {
+	if utils.IsNullValue(defaultValue) {
 		return false
 	}
 
 	// Check for empty values
-	if isEmptyValue(defaultValue) {
+	if utils.IsEmptyValue(defaultValue) {
 		isDebug := app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel
 		if isDebug && app.Logger != nil {
 			app.Logger.Debug("Skipping field because it has an empty default value",
@@ -308,12 +309,12 @@ func shouldFieldBeRequiredWithApp(app *App, fieldName string, fieldValue, defaul
 	}
 
 	// Check if this is a component that can be enabled/disabled
-	if isDisabledComponent(fieldValue) {
+	if utils.IsDisabledComponent(fieldValue) {
 		return false
 	}
 
 	// Check if parent component is disabled
-	if isChildOfDisabledComponent(parentObject) {
+	if utils.IsChildOfDisabledComponent(parentObject) {
 		return false
 	}
 
@@ -326,7 +327,7 @@ func inferUnknownTypeSchemaWithApp(app *App, v any, defaultVal any) map[string]a
 
 	// Handle nil values
 	if !rv.IsValid() || (rv.Kind() == reflect.Ptr && rv.IsNil()) {
-		return inferNullSchema()
+		return utils.InferNullSchema()
 	}
 
 	// Get the underlying value if it's a pointer
@@ -340,15 +341,15 @@ func inferUnknownTypeSchemaWithApp(app *App, v any, defaultVal any) map[string]a
 	case reflect.Slice, reflect.Array:
 		return inferReflectedArraySchemaWithApp(app, rv, defaultVal)
 	case reflect.Bool:
-		return inferBooleanSchema(rv.Bool())
+		return utils.InferBooleanSchema(rv.Bool())
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return inferIntegerSchema(rv.Int())
+		return utils.InferIntegerSchema(rv.Int())
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return inferIntegerSchema(rv.Uint())
+		return utils.InferIntegerSchema(rv.Uint())
 	case reflect.Float32, reflect.Float64:
-		return inferReflectedFloatSchema(rv.Float())
+		return utils.InferReflectedFloatSchema(rv.Float())
 	case reflect.String:
-		return inferStringSchema(rv.String())
+		return utils.InferStringSchema(rv.String())
 	default:
 		// Fall back to string representation for other types
 		return map[string]any{
@@ -459,7 +460,7 @@ func processPropertiesWithApp(app *App, schema map[string]any, defaults map[stri
 		defVal, hasDef := defaults[fieldName]
 
 		// If the default value is empty, don't include it in required
-		if hasDef && isEmptyValue(defVal) {
+		if hasDef && utils.IsEmptyValue(defVal) {
 			isDebug := app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel
 			if isDebug && app.Logger != nil {
 				app.Logger.Debug("Post-processing: Removing field from required list because it has an empty default value",
@@ -484,7 +485,7 @@ func processPropertiesWithApp(app *App, schema map[string]any, defaults map[stri
 			}
 
 			// Also check if the component has a nil value by default
-			if isEmptyValue(propObj) {
+			if utils.IsEmptyValue(propObj) {
 				isDebug := app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel
 				if isDebug && app.Logger != nil {
 					app.Logger.Debug("Post-processing: Removing field from required list because it has a nil default value",
@@ -550,7 +551,7 @@ You can generate a schema from either:
 // generateCmdRunWithApp is the main execution function with dependency injection
 func generateCmdRunWithApp(cmd *cobra.Command, args []string, app *App) error {
 	// Get context directory if provided
-	ctx := getContextDirectory(args)
+	ctx := utils.GetContextDirectory(args)
 
 	// Parse command configuration
 	cmdConfig, err := parseGenerateCommandConfigWithApp(cmd, ctx, app)

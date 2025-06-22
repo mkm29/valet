@@ -52,11 +52,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Improved validation error messages with examples and current state
   - Better guidance for authentication configuration conflicts
   - Clear instructions when charts don't contain schema files
+- **Prometheus metrics exposure for monitoring**:
+  - Added `/metrics` endpoint with comprehensive Prometheus metrics
+  - Helm cache statistics: hits, misses, evictions, size, entry count, hit rates
+  - Metadata cache statistics: separate tracking for metadata cache performance
+  - Command execution metrics: count, duration, and errors by command
+  - Schema generation metrics: count, field count distribution, generation time
+  - File operation metrics: reads, writes, errors, and file size distribution
+  - Configurable metrics server: port, path, and enable/disable via configuration
+  - Real-time cache statistics updates with LRU tracking
+  - Example configuration in `examples/helm-config-with-metrics.yaml`
+- **Utils package for centralized utility functions**:
+  - Created `internal/utils` package to consolidate all helper functions
+  - `reflection.go`: Reflection utilities for extracting struct fields by name and checking empty values
+  - `schema.go`: Schema-related utilities for building defaults, checking null values and disabled components
+  - `yaml.go`: YAML processing utilities including deep merge and type conversion functions
+  - `string.go`: String utilities for masking sensitive data, sanitizing paths, and formatting bytes
+  - Improves code organization and reusability across the codebase
 
 ### Changed
 
 - Updated documentation to reflect removal of backward compatibility code
 - Refactored logger initialization logic from `cmd/root.go` to `cmd/app.go`
+- **Removed wrapper functions**: All wrapper functions that were calling utils package functions have been removed
+  - Direct calls to `utils` package functions are now used throughout the codebase
+  - Affected packages: `cmd`, `internal/config`, `internal/helm`, `internal/telemetry`
+  - This improves code clarity and reduces unnecessary indirection
+- **Moved schema inference functions to utils package**: 
+  - Moved `inferBooleanSchema`, `inferIntegerSchema`, `inferNumberSchema`, `inferStringSchema`, `inferNullSchema`, and `inferReflectedFloatSchema` from `cmd/schema_helpers.go` to `internal/utils/schema.go`
+  - Functions are now exported with capitalized names (e.g., `InferBooleanSchema`)
+  - All calls updated to use `utils.InferXxxSchema()` pattern
+  - Improves code organization by consolidating schema-related utilities
   - Moved `initializeLogger` function to `App.InitializeLogger()` method
   - Improved separation of concerns by centralizing dependency initialization in the App struct
   - Logger creation logic now uses private `createLogger` helper function
@@ -93,6 +119,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Specialized test suites (e.g., `HelmTestSuite`, `ConfigValidationTestSuite`) embed `ValetTestSuite`
   - Maintains consistent test patterns and improved test organization
   - Fixed compilation issues after migration and updated function calls to new APIs
+- **Refactored utility functions into centralized utils package**:
+  - Moved all helper functions from various packages to `internal/utils`
+  - Functions in original locations now act as wrappers to maintain backward compatibility
+  - Affected packages: `cmd`, `internal/config`, `internal/helm`, `internal/telemetry`
+  - Improves code maintainability by following DRY principle
+  - Makes utility functions easier to test and reuse
 
 ### Removed
 
@@ -111,6 +143,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Build errors caused by undefined `inferSchema` function - updated to use `inferSchema` 
 - Build errors from undefined `globalApp` variable after removing backward compatibility code
 - Updated `inferArraySchema` to accept `app` parameter for proper dependency injection
+- **Logger sync error in test environments**: Fixed "sync /dev/stdout: bad file descriptor" error
+  - Added `isIgnorableSyncError` function to filter out harmless sync errors
+  - Ignores errors related to stdout/stderr file descriptors common in test environments
+  - Checks for specific error messages and syscall errors (EBADF, EINVAL)
+  - Tests now run without spurious logger sync errors
 
 ### Security
 

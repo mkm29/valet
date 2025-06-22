@@ -6,17 +6,10 @@ import (
 	"os"
 	"strings"
 
+	"github.com/mkm29/valet/internal/utils"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/yaml.v2"
 )
-
-// maskString returns a masked representation for logging
-func maskString(value, whenPresent, whenEmpty string) string {
-	if value != "" {
-		return whenPresent
-	}
-	return whenEmpty
-}
 
 // Config holds the configuration for the application
 type Config struct {
@@ -78,6 +71,24 @@ type TelemetryConfig struct {
 	Headers map[string]string `yaml:"headers"`
 	// SampleRate is the trace sampling rate (0.0 to 1.0)
 	SampleRate float64 `yaml:"sampleRate"`
+	// Metrics configuration for Prometheus metrics endpoint
+	Metrics *MetricsConfig `yaml:"metrics,omitempty"`
+}
+
+// MetricsConfig holds configuration for the metrics server
+type MetricsConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	Port    int    `yaml:"port"`
+	Path    string `yaml:"path"`
+}
+
+// NewMetricsConfig returns the default metrics configuration
+func NewMetricsConfig() *MetricsConfig {
+	return &MetricsConfig{
+		Enabled: false,
+		Port:    9090,
+		Path:    "/metrics",
+	}
 }
 
 // NewTelemetryConfig returns the default telemetry configuration
@@ -91,6 +102,7 @@ func NewTelemetryConfig() *TelemetryConfig {
 		Insecure:       true,
 		Headers:        make(map[string]string),
 		SampleRate:     1.0,
+		Metrics:        NewMetricsConfig(),
 	}
 }
 
@@ -304,8 +316,8 @@ func (a *HelmAuth) Validate() error {
 		// Username and password must be provided together
 		if a.Username == "" || a.Password == "" {
 			return fmt.Errorf("both username and password must be provided for basic auth.\nCurrent state: username=%s, password=%s",
-				maskString(a.Username, "provided", "missing"),
-				maskString(a.Password, "provided", "missing"))
+				utils.MaskString(a.Username, "provided", "missing"),
+				utils.MaskString(a.Password, "provided", "missing"))
 		}
 	}
 	if a.Token != "" {
@@ -314,8 +326,8 @@ func (a *HelmAuth) Validate() error {
 
 	if authMethods > 1 {
 		return fmt.Errorf("only one authentication method can be used at a time.\nFound multiple methods:\n- Basic auth: %s\n- Token auth: %s\nPlease use either username/password OR token, not both",
-			maskString(a.Username, "configured", "not configured"),
-			maskString(a.Token, "configured", "not configured"))
+			utils.MaskString(a.Username, "configured", "not configured"),
+			utils.MaskString(a.Token, "configured", "not configured"))
 	}
 
 	return nil
@@ -484,6 +496,10 @@ func LoadConfig(path string) (*Config, error) {
 	// Ensure telemetry config is not nil
 	if cfg.Telemetry == nil {
 		cfg.Telemetry = NewTelemetryConfig()
+	}
+	// Ensure metrics config is not nil
+	if cfg.Telemetry.Metrics == nil {
+		cfg.Telemetry.Metrics = NewMetricsConfig()
 	}
 
 	// Apply defaults to Helm configuration if present
