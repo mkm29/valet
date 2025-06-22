@@ -155,45 +155,240 @@ func (h *HelmConfig) Validate() error {
 		return nil // Helm config is optional
 	}
 
-	if h.Chart.Name == "" {
+	return h.Chart.Validate()
+}
+
+// Validate validates the HelmChart configuration
+func (c *HelmChart) Validate() error {
+	if c == nil {
+		return fmt.Errorf("helm chart configuration is nil")
+	}
+
+	// Validate chart name
+	if c.Name == "" {
 		return fmt.Errorf("helm chart name is required")
 	}
-	// Validate chart name (no path traversal)
-	if strings.Contains(h.Chart.Name, "..") || strings.Contains(h.Chart.Name, "/") {
-		return fmt.Errorf("invalid chart name: contains invalid characters")
+	if err := validateChartName(c.Name); err != nil {
+		return fmt.Errorf("invalid chart name: %w", err)
 	}
-	if h.Chart.Version == "" {
+
+	// Validate chart version
+	if c.Version == "" {
 		return fmt.Errorf("helm chart version is required")
 	}
+	if err := validateChartVersion(c.Version); err != nil {
+		return fmt.Errorf("invalid chart version: %w", err)
+	}
 
-	if h.Chart.Registry == nil {
+	// Validate registry
+	if c.Registry == nil {
 		return fmt.Errorf("helm registry configuration is required")
 	}
-
-	if h.Chart.Registry.URL == "" {
-		return fmt.Errorf("helm registry URL is required")
+	if err := c.Registry.Validate(); err != nil {
+		return fmt.Errorf("invalid registry configuration: %w", err)
 	}
+
+	return nil
+}
+
+// Validate validates the HelmRegistry configuration
+func (r *HelmRegistry) Validate() error {
+	if r == nil {
+		return fmt.Errorf("registry configuration is nil")
+	}
+
 	// Validate URL
-	if _, err := url.Parse(h.Chart.Registry.URL); err != nil {
-		return fmt.Errorf("invalid registry URL: %w", err)
+	if r.URL == "" {
+		return fmt.Errorf("registry URL is required")
+	}
+	parsedURL, err := url.Parse(r.URL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
 	}
 
 	// Validate registry type
 	validTypes := map[string]bool{"HTTP": true, "HTTPS": true, "OCI": true}
-	if !validTypes[h.Chart.Registry.Type] {
-		return fmt.Errorf("invalid registry type: %s (must be HTTP, HTTPS, or OCI)", h.Chart.Registry.Type)
+	if !validTypes[r.Type] {
+		return fmt.Errorf("invalid registry type: %s (must be HTTP, HTTPS, or OCI)", r.Type)
+	}
+
+	// Additional URL scheme validation based on type
+	switch r.Type {
+	case "HTTP":
+		if parsedURL.Scheme != "http" {
+			return fmt.Errorf("HTTP registry type requires http:// URL scheme")
+		}
+	case "HTTPS":
+		if parsedURL.Scheme != "https" {
+			return fmt.Errorf("HTTPS registry type requires https:// URL scheme")
+		}
+	case "OCI":
+		if parsedURL.Scheme != "oci" && parsedURL.Scheme != "https" {
+			return fmt.Errorf("OCI registry type requires oci:// or https:// URL scheme")
+		}
+	}
+
+	// Validate insecure flag consistency
+	if r.Type == "HTTPS" && r.Insecure && r.TLS != nil && !r.TLS.InsecureSkipTLSVerify {
+		return fmt.Errorf("conflicting TLS settings: insecure is true but InsecureSkipTLSVerify is false")
+	}
+
+	// Validate auth configuration
+	if r.Auth != nil {
+		if err := r.Auth.Validate(); err != nil {
+			return fmt.Errorf("invalid auth configuration: %w", err)
+		}
 	}
 
 	// Validate TLS configuration
-	if h.Chart.Registry.TLS != nil {
-		// If cert file is provided, key file must also be provided
-		if (h.Chart.Registry.TLS.CertFile != "" && h.Chart.Registry.TLS.KeyFile == "") ||
-			(h.Chart.Registry.TLS.CertFile == "" && h.Chart.Registry.TLS.KeyFile != "") {
-			return fmt.Errorf("both cert file and key file must be provided for client TLS")
+	if r.TLS != nil {
+		if err := r.TLS.Validate(); err != nil {
+			return fmt.Errorf("invalid TLS configuration: %w", err)
 		}
 	}
 
 	return nil
+}
+
+// Validate validates the HelmAuth configuration
+func (a *HelmAuth) Validate() error {
+	if a == nil {
+		return nil // Auth is optional
+	}
+
+	// Check for conflicting auth methods
+	authMethods := 0
+	if a.Username != "" || a.Password != "" {
+		authMethods++
+		// Username and password must be provided together
+		if a.Username == "" || a.Password == "" {
+			return fmt.Errorf("both username and password must be provided for basic auth")
+		}
+	}
+	if a.Token != "" {
+		authMethods++
+	}
+
+	if authMethods > 1 {
+		return fmt.Errorf("only one authentication method can be used at a time")
+	}
+
+	return nil
+}
+
+// Validate validates the HelmTLS configuration
+func (t *HelmTLS) Validate() error {
+	if t == nil {
+		return nil // TLS is optional
+	}
+
+	// If cert file is provided, key file must also be provided
+	if (t.CertFile != "" && t.KeyFile == "") || (t.CertFile == "" && t.KeyFile != "") {
+		return fmt.Errorf("both cert file and key file must be provided for client TLS")
+	}
+
+	// Validate file paths exist if provided
+	if t.CertFile != "" {
+		if _, err := os.Stat(t.CertFile); err != nil {
+			return fmt.Errorf("cert file not found: %w", err)
+		}
+	}
+	if t.KeyFile != "" {
+		if _, err := os.Stat(t.KeyFile); err != nil {
+			return fmt.Errorf("key file not found: %w", err)
+		}
+	}
+	if t.CaFile != "" {
+		if _, err := os.Stat(t.CaFile); err != nil {
+			return fmt.Errorf("CA file not found: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// validateChartName validates a Helm chart name
+func validateChartName(name string) error {
+	if name == "" {
+		return fmt.Errorf("name cannot be empty")
+	}
+
+	// Check for path traversal attempts
+	if strings.Contains(name, "..") {
+		return fmt.Errorf("name contains path traversal")
+	}
+
+	// Check for absolute paths
+	if strings.HasPrefix(name, "/") || strings.HasPrefix(name, "\\") {
+		return fmt.Errorf("name cannot be an absolute path")
+	}
+
+	// Check for invalid characters
+	invalidChars := []string{"\\", ":", "*", "?", "\"", "<", ">", "|", "\n", "\r", "\t"}
+	for _, char := range invalidChars {
+		if strings.Contains(name, char) {
+			return fmt.Errorf("name contains invalid character: %s", char)
+		}
+	}
+
+	// Check length
+	if len(name) > 255 {
+		return fmt.Errorf("name is too long (max 255 characters)")
+	}
+
+	return nil
+}
+
+// validateChartVersion validates a Helm chart version
+func validateChartVersion(version string) error {
+	if version == "" {
+		return fmt.Errorf("version cannot be empty")
+	}
+
+	// Check for invalid characters that could be used for injection
+	invalidChars := []string{";", "&", "|", "$", "`", "(", ")", "{", "}", "[", "]", "<", ">", "\n", "\r", "\t"}
+	for _, char := range invalidChars {
+		if strings.Contains(version, char) {
+			return fmt.Errorf("version contains invalid character: %s", char)
+		}
+	}
+
+	// Check length
+	if len(version) > 128 {
+		return fmt.Errorf("version is too long (max 128 characters)")
+	}
+
+	// Basic semver pattern check (simplified)
+	// This allows for versions like: 1.2.3, v1.2.3, 1.2.3-alpha, 1.2.3+build
+	if !isValidVersion(version) {
+		return fmt.Errorf("version does not appear to be a valid semantic version")
+	}
+
+	return nil
+}
+
+// isValidVersion performs a basic check if a version string looks valid
+func isValidVersion(version string) bool {
+	// Remove common prefixes
+	v := strings.TrimPrefix(version, "v")
+	v = strings.TrimPrefix(v, "V")
+
+	// Very basic check - should start with a digit
+	if len(v) == 0 || !isDigit(v[0]) {
+		return false
+	}
+
+	// Should not have spaces
+	if strings.Contains(v, " ") {
+		return false
+	}
+
+	return true
+}
+
+// isDigit checks if a byte is a digit
+func isDigit(b byte) bool {
+	return b >= '0' && b <= '9'
 }
 
 // LoadConfig reads configuration from a YAML file (if it exists).
@@ -235,6 +430,16 @@ func LoadConfig(path string) (*Config, error) {
 				cfg.Helm.Chart.Registry.TLS = NewHelmTLS()
 			}
 		}
+
+		// Validate Helm configuration
+		if err := cfg.Helm.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid helm configuration: %w", err)
+		}
+	}
+
+	// Validate telemetry configuration
+	if err := cfg.Telemetry.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid telemetry configuration: %w", err)
 	}
 
 	return cfg, nil

@@ -239,65 +239,90 @@ func (h *Helm) loadChart(c *config.HelmChart) (*chart.Chart, error) {
 	return chart, nil
 }
 
-// HasSchema checks if a chart has a values.schema.json file
-func (h *Helm) HasSchema(c *config.HelmChart) (bool, error) {
+// getSchemaFile retrieves the values.schema.json file from the chart if it exists.
+// This method is the single source of truth for finding schema files in charts,
+// eliminating duplication between HasSchema and DownloadSchema methods.
+// Returns nil if the schema file doesn't exist (not an error condition).
+func (h *Helm) getSchemaFile(c *config.HelmChart) (*chart.File, error) {
 	// Load the chart using caching logic
 	chart, err := h.getOrLoadChart(c)
 	if err != nil {
-		return false, err
+		return nil, fmt.Errorf("error loading chart: %w", err)
 	}
 
-	// Check if the chart has a values.schema.json file
+	// Find the values.schema.json file
 	for _, file := range chart.Raw {
 		if h.debug {
 			h.logger.Debug("Checking file", zap.String("file", file.Name))
 		}
 		if file.Name == "values.schema.json" {
 			if h.debug {
-				h.logger.Debug("Chart has values.schema.json")
+				h.logger.Debug("Found values.schema.json in chart")
 			}
-			return true, nil
+			return file, nil
 		}
 	}
 
 	if h.debug {
 		h.logger.Debug("Chart does not have values.schema.json")
 	}
-	return false, nil
+	return nil, nil
+}
+
+// HasSchema checks if a chart has a values.schema.json file
+func (h *Helm) HasSchema(c *config.HelmChart) (bool, error) {
+	file, err := h.getSchemaFile(c)
+	if err != nil {
+		return false, err
+	}
+	return file != nil, nil
+}
+
+// GetSchemaBytes retrieves the values.schema.json file content as bytes
+func (h *Helm) GetSchemaBytes(c *config.HelmChart) ([]byte, error) {
+	file, err := h.getSchemaFile(c)
+	if err != nil {
+		return nil, err
+	}
+
+	if file == nil {
+		return nil, fmt.Errorf("values.schema.json not found in chart")
+	}
+
+	return file.Data, nil
 }
 
 // DownloadSchema retrieves the values.schema.json file from the chart and saves to temporary file
 func (h *Helm) DownloadSchema(c *config.HelmChart) (string, error) {
-	// Load the chart using caching logic
-	chart, err := h.getOrLoadChart(c)
+	file, err := h.getSchemaFile(c)
 	if err != nil {
-		return "", fmt.Errorf("error loading chart: %w", err)
+		return "", err
 	}
 
-	for _, file := range chart.Raw {
-		if file.Name == "values.schema.json" {
-			if h.debug {
-				h.logger.Debug("Found values.schema.json in chart")
-			}
-			// write the schema to a temporary file
-			tmp, err := os.CreateTemp("", "values.schema.json")
-			if err != nil {
-				return "", fmt.Errorf("failed to create temporary file: %w", err)
-			}
-			defer tmp.Close()
-			if _, err := tmp.Write(file.Data); err != nil {
-				return "", fmt.Errorf("failed to write to temporary file: %w", err)
-			}
-			if h.debug {
-				h.logger.Debug("Schema saved to temporary file", zap.String("path", tmp.Name()))
-			}
-			// return the path to the temporary file
-			// or return the schema as a string
-			return tmp.Name(), nil
-		}
+	if file == nil {
+		return "", fmt.Errorf("values.schema.json not found in chart")
 	}
 
-	return "", fmt.Errorf("values.schema.json not found in chart")
+	// Write the schema to a temporary file
+	tmp, err := os.CreateTemp("", "values.schema.json")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temporary file: %w", err)
+	}
+	defer tmp.Close()
+	// change permissions on the temporary file
+	if err := os.Chmod(tmp.Name(), 0600); err != nil {
+		return "", fmt.Errorf("failed to set permissions on temporary file: %w", err)
+	}
+
+	if _, err := tmp.Write(file.Data); err != nil {
+		return "", fmt.Errorf("failed to write to temporary file: %w", err)
+	}
+
+	if h.debug {
+		h.logger.Debug("Schema saved to temporary file", zap.String("path", tmp.Name()))
+	}
+
+	return tmp.Name(), nil
 }
 
 // formatBytes converts bytes to human-readable format
