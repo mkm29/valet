@@ -53,7 +53,7 @@ func NewRootCmdWithApp(app *App) *cobra.Command {
 
 			// Log config if debug is enabled
 			if app.Config.Debug {
-				logDebugConfiguration(app.Config)
+				logDebugConfiguration(app.Logger, app.Config)
 			}
 
 			// Initialize telemetry if enabled
@@ -135,11 +135,11 @@ func initializeLogger(debug bool) (*zap.Logger, error) {
 }
 
 // logDebugConfiguration logs the configuration in debug mode
-func logDebugConfiguration(cfg *config.Config) {
+func logDebugConfiguration(logger *zap.Logger, cfg *config.Config) {
 	// Pretty print configuration to stdout as JSON
 	configJSON, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
-		zap.L().Error("Failed to marshal config", zap.Error(err))
+		logger.Error("Failed to marshal config", zap.Error(err))
 	} else {
 		fmt.Println("=== Configuration ===")
 		fmt.Println(string(configJSON))
@@ -148,7 +148,7 @@ func logDebugConfiguration(cfg *config.Config) {
 
 	// Also log with structured fields for debugging
 	fields := buildConfigFields(cfg)
-	zap.L().Debug("Configuration loaded", fields...)
+	logger.Debug("Configuration loaded", fields...)
 }
 
 // buildConfigFields builds zap fields from config
@@ -185,6 +185,18 @@ func buildConfigFields(cfg *config.Config) []zap.Field {
 				zap.String("helm.chart.registry.type", cfg.Helm.Chart.Registry.Type),
 				zap.Bool("helm.chart.registry.insecure", cfg.Helm.Chart.Registry.Insecure),
 			)
+			if cfg.Helm.Chart.Registry.Auth != nil {
+				auth := cfg.Helm.Chart.Registry.Auth
+				maskedUsername := auth.Username
+				maskedPassword := "[REDACTED]"
+				if auth.Password != "" {
+					maskedPassword = "[REDACTED]"
+				}
+				fields = append(fields,
+					zap.String("helm.registry.auth.username", maskedUsername),
+					zap.String("helm.registry.auth.password", maskedPassword),
+				)
+			}
 		}
 	}
 

@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v2"
 )
@@ -156,6 +158,10 @@ func (h *HelmConfig) Validate() error {
 	if h.Chart.Name == "" {
 		return fmt.Errorf("helm chart name is required")
 	}
+	// Validate chart name (no path traversal)
+	if strings.Contains(h.Chart.Name, "..") || strings.Contains(h.Chart.Name, "/") {
+		return fmt.Errorf("invalid chart name: contains invalid characters")
+	}
 	if h.Chart.Version == "" {
 		return fmt.Errorf("helm chart version is required")
 	}
@@ -166,6 +172,10 @@ func (h *HelmConfig) Validate() error {
 
 	if h.Chart.Registry.URL == "" {
 		return fmt.Errorf("helm registry URL is required")
+	}
+	// Validate URL
+	if _, err := url.Parse(h.Chart.Registry.URL); err != nil {
+		return fmt.Errorf("invalid registry URL: %w", err)
 	}
 
 	// Validate registry type

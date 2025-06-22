@@ -11,10 +11,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Security section in README documenting sensitive information handling
 - Automatic redaction of sensitive credentials in debug output
+- **Chart caching in helm package**: Remote charts are now cached in memory to avoid redundant downloads
+  - Thread-safe implementation using read-write locks
+  - Cache key includes registry URL, chart name, and version
+  - Both `HasSchema` and `DownloadSchema` now benefit from caching
+  - Debug logging shows cache hits and misses
+  - Significantly improves performance when working with the same chart multiple times
+- **Size limits for chart downloads**: Charts exceeding the configured size limit are rejected before loading
+  - Default limit is 1MB (matching etcd's limit)
+  - Configurable via `MaxChartSize` option in `HelmOptions`
+  - Size check happens after download but before loading into memory
+  - Human-readable size formatting in error messages and debug logs
+  - Total cache size tracking for monitoring memory usage
 
 ### Changed
 
 - Updated documentation to reflect removal of backward compatibility code
+- `Helm` struct now includes a `cache` field for storing downloaded charts and `maxChartSize` field for size limits
+- `HasSchema` and `DownloadSchema` methods now use `getOrLoadChart` instead of `loadChart` directly
+- `HelmOptions` now includes `MaxChartSize` field for configuring the maximum allowed chart size
+- Debug logging enhanced with chart size information and total cache size tracking
 
 ### Removed
 

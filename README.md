@@ -165,20 +165,25 @@ Valet follows Go best practices with well-structured packages using a consistent
   - `HasSchema`: Checks if a remote chart contains values.schema.json
   - `DownloadSchema`: Downloads and saves the schema file
   - `loadChart`: Private method that centralizes chart loading logic
+  - `getOrLoadChart`: Private method that implements chart caching
 - Features:
   - Support for HTTP, HTTPS, and OCI registries
   - Authentication support (basic auth, token)
   - TLS configuration options
-  - Comprehensive debug logging
+  - **Chart caching**: Downloaded charts are cached in memory to avoid redundant network calls
+  - **Size limits**: Charts exceeding the configured size limit (default 1MB) are rejected to prevent memory issues
+  - Thread-safe concurrent access with read-write locks
+  - Comprehensive debug logging including cache hit/miss and size information
 - Example usage:
   ```go
-  // Using options pattern
+  // Using options pattern with custom size limit
   h := helm.NewHelm(helm.HelmOptions{
-      Debug:  true,
-      Logger: customLogger, // optional
+      Debug:        true,
+      Logger:       customLogger,    // optional
+      MaxChartSize: 5 * 1024 * 1024, // 5MB limit (default is 1MB)
   })
   
-  // Check and download schema
+  // Check and download schema (uses cache automatically)
   if hasSchema, err := h.HasSchema(chartConfig); hasSchema {
       schemaPath, err := h.DownloadSchema(chartConfig)
   }
@@ -842,12 +847,12 @@ Our development roadmap reflects our commitment to making Valet the most powerfu
 ### 🚧 In Progress
 
 - [ ] **Remote Chart Support** - Work with charts from any registry
-  - [ ] Authentication to private Helm registries
-  - [ ] Retrieve values.yaml from remote charts (HTTP/HTTPS)
-  - [ ] Support for OCI registry authentication and retrieval
-  - [ ] Generate schemas directly from remote charts
+  - [x] Authentication to private Helm registries
+  - [x] Retrieve values.yaml from remote charts (HTTP/HTTPS)
+  - [x] Support for OCI registry authentication and retrieval
+  - [x] Generate schemas directly from remote charts
   - [ ] Validate local values against remote chart schemas
-  - [ ] Cache remote charts for offline use
+  - [x] Cache remote charts for offline use
 
 ### 📋 Planned Features
 

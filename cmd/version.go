@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-
 // NewVersionCmdWithApp creates version command with dependency injection
 func NewVersionCmdWithApp(app *App) *cobra.Command {
 	cmd := &cobra.Command{
@@ -24,4 +23,3 @@ func NewVersionCmdWithApp(app *App) *cobra.Command {
 	}
 	return cmd
 }
-

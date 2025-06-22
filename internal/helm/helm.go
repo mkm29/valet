@@ -5,6 +5,7 @@ package helm
 import (
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/mkm29/valet/internal/config"
 	"go.uber.org/zap"
@@ -17,18 +18,29 @@ const (
 	RegistryTypeHTTP  = "HTTP"
 	RegistryTypeHTTPS = "HTTPS"
 	RegistryTypeOCI   = "OCI"
+
+	// DefaultMaxChartSize is the default maximum size for charts to be cached (1MB, matching etcd limit)
+	DefaultMaxChartSize = 1 * 1024 * 1024 // 1MB in bytes
 )
 
 // Helm provides functionality for working with Helm charts
 type Helm struct {
-	logger *zap.Logger
-	debug  bool
+	logger       *zap.Logger
+	debug        bool
+	cache        *chartCache
+	maxChartSize int64
 }
 
 // HelmOptions configures a Helm instance
 type HelmOptions struct {
-	Debug  bool
-	Logger *zap.Logger
+	Debug        bool
+	Logger       *zap.Logger
+	MaxChartSize int64 // Maximum size in bytes for charts to be cached (0 = use default)
+}
+
+type chartCache struct {
+	mu     sync.RWMutex
+	charts map[string]*chart.Chart
 }
 
 // NewHelm creates a new Helm instance with options
@@ -38,9 +50,18 @@ func NewHelm(opts HelmOptions) *Helm {
 		logger = zap.L().Named("helm")
 	}
 
+	maxSize := opts.MaxChartSize
+	if maxSize <= 0 {
+		maxSize = DefaultMaxChartSize
+	}
+
 	return &Helm{
-		logger: logger,
-		debug:  opts.Debug,
+		logger:       logger,
+		debug:        opts.Debug,
+		maxChartSize: maxSize,
+		cache: &chartCache{
+			charts: make(map[string]*chart.Chart),
+		},
 	}
 }
 
@@ -72,6 +93,79 @@ func (h *Helm) GetOptions(c *config.HelmChart) []getter.Option {
 	return getterOpts
 }
 
+func (h *Helm) getOrLoadChart(c *config.HelmChart) (*chart.Chart, error) {
+	// Create a cache key from chart name and version
+	cacheKey := fmt.Sprintf("%s/%s@%s", c.Registry.URL, c.Name, c.Version)
+
+	// Check if chart is already in cache (read lock)
+	h.cache.mu.RLock()
+	if cachedChart, ok := h.cache.charts[cacheKey]; ok {
+		h.cache.mu.RUnlock()
+		if h.debug {
+			h.logger.Debug("Chart found in cache",
+				zap.String("name", c.Name),
+				zap.String("version", c.Version),
+				zap.String("cacheKey", cacheKey),
+			)
+		}
+		return cachedChart, nil
+	}
+	h.cache.mu.RUnlock()
+
+	// Chart not in cache, need to load it (write lock)
+	h.cache.mu.Lock()
+	defer h.cache.mu.Unlock()
+
+	// Double-check after acquiring write lock
+	if cachedChart, ok := h.cache.charts[cacheKey]; ok {
+		if h.debug {
+			h.logger.Debug("Chart found in cache after acquiring write lock",
+				zap.String("name", c.Name),
+				zap.String("version", c.Version),
+				zap.String("cacheKey", cacheKey),
+			)
+		}
+		return cachedChart, nil
+	}
+
+	// Load the chart
+	if h.debug {
+		h.logger.Debug("Loading chart from registry",
+			zap.String("name", c.Name),
+			zap.String("version", c.Version),
+			zap.String("cacheKey", cacheKey),
+		)
+	}
+
+	loadedChart, err := h.loadChart(c)
+	if err != nil {
+		return nil, err
+	}
+
+	// Store in cache
+	h.cache.charts[cacheKey] = loadedChart
+
+	// Calculate total cache size
+	var totalCacheSize int64
+	for _, cachedChart := range h.cache.charts {
+		for _, file := range cachedChart.Raw {
+			totalCacheSize += int64(len(file.Data))
+		}
+	}
+
+	if h.debug {
+		h.logger.Debug("Chart cached successfully",
+			zap.String("name", c.Name),
+			zap.String("version", c.Version),
+			zap.String("cacheKey", cacheKey),
+			zap.Int("cacheCount", len(h.cache.charts)),
+			zap.String("totalCacheSize", h.formatBytes(totalCacheSize)),
+		)
+	}
+
+	return loadedChart, nil
+}
+
 // loadChart downloads and loads a Helm chart from the specified registry
 func (h *Helm) loadChart(c *config.HelmChart) (*chart.Chart, error) {
 	url := fmt.Sprintf("%s/%s-%s.tgz", c.Registry.URL, c.Name, c.Version)
@@ -81,6 +175,7 @@ func (h *Helm) loadChart(c *config.HelmChart) (*chart.Chart, error) {
 			zap.String("name", c.Name),
 			zap.String("version", c.Version),
 			zap.String("url", url),
+			zap.Int64("maxSizeBytes", h.maxChartSize),
 		)
 	}
 
@@ -110,6 +205,23 @@ func (h *Helm) loadChart(c *config.HelmChart) (*chart.Chart, error) {
 		return nil, fmt.Errorf("failed to get chart: %w", err)
 	}
 
+	// Check the size before loading
+	chartSize := int64(provider.Len())
+	if h.debug {
+		h.logger.Debug("Chart file size",
+			zap.String("name", c.Name),
+			zap.String("version", c.Version),
+			zap.Int64("sizeBytes", chartSize),
+			zap.String("sizeHuman", h.formatBytes(chartSize)),
+		)
+	}
+
+	// Check if chart exceeds size limit
+	if chartSize > h.maxChartSize {
+		return nil, fmt.Errorf("chart size (%s) exceeds maximum allowed size (%s)",
+			h.formatBytes(chartSize), h.formatBytes(h.maxChartSize))
+	}
+
 	// Load the chart archive
 	chart, err := loader.LoadArchive(provider)
 	if err != nil {
@@ -120,6 +232,7 @@ func (h *Helm) loadChart(c *config.HelmChart) (*chart.Chart, error) {
 		h.logger.Debug("Chart loaded successfully",
 			zap.String("name", chart.Name()),
 			zap.String("version", chart.Metadata.Version),
+			zap.Int64("sizeBytes", chartSize),
 		)
 	}
 
@@ -128,8 +241,8 @@ func (h *Helm) loadChart(c *config.HelmChart) (*chart.Chart, error) {
 
 // HasSchema checks if a chart has a values.schema.json file
 func (h *Helm) HasSchema(c *config.HelmChart) (bool, error) {
-	// Load the chart using common logic
-	chart, err := h.loadChart(c)
+	// Load the chart using caching logic
+	chart, err := h.getOrLoadChart(c)
 	if err != nil {
 		return false, err
 	}
@@ -155,8 +268,8 @@ func (h *Helm) HasSchema(c *config.HelmChart) (bool, error) {
 
 // DownloadSchema retrieves the values.schema.json file from the chart and saves to temporary file
 func (h *Helm) DownloadSchema(c *config.HelmChart) (string, error) {
-	// Load the chart using common logic
-	chart, err := h.loadChart(c)
+	// Load the chart using caching logic
+	chart, err := h.getOrLoadChart(c)
 	if err != nil {
 		return "", fmt.Errorf("error loading chart: %w", err)
 	}
@@ -185,4 +298,18 @@ func (h *Helm) DownloadSchema(c *config.HelmChart) (string, error) {
 	}
 
 	return "", fmt.Errorf("values.schema.json not found in chart")
+}
+
+// formatBytes converts bytes to human-readable format
+func (h *Helm) formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
