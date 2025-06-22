@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/mkm29/valet/internal/config"
+	"go.uber.org/zap/zapcore"
 )
 
 func (ts *ValetTestSuite) TestLoadConfig_NoFile() {
@@ -14,7 +15,7 @@ func (ts *ValetTestSuite) TestLoadConfig_NoFile() {
 	ts.Empty(cfg.Context, "expected empty Context")
 	ts.Empty(cfg.Overrides, "expected empty Overrides")
 	ts.Empty(cfg.Output, "expected empty Output")
-	ts.False(cfg.Debug, "expected Debug=false by default")
+	ts.Equal(zapcore.InfoLevel, cfg.LogLevel.Level, "expected LogLevel=info by default")
 }
 
 func (ts *ValetTestSuite) TestLoadConfig_FromFile() {
@@ -35,7 +36,7 @@ func (ts *ValetTestSuite) TestLoadConfig_FromFile() {
 	ts.Equal("foo_dir", cfg.Context, "expected Context=foo_dir")
 	ts.Equal("override.yaml", cfg.Overrides, "expected Overrides=override.yaml")
 	ts.Equal("out.json", cfg.Output, "expected Output=out.json")
-	ts.True(cfg.Debug, "expected Debug=true from config file")
+	ts.Equal(zapcore.DebugLevel, cfg.LogLevel.Level, "expected LogLevel=debug from config file")
 }
 
 // TestLoadConfig_BadYAML ensures parse errors are returned
@@ -69,7 +70,7 @@ output: config-schema.json
 	ts.NoError(err, "LoadConfig failed")
 
 	// Verify values
-	ts.True(cfg.Debug, "Debug should be true")
+	ts.Equal(zapcore.DebugLevel, cfg.LogLevel.Level, "LogLevel should be debug")
 	ts.Equal("/config/context", cfg.Context, "Context incorrect")
 	ts.Equal("config-values.yaml", cfg.Overrides, "Overrides incorrect")
 	ts.Equal("config-schema.json", cfg.Output, "Output incorrect")
@@ -91,7 +92,7 @@ debug: true
 	ts.NoError(err, "LoadConfig failed")
 
 	// Verify values
-	ts.True(cfg.Debug, "Debug should be true")
+	ts.Equal(zapcore.DebugLevel, cfg.LogLevel.Level, "LogLevel should be debug")
 	ts.Empty(cfg.Context, "Context should be empty")
 	ts.Empty(cfg.Overrides, "Overrides should be empty")
 	ts.Empty(cfg.Output, "Output should be empty")
@@ -147,6 +148,6 @@ mappings:
 	ts.NoError(err, "LoadConfig failed")
 
 	// Verify critical values
-	ts.True(cfg.Debug, "Debug should be true")
+	ts.Equal(zapcore.DebugLevel, cfg.LogLevel.Level, "LogLevel should be debug")
 	ts.Equal("/complex/context", cfg.Context, "Context incorrect")
 }

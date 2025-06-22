@@ -24,6 +24,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Size check happens after download but before loading into memory
   - Human-readable size formatting in error messages and debug logs
   - Total cache size tracking for monitoring memory usage
+- **Cache eviction policy**: Implemented LRU (Least Recently Used) eviction to prevent unbounded memory growth
+  - Configurable maximum cache size (default: 10MB) via `MaxCacheSize` in `HelmOptions`
+  - Configurable maximum number of entries (default: 50) via `MaxCacheEntries` in `HelmOptions`
+  - Charts larger than the total cache size are not cached but still returned
+  - Automatic eviction of least recently used entries when limits are exceeded
+  - Cache statistics tracking: hits, misses, evictions, hit rate, and usage percentage
+- **Cache monitoring and management**:
+  - `GetCacheStats()` method returns detailed cache statistics
+  - `ClearCache()` method to manually clear all cache entries
+  - Enhanced debug logging with cache usage metrics
+  - Hit rate and cache utilization tracking
 
 ### Changed
 
@@ -32,10 +43,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Moved `initializeLogger` function to `App.InitializeLogger()` method
   - Improved separation of concerns by centralizing dependency initialization in the App struct
   - Logger creation logic now uses private `createLogger` helper function
-- `Helm` struct now includes a `cache` field for storing downloaded charts and `maxChartSize` field for size limits
-- `HasSchema` and `DownloadSchema` methods now use `getOrLoadChart` instead of `loadChart` directly
-- `HelmOptions` now includes `MaxChartSize` field for configuring the maximum allowed chart size
-- Debug logging enhanced with chart size information and total cache size tracking
+- **BREAKING**: Replaced `Debug` boolean field in Config with `LogLevel` field that accepts zapcore.Level values
+  - CLI flag changed from `--debug` (`-d`) to `--log-level` (`-l`)
+  - Config file field changed from `debug: true/false` to `logLevel: debug/info/warn/error/dpanic/panic/fatal`
+  - Default log level is `info` instead of implicit `false` for debug
+  - Backward compatibility: Config files with `debug: true` are automatically converted to `logLevel: debug`
+  - Logger initialization now accepts zapcore.Level instead of boolean
+  - Development console format is used when log level is debug, production JSON format otherwise
+- `Helm` struct completely redesigned with enhanced caching:
+  - Replaced simple map cache with LRU-based `chartCache` structure
+  - Added `maxCacheSize` and `maxCacheEntries` fields for cache limits
+  - Cache now tracks access time, size, and provides eviction capabilities
+- `HelmOptions` expanded with new cache configuration:
+  - `MaxChartSize`: Maximum size for individual charts (default: 1MB)
+  - `MaxCacheSize`: Maximum total cache size (default: 10MB)  
+  - `MaxCacheEntries`: Maximum number of cached entries (default: 50)
+- `DownloadSchema` method signature changed to return cleanup function:
+  - Old: `(string, error)`
+  - New: `(string, func(), error)` - cleanup function should be deferred
+- Cache implementation improvements:
+  - Charts are now stored with metadata (size, last access time)
+  - LRU eviction based on both size and entry count
+  - Cache statistics tracking for monitoring
+  - Enhanced debug logging with hit rates and usage metrics
 
 ### Removed
 

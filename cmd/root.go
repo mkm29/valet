@@ -11,6 +11,7 @@ import (
 	"github.com/mkm29/valet/internal/telemetry"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // CommandContext extends cobra.Command to carry dependencies
@@ -42,13 +43,13 @@ func NewRootCmdWithApp(app *App) *cobra.Command {
 				app.Config = c
 			}
 
-			// Initialize logger based on debug setting
-			if err := app.InitializeLogger(app.Config.Debug); err != nil {
+			// Initialize logger based on log level
+			if err := app.InitializeLogger(app.Config.LogLevel.Level); err != nil {
 				return fmt.Errorf("failed to initialize logger: %w", err)
 			}
 
-			// Log config if debug is enabled
-			if app.Config.Debug {
+			// Log config if debug level is enabled
+			if app.Config.LogLevel.Level == zapcore.DebugLevel {
 				logDebugConfiguration(app.Logger, app.Config)
 			}
 
@@ -112,7 +113,6 @@ func NewRootCmdWithApp(app *App) *cobra.Command {
 	return cmd
 }
 
-
 // logDebugConfiguration logs the configuration in debug mode
 func logDebugConfiguration(logger *zap.Logger, cfg *config.Config) {
 	// Pretty print configuration to stdout as JSON
@@ -133,7 +133,7 @@ func logDebugConfiguration(logger *zap.Logger, cfg *config.Config) {
 // buildConfigFields builds zap fields from config
 func buildConfigFields(cfg *config.Config) []zap.Field {
 	fields := []zap.Field{
-		zap.Bool("debug", cfg.Debug),
+		zap.String("logLevel", cfg.LogLevel.String()),
 		zap.String("context", cfg.Context),
 		zap.String("overrides", cfg.Overrides),
 		zap.String("output", cfg.Output),
@@ -189,7 +189,7 @@ func addPersistentFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringP("context", "c", ".", "context directory containing values.yaml (optional)")
 	cmd.PersistentFlags().StringP("overrides", "f", "", "overrides file (optional)")
 	cmd.PersistentFlags().StringP("output", "o", "values.schema.json", "output file (default: values.schema.json)")
-	cmd.PersistentFlags().BoolP("debug", "d", false, "enable debug logging")
+	cmd.PersistentFlags().StringP("log-level", "l", "info", "log level (debug, info, warn, error, dpanic, panic, fatal)")
 
 	// Telemetry flags
 	cmd.PersistentFlags().Bool("telemetry-enabled", false, "enable telemetry")
@@ -218,10 +218,8 @@ func initializeConfig(cmd *cobra.Command) (*config.Config, error) {
 		// Config file was explicitly specified but doesn't exist
 		return nil, fmt.Errorf("config file not found: %s", cfgFile)
 	} else {
-		// No config file: start with empty config
-		c = &config.Config{
-			Telemetry: config.NewTelemetryConfig(),
-		}
+		// No config file: start with default config
+		c = config.NewConfig()
 	}
 
 	// Always set the service version from build info, regardless of config source
@@ -250,9 +248,15 @@ func applyFlagOverrides(cmd *cobra.Command, c *config.Config) {
 		out, _ := cmd.PersistentFlags().GetString("output")
 		c.Output = out
 	}
-	if cmd.PersistentFlags().Changed("debug") {
-		dbg, _ := cmd.PersistentFlags().GetBool("debug")
-		c.Debug = dbg
+	if cmd.PersistentFlags().Changed("log-level") {
+		levelStr, _ := cmd.PersistentFlags().GetString("log-level")
+		// Parse the log level string to zapcore.Level
+		var level zapcore.Level
+		if err := level.UnmarshalText([]byte(levelStr)); err != nil {
+			// Default to info level if parsing fails
+			level = zapcore.InfoLevel
+		}
+		c.LogLevel = config.LogLevel{Level: level}
 	}
 
 	// Handle telemetry flags

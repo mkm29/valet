@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/mkm29/valet/internal/config"
@@ -157,7 +158,10 @@ func (suite *HelmTestSuite) TestHelm_DownloadSchema() {
 			}
 
 			// Test DownloadSchema
-			schemaPath, err := h.DownloadSchema(chartConfig)
+			schemaPath, cleanup, err := h.DownloadSchema(chartConfig)
+			if cleanup != nil {
+				defer cleanup()
+			}
 
 			if tt.expectError {
 				suite.Error(err)
@@ -167,14 +171,11 @@ func (suite *HelmTestSuite) TestHelm_DownloadSchema() {
 			} else {
 				suite.NoError(err)
 				suite.NotEmpty(schemaPath)
-				
+
 				// Verify the file exists and has content
 				content, err := os.ReadFile(schemaPath)
 				suite.NoError(err)
 				suite.Contains(string(content), "$schema")
-				
-				// Clean up
-				os.Remove(schemaPath)
 			}
 		})
 	}
@@ -186,17 +187,17 @@ func (suite *HelmTestSuite) TestHelm_CacheManagement() {
 	requestCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount++
-		
+
 		// Create a test chart
 		testChart := suite.createTestChart("cache-test", "1.0.0", true)
-		
+
 		// Create tar.gz from chart
 		data, err := suite.createChartArchive(testChart)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		
+
 		w.Header().Set("Content-Type", "application/x-gzip")
 		w.Write(data)
 	}))
@@ -231,13 +232,11 @@ func (suite *HelmTestSuite) TestHelm_CacheManagement() {
 	suite.Equal(1, requestCount, "Second call should use cache")
 
 	// DownloadSchema should also use cache
-	schemaPath, err := h.DownloadSchema(chartConfig)
+	schemaPath, cleanup, err := h.DownloadSchema(chartConfig)
+	defer cleanup()
 	suite.NoError(err)
 	suite.NotEmpty(schemaPath)
 	suite.Equal(1, requestCount, "DownloadSchema should use cache")
-	
-	// Clean up
-	os.Remove(schemaPath)
 
 	// Different version should hit the server again
 	chartConfig.Version = "2.0.0"
@@ -257,7 +256,7 @@ func (suite *HelmTestSuite) TestHelm_SizeLimits() {
 	}{
 		{
 			name:        "Chart within limit",
-			chartSize:   500 * 1024, // 500KB
+			chartSize:   500 * 1024,  // 500KB
 			maxSize:     1024 * 1024, // 1MB
 			expectError: false,
 		},
@@ -282,21 +281,21 @@ func (suite *HelmTestSuite) TestHelm_SizeLimits() {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				// Create a chart with padding to reach desired size
 				testChart := suite.createTestChartWithSize("size-test", "1.0.0", true, tt.chartSize)
-				
+
 				// Create tar.gz from chart
 				data, err := suite.createChartArchive(testChart)
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}
-				
+
 				// Ensure we're returning the expected size
 				if int64(len(data)) < tt.chartSize {
 					// Add padding if needed
 					padding := make([]byte, tt.chartSize-int64(len(data)))
 					data = append(data, padding...)
 				}
-				
+
 				w.Header().Set("Content-Type", "application/x-gzip")
 				w.Write(data)
 			}))
@@ -357,16 +356,16 @@ func (suite *HelmTestSuite) TestHelmConfig_Validation() {
 			expectError: false,
 		},
 		{
-			name:          "Nil config is valid",
-			helmConfig:    nil,
-			expectError:   false,
+			name:        "Nil config is valid",
+			helmConfig:  nil,
+			expectError: false,
 		},
 		{
 			name: "Missing chart is valid",
 			helmConfig: &config.HelmConfig{
 				Chart: nil,
 			},
-			expectError:   false,
+			expectError: false,
 		},
 		{
 			name: "Missing chart name",
@@ -469,14 +468,14 @@ func (suite *HelmTestSuite) createTestServer(chartName, chartVersion string, inc
 
 		// Create a test chart
 		testChart := suite.createTestChart(chartName, chartVersion, includeSchema)
-		
+
 		// Create tar.gz from chart
 		data, err := suite.createChartArchive(testChart)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		
+
 		w.Header().Set("Content-Type", "application/x-gzip")
 		w.Write(data)
 	}))
@@ -522,13 +521,13 @@ func (suite *HelmTestSuite) createTestChart(name, version string, includeSchema 
 // Helper function to create a test chart with specific size
 func (suite *HelmTestSuite) createTestChartWithSize(name, version string, includeSchema bool, targetSize int64) *chart.Chart {
 	ch := suite.createTestChart(name, version, includeSchema)
-	
+
 	// Add a large file to reach target size
 	currentSize := int64(0)
 	for _, f := range ch.Files {
 		currentSize += int64(len(f.Data))
 	}
-	
+
 	if currentSize < targetSize {
 		paddingSize := targetSize - currentSize
 		padding := make([]byte, paddingSize)
@@ -538,7 +537,7 @@ func (suite *HelmTestSuite) createTestChartWithSize(name, version string, includ
 		})
 		ch.Raw = ch.Files
 	}
-	
+
 	return ch
 }
 
@@ -546,13 +545,13 @@ func (suite *HelmTestSuite) createTestChartWithSize(name, version string, includ
 func (suite *HelmTestSuite) createChartArchive(ch *chart.Chart) ([]byte, error) {
 	// Create a buffer to write our archive to
 	buf := new(bytes.Buffer)
-	
+
 	// Create a new gzip writer
 	gw := gzip.NewWriter(buf)
-	
+
 	// Create a new tar writer
 	tw := tar.NewWriter(gw)
-	
+
 	// Write Chart.yaml
 	chartYaml := fmt.Sprintf(`apiVersion: v2
 name: %s
@@ -560,7 +559,7 @@ version: %s
 description: A test Helm chart
 type: application
 `, ch.Metadata.Name, ch.Metadata.Version)
-	
+
 	hdr := &tar.Header{
 		Name: ch.Metadata.Name + "/Chart.yaml",
 		Mode: 0644,
@@ -572,7 +571,7 @@ type: application
 	if _, err := tw.Write([]byte(chartYaml)); err != nil {
 		return nil, err
 	}
-	
+
 	// Write all files
 	for _, file := range ch.Files {
 		hdr := &tar.Header{
@@ -587,18 +586,157 @@ type: application
 			return nil, err
 		}
 	}
-	
+
 	// Close the tar writer
 	if err := tw.Close(); err != nil {
 		return nil, err
 	}
-	
+
 	// Close the gzip writer
 	if err := gw.Close(); err != nil {
 		return nil, err
 	}
-	
+
 	return buf.Bytes(), nil
+}
+
+// TestHelm_CacheEviction tests the LRU cache eviction policy
+func (suite *HelmTestSuite) TestHelm_CacheEviction() {
+	// Create test server that returns small charts
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Extract chart name from URL
+		chartName := "chart"
+		versionStart := strings.LastIndex(r.URL.Path, "-")
+		if versionStart > 0 {
+			chartName = r.URL.Path[1:versionStart] // Skip leading /
+		}
+
+		// Create a small test chart (about 100KB each)
+		testChart := suite.createTestChartWithSize(chartName, "1.0.0", true, 100*1024)
+
+		// Create tar.gz from chart
+		data, err := suite.createChartArchive(testChart)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/x-gzip")
+		w.Write(data)
+	}))
+	defer server.Close()
+
+	// Create Helm instance with small cache limits
+	h := helm.NewHelm(helm.HelmOptions{
+		Debug:           true,
+		Logger:          suite.logger,
+		MaxChartSize:    200 * 1024, // 200KB per chart
+		MaxCacheSize:    500 * 1024, // 500KB total (can fit ~4-5 charts)
+		MaxCacheEntries: 3,          // Max 3 entries
+	})
+
+	// Load 5 different charts to trigger eviction
+	charts := []string{"chart1", "chart2", "chart3", "chart4", "chart5"}
+
+	for _, chartName := range charts {
+		chartConfig := &config.HelmChart{
+			Name:    chartName,
+			Version: "1.0.0",
+			Registry: &config.HelmRegistry{
+				URL:  server.URL,
+				Type: "HTTP",
+			},
+		}
+
+		_, err := h.HasSchema(chartConfig)
+		suite.NoError(err)
+	}
+
+	// Get cache statistics
+	stats := h.GetCacheStats()
+
+	// Should have evicted some entries
+	suite.LessOrEqual(stats.Entries, 3, "Cache should have at most 3 entries")
+	suite.Greater(stats.Evictions, int64(0), "Should have evicted some entries")
+	suite.LessOrEqual(stats.CurrentSize, int64(500*1024), "Cache size should be within limit")
+
+	// The most recent 3 charts should be in cache
+	recentCharts := []string{"chart3", "chart4", "chart5"}
+	for _, chartName := range recentCharts {
+		chartConfig := &config.HelmChart{
+			Name:    chartName,
+			Version: "1.0.0",
+			Registry: &config.HelmRegistry{
+				URL:  server.URL,
+				Type: "HTTP",
+			},
+		}
+
+		// This should be a cache hit
+		oldHits := stats.Hits
+		_, err := h.HasSchema(chartConfig)
+		suite.NoError(err)
+
+		newStats := h.GetCacheStats()
+		suite.Greater(newStats.Hits, oldHits, "Should have been a cache hit for %s", chartName)
+		stats = newStats
+	}
+}
+
+// TestHelm_CacheStatistics tests cache statistics tracking
+func (suite *HelmTestSuite) TestHelm_CacheStatistics() {
+	// Create test server
+	server := suite.createTestServer("stats-test", "1.0.0", true)
+	defer server.Close()
+
+	// Create Helm instance
+	h := helm.NewHelm(helm.HelmOptions{
+		Debug:  true,
+		Logger: suite.logger,
+	})
+
+	// Initial stats should be zero
+	stats := h.GetCacheStats()
+	suite.Equal(int64(0), stats.Hits)
+	suite.Equal(int64(0), stats.Misses)
+	suite.Equal(int64(0), stats.Evictions)
+	suite.Equal(float64(0), stats.HitRate)
+
+	chartConfig := &config.HelmChart{
+		Name:    "stats-test",
+		Version: "1.0.0",
+		Registry: &config.HelmRegistry{
+			URL:  server.URL,
+			Type: "HTTP",
+		},
+	}
+
+	// First call - cache miss
+	_, err := h.HasSchema(chartConfig)
+	suite.NoError(err)
+
+	stats = h.GetCacheStats()
+	suite.Equal(int64(0), stats.Hits)
+	suite.Equal(int64(1), stats.Misses)
+	suite.Equal(1, stats.Entries)
+
+	// Second call - cache hit
+	_, err = h.HasSchema(chartConfig)
+	suite.NoError(err)
+
+	stats = h.GetCacheStats()
+	suite.Equal(int64(1), stats.Hits)
+	suite.Equal(int64(1), stats.Misses)
+	suite.Equal(float64(50), stats.HitRate) // 1 hit / 2 total = 50%
+
+	// Clear cache
+	h.ClearCache()
+	stats = h.GetCacheStats()
+	suite.Equal(0, stats.Entries)
+	suite.Equal(int64(0), stats.CurrentSize)
+	// Statistics are cumulative, not reset
+	suite.Equal(int64(1), stats.Hits)
+	suite.Equal(int64(1), stats.Misses)
 }
 
 func TestHelmSuite(t *testing.T) {

@@ -6,17 +6,50 @@ import (
 	"os"
 	"strings"
 
+	"go.uber.org/zap/zapcore"
 	"gopkg.in/yaml.v2"
 )
 
 // Config holds the configuration for the application
 type Config struct {
-	Debug     bool             `yaml:"debug"`
+	LogLevel  LogLevel         `yaml:"logLevel"`
 	Context   string           `yaml:"context"`
 	Overrides string           `yaml:"overrides"`
 	Output    string           `yaml:"output"`
 	Telemetry *TelemetryConfig `yaml:"telemetry"`
 	Helm      *HelmConfig      `yaml:"helm"`
+}
+
+// LogLevel wraps zapcore.Level to provide YAML unmarshaling
+type LogLevel struct {
+	zapcore.Level
+}
+
+// UnmarshalYAML implements yaml.Unmarshaler for LogLevel
+func (l *LogLevel) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var levelStr string
+	if err := unmarshal(&levelStr); err != nil {
+		return err
+	}
+
+	// Parse the level string
+	level, err := zapcore.ParseLevel(levelStr)
+	if err != nil {
+		return fmt.Errorf("invalid log level %q: %w", levelStr, err)
+	}
+
+	l.Level = level
+	return nil
+}
+
+// MarshalYAML implements yaml.Marshaler for LogLevel
+func (l LogLevel) MarshalYAML() (interface{}, error) {
+	return l.Level.String(), nil
+}
+
+// String returns the string representation of the log level
+func (l LogLevel) String() string {
+	return l.Level.String()
 }
 
 // TelemetryConfig holds the telemetry configuration
@@ -391,12 +424,18 @@ func isDigit(b byte) bool {
 	return b >= '0' && b <= '9'
 }
 
+// NewConfig returns a new Config with default values
+func NewConfig() *Config {
+	return &Config{
+		LogLevel:  LogLevel{Level: zapcore.InfoLevel},
+		Telemetry: NewTelemetryConfig(),
+	}
+}
+
 // LoadConfig reads configuration from a YAML file (if it exists).
 // If the file is not found, returns an empty Config without error.
 func LoadConfig(path string) (*Config, error) {
-	cfg := &Config{
-		Telemetry: NewTelemetryConfig(),
-	}
+	cfg := NewConfig()
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -406,7 +445,27 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
-	if err := yaml.Unmarshal(data, cfg); err != nil {
+	// First try to unmarshal to check for legacy debug field
+	var rawConfig map[string]interface{}
+	if err := yaml.Unmarshal(data, &rawConfig); err != nil {
+		return nil, fmt.Errorf("failed to parse config: %w", err)
+	}
+
+	// Check for legacy debug field
+	if debug, ok := rawConfig["debug"]; ok {
+		if debugBool, ok := debug.(bool); ok && debugBool {
+			rawConfig["logLevel"] = "debug"
+		}
+		delete(rawConfig, "debug")
+	}
+
+	// Re-marshal and unmarshal with the updated data
+	updatedData, err := yaml.Marshal(rawConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to re-marshal config: %w", err)
+	}
+
+	if err := yaml.Unmarshal(updatedData, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 

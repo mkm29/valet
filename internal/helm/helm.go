@@ -3,12 +3,15 @@ package helm
 // Determine if a remote chart contains a values.schema.json file
 
 import (
+	"container/list"
 	"fmt"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/mkm29/valet/internal/config"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/getter"
@@ -19,28 +22,52 @@ const (
 	RegistryTypeHTTPS = "HTTPS"
 	RegistryTypeOCI   = "OCI"
 
-	// DefaultMaxChartSize is the default maximum size for charts to be cached (1MB, matching etcd limit)
+	// DefaultMaxChartSize is the default maximum size for individual charts (1MB, matching etcd limit)
 	DefaultMaxChartSize = 1 * 1024 * 1024 // 1MB in bytes
+
+	// DefaultMaxCacheSize is the default maximum total size for the cache (10MB)
+	DefaultMaxCacheSize = 10 * 1024 * 1024 // 10MB in bytes
+
+	// DefaultMaxCacheEntries is the default maximum number of charts in cache
+	DefaultMaxCacheEntries = 50
 )
 
 // Helm provides functionality for working with Helm charts
 type Helm struct {
-	logger       *zap.Logger
-	debug        bool
-	cache        *chartCache
-	maxChartSize int64
+	logger          *zap.Logger
+	debug           bool
+	cache           *chartCache
+	maxChartSize    int64
+	maxCacheSize    int64
+	maxCacheEntries int
 }
 
 // HelmOptions configures a Helm instance
 type HelmOptions struct {
-	Debug        bool
-	Logger       *zap.Logger
-	MaxChartSize int64 // Maximum size in bytes for charts to be cached (0 = use default)
+	Debug           bool
+	Logger          *zap.Logger
+	MaxChartSize    int64 // Maximum size in bytes for individual charts (0 = use default)
+	MaxCacheSize    int64 // Maximum total size in bytes for cache (0 = use default)
+	MaxCacheEntries int   // Maximum number of entries in cache (0 = use default)
+}
+
+// cacheEntry represents a cached chart with metadata
+type cacheEntry struct {
+	chart      *chart.Chart
+	size       int64
+	lastAccess time.Time
+	key        string
 }
 
 type chartCache struct {
-	mu     sync.RWMutex
-	charts map[string]*chart.Chart
+	mu           sync.RWMutex
+	entries      map[string]*cacheEntry
+	lruList      *list.List               // LRU list of cache keys
+	keyToElement map[string]*list.Element // Map from key to list element
+	currentSize  int64                    // Current total size of cached charts
+	hits         int64                    // Cache hit count
+	misses       int64                    // Cache miss count
+	evictions    int64                    // Number of evictions
 }
 
 // NewHelm creates a new Helm instance with options
@@ -50,17 +77,35 @@ func NewHelm(opts HelmOptions) *Helm {
 		logger = zap.L().Named("helm")
 	}
 
-	maxSize := opts.MaxChartSize
-	if maxSize <= 0 {
-		maxSize = DefaultMaxChartSize
+	maxChartSize := opts.MaxChartSize
+	if maxChartSize <= 0 {
+		maxChartSize = DefaultMaxChartSize
+	}
+
+	maxCacheSize := opts.MaxCacheSize
+	if maxCacheSize <= 0 {
+		maxCacheSize = DefaultMaxCacheSize
+	}
+
+	maxCacheEntries := opts.MaxCacheEntries
+	if maxCacheEntries <= 0 {
+		maxCacheEntries = DefaultMaxCacheEntries
 	}
 
 	return &Helm{
-		logger:       logger,
-		debug:        opts.Debug,
-		maxChartSize: maxSize,
+		logger:          logger,
+		debug:           opts.Debug,
+		maxChartSize:    maxChartSize,
+		maxCacheSize:    maxCacheSize,
+		maxCacheEntries: maxCacheEntries,
 		cache: &chartCache{
-			charts: make(map[string]*chart.Chart),
+			entries:      make(map[string]*cacheEntry),
+			lruList:      list.New(),
+			keyToElement: make(map[string]*list.Element),
+			currentSize:  0,
+			hits:         0,
+			misses:       0,
+			evictions:    0,
 		},
 	}
 }
@@ -93,73 +138,234 @@ func (h *Helm) GetOptions(c *config.HelmChart) []getter.Option {
 	return getterOpts
 }
 
-func (h *Helm) getOrLoadChart(c *config.HelmChart) (*chart.Chart, error) {
-	// Create a cache key from chart name and version
-	cacheKey := fmt.Sprintf("%s/%s@%s", c.Registry.URL, c.Name, c.Version)
+// calculateChartSize calculates the total size of a chart by summing all file sizes.
+// This includes all files in the chart's Raw field (Chart.yaml, values.yaml, templates, etc.)
+func (h *Helm) calculateChartSize(ch *chart.Chart) int64 {
+	var size int64
+	for _, file := range ch.Raw {
+		size += int64(len(file.Data))
+	}
+	return size
+}
 
-	// Check if chart is already in cache (read lock)
-	h.cache.mu.RLock()
-	if cachedChart, ok := h.cache.charts[cacheKey]; ok {
-		h.cache.mu.RUnlock()
+// evictLRU evicts least recently used entries until we're under both size and count limits.
+// This method implements the LRU eviction policy to prevent unbounded cache growth.
+//
+// The eviction continues until BOTH conditions are satisfied:
+// 1. Total cache size is under h.maxCacheSize
+// 2. Number of entries is less than h.maxCacheEntries
+//
+// IMPORTANT: Must be called with write lock held on h.cache.mu
+func (h *Helm) evictLRU() {
+	// Continue evicting while we exceed either limit
+	for h.cache.currentSize > h.maxCacheSize || len(h.cache.entries) >= h.maxCacheEntries {
+		// Get the least recently used element from the back of the list
+		elem := h.cache.lruList.Back()
+		if elem == nil {
+			// Safety check: list is empty, nothing to evict
+			break
+		}
+
+		// Extract the cache key and find the corresponding entry
+		key := elem.Value.(string)
+		entry := h.cache.entries[key]
+
+		// Remove from all cache data structures:
+		// 1. Remove from entries map
+		delete(h.cache.entries, key)
+		// 2. Remove from key-to-element mapping
+		delete(h.cache.keyToElement, key)
+		// 3. Remove from LRU list
+		h.cache.lruList.Remove(elem)
+
+		// Update cache statistics
+		h.cache.currentSize -= entry.size
+		h.cache.evictions++
+
 		if h.debug {
-			h.logger.Debug("Chart found in cache",
-				zap.String("name", c.Name),
-				zap.String("version", c.Version),
-				zap.String("cacheKey", cacheKey),
+			h.logger.Debug("Evicted chart from cache",
+				zap.String("key", key),
+				zap.String("size", h.formatBytes(entry.size)),
+				zap.Int64("evictions", h.cache.evictions),
+				zap.String("reason", h.getEvictionReason()),
 			)
 		}
-		return cachedChart, nil
+	}
+}
+
+// getEvictionReason returns a string describing why eviction is happening
+func (h *Helm) getEvictionReason() string {
+	sizeExceeded := h.cache.currentSize > h.maxCacheSize
+	countExceeded := len(h.cache.entries) >= h.maxCacheEntries
+
+	if sizeExceeded && countExceeded {
+		return "both size and count limits exceeded"
+	} else if sizeExceeded {
+		return "size limit exceeded"
+	} else if countExceeded {
+		return "count limit exceeded"
+	}
+	return "unknown"
+}
+
+// updateLRU moves an existing entry to the front of the LRU list or adds a new entry.
+// The front of the list contains the most recently used items.
+//
+// IMPORTANT: Must be called with write lock held on h.cache.mu
+func (h *Helm) updateLRU(key string) {
+	if elem, exists := h.cache.keyToElement[key]; exists {
+		// Entry exists: move it to the front (mark as recently used)
+		h.cache.lruList.MoveToFront(elem)
+	} else {
+		// New entry: add to the front of the list
+		elem := h.cache.lruList.PushFront(key)
+		// Store the list element reference for O(1) access later
+		h.cache.keyToElement[key] = elem
+	}
+}
+
+// getOrLoadChart retrieves a chart from cache or loads it from the registry.
+// This is the main entry point for all chart operations and implements:
+// 1. Thread-safe cache lookup with read/write lock optimization
+// 2. LRU cache management with eviction
+// 3. Size-based cache limits
+// 4. Comprehensive hit/miss tracking
+func (h *Helm) getOrLoadChart(c *config.HelmChart) (*chart.Chart, error) {
+	// Create a unique cache key combining registry URL, chart name, and version
+	// Format: "https://charts.example.com/repo/mychart@1.2.3"
+	cacheKey := fmt.Sprintf("%s/%s@%s", c.Registry.URL, c.Name, c.Version)
+
+	// PHASE 1: Optimistic read with read lock (most common case - cache hit)
+	h.cache.mu.RLock()
+	if entry, ok := h.cache.entries[cacheKey]; ok {
+		// Found in cache - release read lock before acquiring write lock
+		h.cache.mu.RUnlock()
+
+		// PHASE 2: Update cache metadata (requires write lock)
+		h.cache.mu.Lock()
+		entry.lastAccess = time.Now()
+		h.updateLRU(cacheKey) // Move to front of LRU list
+		h.cache.hits++
+
+		// Calculate current hit rate for logging
+		totalRequests := h.cache.hits + h.cache.misses
+		hitRate := float64(0)
+		if totalRequests > 0 {
+			hitRate = float64(h.cache.hits) / float64(totalRequests) * 100
+		}
+		h.cache.mu.Unlock()
+
+		if h.debug {
+			h.logger.Debug("Cache hit",
+				zap.String("chart", fmt.Sprintf("%s/%s", c.Name, c.Version)),
+				zap.String("cacheKey", cacheKey),
+				zap.Int64("totalHits", h.cache.hits),
+				zap.Int64("totalMisses", h.cache.misses),
+				zap.Float64("hitRate", hitRate),
+				zap.String("entrySize", h.formatBytes(entry.size)),
+				zap.Duration("age", time.Since(entry.lastAccess)),
+			)
+		}
+		return entry.chart, nil
 	}
 	h.cache.mu.RUnlock()
 
-	// Chart not in cache, need to load it (write lock)
+	// PHASE 3: Cache miss - need exclusive access for loading
 	h.cache.mu.Lock()
 	defer h.cache.mu.Unlock()
 
-	// Double-check after acquiring write lock
-	if cachedChart, ok := h.cache.charts[cacheKey]; ok {
+	// Double-check pattern: another goroutine might have loaded it while we waited for write lock
+	if entry, ok := h.cache.entries[cacheKey]; ok {
+		entry.lastAccess = time.Now()
+		h.updateLRU(cacheKey)
+		h.cache.hits++
+
 		if h.debug {
-			h.logger.Debug("Chart found in cache after acquiring write lock",
-				zap.String("name", c.Name),
-				zap.String("version", c.Version),
+			h.logger.Debug("Cache hit (after write lock)",
+				zap.String("chart", fmt.Sprintf("%s/%s", c.Name, c.Version)),
 				zap.String("cacheKey", cacheKey),
 			)
 		}
-		return cachedChart, nil
+		return entry.chart, nil
 	}
 
-	// Load the chart
+	// PHASE 4: Confirmed cache miss - update statistics
+	h.cache.misses++
+	missRate := float64(h.cache.misses) / float64(h.cache.hits+h.cache.misses) * 100
+
 	if h.debug {
-		h.logger.Debug("Loading chart from registry",
-			zap.String("name", c.Name),
-			zap.String("version", c.Version),
+		h.logger.Debug("Cache miss - loading from registry",
+			zap.String("chart", fmt.Sprintf("%s/%s", c.Name, c.Version)),
 			zap.String("cacheKey", cacheKey),
+			zap.Int64("totalMisses", h.cache.misses),
+			zap.Float64("missRate", missRate),
+			zap.String("registry", c.Registry.URL),
 		)
 	}
 
+	// PHASE 5: Load chart from registry
+	startTime := time.Now()
 	loadedChart, err := h.loadChart(c)
 	if err != nil {
+		// Don't cache failures
 		return nil, err
 	}
+	loadDuration := time.Since(startTime)
 
-	// Store in cache
-	h.cache.charts[cacheKey] = loadedChart
+	// PHASE 6: Evaluate cacheability
+	chartSize := h.calculateChartSize(loadedChart)
 
-	// Calculate total cache size
-	var totalCacheSize int64
-	for _, cachedChart := range h.cache.charts {
-		for _, file := range cachedChart.Raw {
-			totalCacheSize += int64(len(file.Data))
+	// Check if chart is too large for our cache
+	if chartSize > h.maxCacheSize {
+		if h.debug || h.logger.Core().Enabled(zapcore.WarnLevel) {
+			h.logger.Warn("Chart too large to cache",
+				zap.String("chart", fmt.Sprintf("%s/%s", c.Name, c.Version)),
+				zap.String("chartSize", h.formatBytes(chartSize)),
+				zap.String("maxCacheSize", h.formatBytes(h.maxCacheSize)),
+				zap.Float64("sizeRatio", float64(chartSize)/float64(h.maxCacheSize)),
+			)
 		}
+		// Return the chart without caching
+		return loadedChart, nil
 	}
+
+	// PHASE 7: Make room in cache if necessary
+	evictionStart := time.Now()
+	evictionCount := 0
+	for h.cache.currentSize+chartSize > h.maxCacheSize || len(h.cache.entries) >= h.maxCacheEntries {
+		h.evictLRU()
+		evictionCount++
+	}
+	evictionDuration := time.Since(evictionStart)
+
+	// PHASE 8: Add to cache
+	entry := &cacheEntry{
+		chart:      loadedChart,
+		size:       chartSize,
+		lastAccess: time.Now(),
+		key:        cacheKey,
+	}
+
+	h.cache.entries[cacheKey] = entry
+	h.cache.currentSize += chartSize
+	h.updateLRU(cacheKey)
+
+	// Calculate final cache state
+	cacheUsagePercent := float64(h.cache.currentSize) / float64(h.maxCacheSize) * 100
+	entriesUsagePercent := float64(len(h.cache.entries)) / float64(h.maxCacheEntries) * 100
 
 	if h.debug {
 		h.logger.Debug("Chart cached successfully",
-			zap.String("name", c.Name),
-			zap.String("version", c.Version),
+			zap.String("chart", fmt.Sprintf("%s/%s", c.Name, c.Version)),
 			zap.String("cacheKey", cacheKey),
-			zap.Int("cacheCount", len(h.cache.charts)),
-			zap.String("totalCacheSize", h.formatBytes(totalCacheSize)),
+			zap.Duration("loadTime", loadDuration),
+			zap.String("chartSize", h.formatBytes(chartSize)),
+			zap.Int("evictedEntries", evictionCount),
+			zap.Duration("evictionTime", evictionDuration),
+			zap.Int("totalEntries", len(h.cache.entries)),
+			zap.String("cacheSize", h.formatBytes(h.cache.currentSize)),
+			zap.Float64("cacheSizeUsage", cacheUsagePercent),
+			zap.Float64("cacheEntriesUsage", entriesUsagePercent),
 		)
 	}
 
@@ -293,36 +499,38 @@ func (h *Helm) GetSchemaBytes(c *config.HelmChart) ([]byte, error) {
 }
 
 // DownloadSchema retrieves the values.schema.json file from the chart and saves to temporary file
-func (h *Helm) DownloadSchema(c *config.HelmChart) (string, error) {
+func (h *Helm) DownloadSchema(c *config.HelmChart) (string, func(), error) {
 	file, err := h.getSchemaFile(c)
+
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	if file == nil {
-		return "", fmt.Errorf("values.schema.json not found in chart")
+		return "", nil, fmt.Errorf("values.schema.json not found in chart")
 	}
 
 	// Write the schema to a temporary file
 	tmp, err := os.CreateTemp("", "values.schema.json")
 	if err != nil {
-		return "", fmt.Errorf("failed to create temporary file: %w", err)
+		return "", nil, fmt.Errorf("failed to create temporary file: %w", err)
 	}
 	defer tmp.Close()
 	// change permissions on the temporary file
 	if err := os.Chmod(tmp.Name(), 0600); err != nil {
-		return "", fmt.Errorf("failed to set permissions on temporary file: %w", err)
+		return "", nil, fmt.Errorf("failed to set permissions on temporary file: %w", err)
 	}
 
 	if _, err := tmp.Write(file.Data); err != nil {
-		return "", fmt.Errorf("failed to write to temporary file: %w", err)
+		return "", nil, fmt.Errorf("failed to write to temporary file: %w", err)
 	}
 
 	if h.debug {
 		h.logger.Debug("Schema saved to temporary file", zap.String("path", tmp.Name()))
 	}
+	cleanup := func() { os.Remove(tmp.Name()) }
 
-	return tmp.Name(), nil
+	return tmp.Name(), cleanup, nil
 }
 
 // formatBytes converts bytes to human-readable format
@@ -337,4 +545,62 @@ func (h *Helm) formatBytes(bytes int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %ciB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// CacheStats represents cache statistics
+type CacheStats struct {
+	Entries      int     `json:"entries"`
+	CurrentSize  int64   `json:"currentSize"`
+	MaxSize      int64   `json:"maxSize"`
+	MaxEntries   int     `json:"maxEntries"`
+	Hits         int64   `json:"hits"`
+	Misses       int64   `json:"misses"`
+	Evictions    int64   `json:"evictions"`
+	HitRate      float64 `json:"hitRate"`
+	UsagePercent float64 `json:"usagePercent"`
+}
+
+// GetCacheStats returns current cache statistics
+func (h *Helm) GetCacheStats() CacheStats {
+	h.cache.mu.RLock()
+	defer h.cache.mu.RUnlock()
+
+	totalRequests := h.cache.hits + h.cache.misses
+	hitRate := float64(0)
+	if totalRequests > 0 {
+		hitRate = float64(h.cache.hits) / float64(totalRequests) * 100
+	}
+
+	usagePercent := float64(0)
+	if h.maxCacheSize > 0 {
+		usagePercent = float64(h.cache.currentSize) / float64(h.maxCacheSize) * 100
+	}
+
+	return CacheStats{
+		Entries:      len(h.cache.entries),
+		CurrentSize:  h.cache.currentSize,
+		MaxSize:      h.maxCacheSize,
+		MaxEntries:   h.maxCacheEntries,
+		Hits:         h.cache.hits,
+		Misses:       h.cache.misses,
+		Evictions:    h.cache.evictions,
+		HitRate:      hitRate,
+		UsagePercent: usagePercent,
+	}
+}
+
+// ClearCache clears all entries from the cache
+func (h *Helm) ClearCache() {
+	h.cache.mu.Lock()
+	defer h.cache.mu.Unlock()
+
+	h.cache.entries = make(map[string]*cacheEntry)
+	h.cache.lruList = list.New()
+	h.cache.keyToElement = make(map[string]*list.Element)
+	h.cache.currentSize = 0
+	// Don't reset statistics, they're cumulative
+
+	if h.debug {
+		h.logger.Debug("Cache cleared")
+	}
 }

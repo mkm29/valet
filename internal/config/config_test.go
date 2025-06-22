@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zapcore"
 )
 
 func TestHelmConfig_Validate(t *testing.T) {
@@ -30,8 +31,8 @@ func TestHelmConfig_Validate(t *testing.T) {
 			name: "valid config",
 			config: &HelmConfig{
 				Chart: &HelmChart{
-					Name:     "my-chart",
-					Version:  "1.2.3",
+					Name:    "my-chart",
+					Version: "1.2.3",
 					Registry: &HelmRegistry{
 						URL:  "https://example.com",
 						Type: "HTTPS",
@@ -716,7 +717,7 @@ helm:
 		cfg, err := LoadConfig(configFile)
 		assert.NoError(t, err)
 		assert.NotNil(t, cfg)
-		assert.True(t, cfg.Debug)
+		assert.Equal(t, zapcore.DebugLevel, cfg.LogLevel.Level)
 		assert.Equal(t, "my-chart", cfg.Helm.Chart.Name)
 	})
 }

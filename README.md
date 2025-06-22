@@ -172,20 +172,39 @@ Valet follows Go best practices with well-structured packages using a consistent
   - TLS configuration options
   - **Chart caching**: Downloaded charts are cached in memory to avoid redundant network calls
   - **Size limits**: Charts exceeding the configured size limit (default 1MB) are rejected to prevent memory issues
+  - **LRU eviction**: Prevents unbounded memory growth with configurable cache limits
+  - **Cache monitoring**: Track hit rates, evictions, and usage statistics
   - Thread-safe concurrent access with read-write locks
-  - Comprehensive debug logging including cache hit/miss and size information
+  - Comprehensive debug logging including cache hit/miss, size information, and eviction events
+- Cache features:
+  - Maximum cache size limit (default: 10MB)
+  - Maximum number of cached entries (default: 50)
+  - Automatic eviction of least recently used entries
+  - Charts larger than the total cache size are not cached
+  - Statistics tracking: hits, misses, evictions, hit rate
 - Example usage:
   ```go
-  // Using options pattern with custom size limit
+  // Using options pattern with custom limits
   h := helm.NewHelm(helm.HelmOptions{
-      Debug:        true,
-      Logger:       customLogger,    // optional
-      MaxChartSize: 5 * 1024 * 1024, // 5MB limit (default is 1MB)
+      Debug:           true,  // For HelmOptions, this remains a boolean
+      Logger:          customLogger,         // optional
+      MaxChartSize:    5 * 1024 * 1024,     // 5MB limit per chart (default is 1MB)
+      MaxCacheSize:    20 * 1024 * 1024,    // 20MB total cache (default is 10MB)
+      MaxCacheEntries: 100,                 // Max 100 charts cached (default is 50)
   })
+  
+  // Get cache statistics
+  stats := h.GetCacheStats()
+  fmt.Printf("Cache hit rate: %.2f%%, Usage: %.2f%%\n", 
+      stats.HitRate, stats.UsagePercent)
+  
+  // Clear cache if needed
+  h.ClearCache()
   
   // Check and download schema (uses cache automatically)
   if hasSchema, err := h.HasSchema(chartConfig); hasSchema {
-      schemaPath, err := h.DownloadSchema(chartConfig)
+      schemaPath, cleanup, err := h.DownloadSchema(chartConfig)
+      defer cleanup() // Clean up temporary file
   }
   ```
 
@@ -272,7 +291,7 @@ valet [global options] generate [flags] [context-dir]
 
 Global options:
   --config-file string          config file path (default: .valet.yaml)
-  -d, --debug                   enable debug logging
+  -l, --log-level string        log level (debug, info, warn, error, dpanic, panic, fatal) (default: info)
   --telemetry-enabled           enable telemetry
   --telemetry-exporter string   telemetry exporter type (none, stdout, otlp) (default: none)
   --telemetry-endpoint string   OTLP endpoint for telemetry (default: localhost:4317)
@@ -320,7 +339,7 @@ The CLI supports a YAML configuration file (default: `.valet.yaml`) in the curre
 - `context`: directory containing `values.yaml`
 - `overrides`: path to an overrides YAML file
 - `output`: name of the output schema file (default: `values.schema.json`)
-- `debug`: enable debug logging (boolean)
+- `logLevel`: log level (string) - one of: debug, info, warn, error, dpanic, panic, fatal (default: info)
 - `telemetry`: telemetry configuration (object)
   - `enabled`: enable telemetry (boolean)
   - `serviceName`: service name for telemetry (default: `valet`)
@@ -406,7 +425,7 @@ github.com/mkm29/valet@v0.1.1 (commit 9153c14b9ffddeaccba93268a0851d5da0ae8cbf)
 
 ### Debug Mode
 
-When debug mode is enabled (`--debug` flag or `debug: true` in config), Valet provides:
+When debug log level is enabled (`--log-level debug` flag or `logLevel: debug` in config), Valet provides:
 
 - Pretty-printed configuration output to stdout (with sensitive fields redacted)
 - Detailed debug logging from all components
@@ -417,7 +436,7 @@ When debug mode is enabled (`--debug` flag or `debug: true` in config), Valet pr
 
 Example:
 ```bash
-./bin/valet generate --config-file examples/helm-config.yaml --debug
+./bin/valet generate --config-file examples/helm-config.yaml --log-level debug
 ```
 
 ### Observability
@@ -521,8 +540,8 @@ Valet uses [Uber's zap](https://github.com/uber-go/zap) for high-performance str
 - **Structured fields**: All log data is structured for easy parsing and querying
 - **OpenTelemetry integration**: When telemetry is enabled, log entries automatically include trace and span IDs
 - **Span events**: When telemetry is enabled, logs are also recorded as events in the active span
-- **Level control**: Info level by default, Debug level when `--debug` flag is set
-- **Format control**: Development format (human-readable) when debug is enabled, JSON format otherwise
+- **Level control**: Configurable via `--log-level` flag or `logLevel` in config (default: info)
+- **Format control**: Development format (human-readable) when log level is debug, JSON format otherwise
 
 Example log output:
 
@@ -692,11 +711,11 @@ Valet uses dependency injection for better testability and maintainability:
    rootCmd := cmd.NewRootCmdWithApp(app)
    ```
 
-3. **Logger Initialization**: The App struct includes a method to initialize the logger based on debug settings:
+3. **Logger Initialization**: The App struct includes a method to initialize the logger based on log level:
    ```go
    // Initialize logger internally based on configuration
    app := cmd.NewApp().WithConfig(cfg)
-   if err := app.InitializeLogger(cfg.Debug); err != nil {
+   if err := app.InitializeLogger(cfg.LogLevel); err != nil {
        // handle error
    }
    ```
@@ -822,7 +841,7 @@ This project uses [GoReleaser](https://goreleaser.com) to automate builds and re
 Valet takes security seriously when handling sensitive configuration:
 
 - **Registry Credentials**: When using `--registry-username`, `--registry-password`, or `--registry-token`, these values are automatically redacted as `[REDACTED]` in all log output
-- **Debug Mode**: Configuration output in debug mode automatically redacts sensitive fields to prevent accidental exposure
+- **Debug Mode**: Configuration output in debug log level automatically redacts sensitive fields to prevent accidental exposure
 - **TLS Certificates**: Certificate file paths are logged, but certificate contents are never exposed
 - **Environment Variables**: Sensitive values can be provided via environment variables instead of command-line flags for better security
 

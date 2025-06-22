@@ -63,7 +63,7 @@ func TestGetSchemaFile(t *testing.T) {
 					break
 				}
 			}
-			
+
 			if tt.wantFile {
 				assert.NotNil(t, foundFile)
 				assert.Equal(t, "values.schema.json", foundFile.Name)
@@ -77,7 +77,7 @@ func TestGetSchemaFile(t *testing.T) {
 func TestMethodConsistency(t *testing.T) {
 	// This test demonstrates that HasSchema, GetSchemaBytes, and DownloadSchema
 	// all use the same underlying getSchemaFile method, ensuring consistency
-	
+
 	chartConfig := &config.HelmChart{
 		Name:    "test",
 		Version: "1.0.0",
@@ -86,13 +86,13 @@ func TestMethodConsistency(t *testing.T) {
 			URL:  "http://example.com",
 		},
 	}
-	
+
 	// Create a helm instance
 	h := NewHelmWithDebug(false)
-	
+
 	// Note: In a real test, we would mock the chart loading
 	// This test is primarily to show the design pattern
-	
+
 	t.Run("all methods use getSchemaFile", func(t *testing.T) {
 		// The refactoring ensures that:
 		// 1. HasSchema calls getSchemaFile and checks if result is not nil

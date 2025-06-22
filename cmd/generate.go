@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // GenerateWithApp is a version of Generate that accepts dependencies
@@ -102,7 +103,7 @@ func generateInternalWithApp(ctx context.Context, app *App, tel *telemetry.Telem
 	}
 
 	// Log some of the top-level default values to help with debugging
-	isDebug := app.Config != nil && app.Config.Debug
+	isDebug := app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel
 	if isDebug && tel.IsEnabled() && app.Logger != nil {
 		logDefaultValues(ctx, app.Logger, valuesPath, yaml1)
 	}
@@ -297,7 +298,7 @@ func shouldFieldBeRequiredWithApp(app *App, fieldName string, fieldValue, defaul
 
 	// Check for empty values
 	if isEmptyValue(defaultValue) {
-		isDebug := app.Config != nil && app.Config.Debug
+		isDebug := app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel
 		if isDebug && app.Logger != nil {
 			app.Logger.Debug("Skipping field because it has an empty default value",
 				zap.String("field", fieldName),
@@ -442,7 +443,7 @@ func processPropertiesWithApp(app *App, schema map[string]any, defaults map[stri
 	// Check if this object itself has an 'enabled' key that is false
 	if enabled, hasEnabled := defaults["enabled"]; hasEnabled {
 		if enabledBool, isBool := enabled.(bool); isBool && !enabledBool {
-			isDebug := app.Config != nil && app.Config.Debug
+			isDebug := app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel
 			if isDebug && app.Logger != nil {
 				app.Logger.Debug("Post-processing: Removing required fields from component because it has enabled=false")
 			}
@@ -459,7 +460,7 @@ func processPropertiesWithApp(app *App, schema map[string]any, defaults map[stri
 
 		// If the default value is empty, don't include it in required
 		if hasDef && isEmptyValue(defVal) {
-			isDebug := app.Config != nil && app.Config.Debug
+			isDebug := app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel
 			if isDebug && app.Logger != nil {
 				app.Logger.Debug("Post-processing: Removing field from required list because it has an empty default value",
 					zap.String("field", fieldName))
@@ -473,7 +474,7 @@ func processPropertiesWithApp(app *App, schema map[string]any, defaults map[stri
 			// Check if this component has an 'enabled' field
 			if enabled, hasEnabled := propObj["enabled"]; hasEnabled {
 				if enabledBool, isBool := enabled.(bool); isBool && !enabledBool {
-					isDebug := app.Config != nil && app.Config.Debug
+					isDebug := app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel
 					if isDebug && app.Logger != nil {
 						app.Logger.Debug("Post-processing: Removing field from required list because it is disabled",
 							zap.String("field", fieldName))
@@ -484,7 +485,7 @@ func processPropertiesWithApp(app *App, schema map[string]any, defaults map[stri
 
 			// Also check if the component has a nil value by default
 			if isEmptyValue(propObj) {
-				isDebug := app.Config != nil && app.Config.Debug
+				isDebug := app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel
 				if isDebug && app.Logger != nil {
 					app.Logger.Debug("Post-processing: Removing field from required list because it has a nil default value",
 						zap.String("field", fieldName))
@@ -597,7 +598,7 @@ func parseGenerateCommandConfigWithApp(cmd *cobra.Command, ctx string, app *App)
 
 // logGenerateCommandDebugWithApp logs debug information with dependency injection
 func logGenerateCommandDebugWithApp(cmdConfig *generateCommandConfig, app *App) {
-	if app.Config != nil && app.Config.Debug && app.Logger != nil {
+	if app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel && app.Logger != nil {
 		app.Logger.Debug("Generate command configuration",
 			zap.Bool("hasRemoteChartFlags", cmdConfig.hasRemoteChartFlags),
 			zap.Bool("hasRemoteChartConfig", cmdConfig.hasRemoteChartConfig),
@@ -620,15 +621,16 @@ func handleRemoteChartGenerationWithApp(cmd *cobra.Command, cmdConfig *generateC
 func handleRemoteChartFromConfigWithApp(app *App) error {
 	// Create Helm instance with options
 	h := helm.NewHelm(helm.HelmOptions{
-		Debug: app.Config.Debug,
+		Debug: app.Config.LogLevel.Level == zapcore.DebugLevel,
 		// Logger will use the default zap.L().Named("helm")
 	})
 
 	// Execute DownloadSchema() just for testing
-	loc, err := h.DownloadSchema(app.Config.Helm.Chart)
+	loc, cleanup, err := h.DownloadSchema(app.Config.Helm.Chart)
 	if err != nil {
 		return fmt.Errorf("error downloading remote chart schema: %w", err)
 	}
+	defer cleanup() // Clean up the temporary file
 	if loc == "" {
 		return fmt.Errorf("no schema found for remote chart %s", app.Config.Helm.Chart.Name)
 	}

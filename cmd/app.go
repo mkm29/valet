@@ -43,9 +43,9 @@ func (a *App) WithLogger(logger *zap.Logger) *App {
 	return a
 }
 
-// InitializeLogger creates a new logger based on debug setting
-func (a *App) InitializeLogger(debug bool) error {
-	logger, err := createLogger(debug)
+// InitializeLogger creates a new logger based on log level
+func (a *App) InitializeLogger(level zapcore.Level) error {
+	logger, err := createLogger(level)
 	if err != nil {
 		return err
 	}
@@ -54,20 +54,23 @@ func (a *App) InitializeLogger(debug bool) error {
 	return nil
 }
 
-// createLogger creates a new zap logger based on debug setting
-func createLogger(debug bool) (*zap.Logger, error) {
+// createLogger creates a new zap logger based on log level
+func createLogger(level zapcore.Level) (*zap.Logger, error) {
 	var logConfig zap.Config
-	if debug {
+
+	// Use development config for debug level, production for others
+	if level == zapcore.DebugLevel {
 		logConfig = zap.NewDevelopmentConfig()
 		logConfig.EncoderConfig.TimeKey = "timestamp"
 		logConfig.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 		// Use console encoder for more readable output
 		logConfig.Encoding = "console"
-		logConfig.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
 	} else {
 		logConfig = zap.NewProductionConfig()
-		logConfig.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
 	}
+
+	// Set the log level
+	logConfig.Level = zap.NewAtomicLevelAt(level)
 
 	return logConfig.Build()
 }
