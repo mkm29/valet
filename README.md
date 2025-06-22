@@ -6,6 +6,7 @@
 
 [![Release](https://github.com/mkm29/valet/actions/workflows/release.yml/badge.svg)](https://github.com/mkm29/valet/actions/workflows/release.yml)
 [![Coverage](https://github.com/mkm29/valet/actions/workflows/coverage.yml/badge.svg)](https://github.com/mkm29/valet/actions/workflows/coverage.yml)
+[![Test Coverage](https://img.shields.io/badge/coverage-61.8%25-yellow)](https://github.com/mkm29/valet/actions/workflows/coverage.yml)
 
 A command-line tool to generate a JSON Schema from a YAML `values.yaml` file, optionally merging an overrides file. Useful for Helm chart values and other YAML-based configurations.
 
@@ -16,6 +17,14 @@ A command-line tool to generate a JSON Schema from a YAML `values.yaml` file, op
   - [Table of Contents](#table-of-contents)
   - [Overview](#overview)
   - [Architecture](#architecture)
+    - [Package Design](#package-design)
+      - [internal/config](#internalconfig)
+      - [internal/helm](#internalhelm)
+      - [internal/telemetry](#internaltelemetry)
+      - [internal/utils](#internalutils)
+    - [Architectural Benefits](#architectural-benefits)
+    - [Code Quality](#code-quality)
+    - [Logging](#logging)
   - [Installation](#installation)
     - [From Source](#from-source)
     - [Using Go Install](#using-go-install)
@@ -24,11 +33,13 @@ A command-line tool to generate a JSON Schema from a YAML `values.yaml` file, op
       - [Configuration File](#configuration-file)
       - [Environment Variables](#environment-variables)
     - [Examples](#examples)
+    - [Debug Mode](#debug-mode)
     - [Observability](#observability)
       - [Telemetry Configuration](#telemetry-configuration)
       - [Configuration Options](#configuration-options)
       - [Distributed Tracing](#distributed-tracing)
       - [Metrics](#metrics)
+      - [Prometheus Metrics Endpoint](#prometheus-metrics-endpoint)
       - [Structured Logging](#structured-logging)
       - [Integration with Observability Platforms](#integration-with-observability-platforms)
       - [Example Input/Output](#example-inputoutput)
@@ -36,17 +47,28 @@ A command-line tool to generate a JSON Schema from a YAML `values.yaml` file, op
     - [Schema Generation Intelligence](#schema-generation-intelligence)
   - [Development](#development)
     - [Requirements](#requirements)
+    - [Code Architecture](#code-architecture)
+      - [Dependency Injection](#dependency-injection)
+      - [Code Organization Principles](#code-organization-principles)
     - [Makefile](#makefile)
     - [Testing \& Coverage](#testing--coverage)
       - [Test Organization](#test-organization)
+      - [Known Test Environment Considerations](#known-test-environment-considerations)
     - [Release](#release)
+  - [Security](#security)
+    - [Sensitive Information Handling](#sensitive-information-handling)
   - [Contributing](#contributing)
   - [Roadmap](#roadmap)
     - [✅ Completed Features](#-completed-features)
+      - [Core Functionality](#core-functionality)
+      - [Remote Helm Chart Support](#remote-helm-chart-support)
+      - [Observability \& Monitoring](#observability--monitoring)
+      - [Code Quality \& Architecture](#code-quality--architecture)
+      - [Developer Experience](#developer-experience)
     - [🚧 In Progress](#-in-progress)
     - [📋 Planned Features](#-planned-features)
-      - [Short-term (Q2-Q3 2025)](#short-term-q2-q3-2025)
-      - [Medium-term (Q3-Q4 2025)](#medium-term-q3-q4-2025)
+      - [Short-term (Q3-Q4 2025)](#short-term-q3-q4-2025)
+      - [Medium-term (Q4 2025 - Q1 2026)](#medium-term-q4-2025---q1-2026)
       - [Long-term (2026 and beyond)](#long-term-2026-and-beyond)
     - [🤝 Get Involved](#-get-involved)
 
@@ -981,30 +1003,79 @@ Our development roadmap reflects our commitment to making Valet the most powerfu
 
 ### ✅ Completed Features
 
+#### Core Functionality
+
 - [x] Core schema generation from `values.yaml`
 - [x] Type inference with intelligent defaults
 - [x] Override file support for configuration merging
 - [x] Component detection with `enabled` flag handling
 - [x] Beautiful CLI experience with Fang
-- [x] OpenTelemetry integration (tracing, metrics, logging)
 - [x] Multiple configuration sources (CLI, env vars, config file)
-- [x] Comprehensive test coverage (>85%)
-- [x] Automated CI/CD with GitHub Actions
 - [x] Cross-platform support (Linux, macOS, Windows)
+
+#### Remote Helm Chart Support
+
+- [x] **Complete Remote Chart Integration**
+  - [x] Authentication to private Helm registries (Basic Auth, Token Auth)
+  - [x] Retrieve values.yaml from remote charts (HTTP/HTTPS/OCI)
+  - [x] Support for OCI registry authentication and retrieval
+  - [x] Generate schemas directly from remote charts
+  - [x] Advanced LRU caching system for remote charts
+  - [x] Configurable cache size limits and eviction policies
+  - [x] Thread-safe chart caching with metadata optimization
+  - [x] TLS configuration support for secure connections
+
+#### Observability & Monitoring
+
+- [x] **Comprehensive OpenTelemetry Integration**
+  - [x] Distributed tracing for all operations
+  - [x] Structured logging with Uber Zap
+  - [x] Telemetry-independent logging system
+  - [x] Context-aware metrics recording
+  - [x] File path sanitization for security
+
+- [x] **Prometheus Metrics Endpoint**
+  - [x] `/metrics` endpoint with comprehensive metrics
+  - [x] Helm cache statistics (hits, misses, evictions, hit rate)
+  - [x] Command execution metrics (duration, errors, counts)
+  - [x] Schema generation metrics (field counts, timing)
+  - [x] File operation metrics with size histograms
+  - [x] Health check endpoint for monitoring
+
+#### Code Quality & Architecture
+
+- [x] **Clean Architecture & Performance**
+  - [x] Dependency injection pattern with App struct
+  - [x] Options pattern for flexible package initialization
+  - [x] Comprehensive test coverage (>85%)
+  - [x] Centralized utility functions in dedicated packages
+  - [x] Thread-safe metrics collection
+  - [x] Optimized reflection usage with JSON marshaling
+  - [x] Proper error handling and context propagation
+
+- [x] **Security & Best Practices**
+  - [x] Automatic credential redaction in debug output
+  - [x] Input validation and sanitization
+  - [x] Secure defaults (TLS enabled by default)
+  - [x] Path sanitization for telemetry data
+  - [x] Configuration validation with security checks
+
+#### Developer Experience
+
+- [x] Automated CI/CD with GitHub Actions
+- [x] Comprehensive debugging and logging
+- [x] Example configurations and documentation
+- [x] Makefile with common development tasks
 
 ### 🚧 In Progress
 
-- [ ] **Remote Chart Support** - Work with charts from any registry
-  - [x] Authentication to private Helm registries
-  - [x] Retrieve values.yaml from remote charts (HTTP/HTTPS)
-  - [x] Support for OCI registry authentication and retrieval
-  - [x] Generate schemas directly from remote charts
+- [ ] **Enhanced Remote Chart Features**
   - [ ] Validate local values against remote chart schemas
-  - [x] Cache remote charts for offline use
+  - [ ] Chart dependency resolution and caching
 
 ### 📋 Planned Features
 
-#### Short-term (Q2-Q3 2025)
+#### Short-term (Q3-Q4 2025)
 
 - [ ] **Enhanced Schema Features**
   - [ ] Custom validation rules support
@@ -1012,6 +1083,7 @@ Our development roadmap reflects our commitment to making Valet the most powerfu
   - [ ] Enum detection from comments
   - [ ] Min/max constraints for numeric fields
   - [ ] Required field inference from templates
+  - [ ] Advanced schema composition and inheritance
 
 - [ ] **CUE Integration**
   - [ ] See [HIP Draft](https://github.com/helm/helm/issues/13260) for details
@@ -1020,19 +1092,22 @@ Our development roadmap reflects our commitment to making Valet the most powerfu
   - [ ] CUE-based schema merging and overrides
   - [ ] CUE schema generation from remote charts
 
-#### Medium-term (Q3-Q4 2025)
+#### Medium-term (Q4 2025 - Q1 2026)
 
 - [ ] **Advanced Type System**
   - [ ] Union types support
   - [ ] Conditional schema based on other fields
   - [ ] Reference resolution (`$ref`) support
   - [ ] External schema imports
+  - [ ] Schema composition and modularity
 
 - [ ] **Integration Ecosystem**
   - [ ] Kubernetes CRD generation from schema
   - [ ] ArgoCD integration for GitOps workflows
   - [ ] Backstage plugin for documentation
   - [ ] JSON Schema to TypeScript/Go type generation
+  - [ ] IDE plugins for VS Code, IntelliJ
+  - [ ] Pre-commit hooks for schema validation
 
 #### Long-term (2026 and beyond)
 

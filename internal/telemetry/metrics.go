@@ -2,13 +2,12 @@ package telemetry
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
-	"reflect"
 	"sync"
 	"time"
 
-	"github.com/mkm29/valet/internal/utils"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -50,6 +49,14 @@ type MetricsServer struct {
 	fileReadErrors  prometheus.Counter
 	fileWriteErrors prometheus.Counter
 	fileSize        prometheus.Histogram
+
+	// State tracking for delta calculations
+	lastHits           int64
+	lastMisses         int64
+	lastEvictions      int64
+	lastMetadataHits   int64
+	lastMetadataMisses int64
+	stateMu            sync.Mutex
 }
 
 // MetricsConfig holds configuration for the metrics server
@@ -247,22 +254,48 @@ func (m *MetricsServer) Start(ctx context.Context) error {
 		}
 	}()
 
+	// Wait for server startup confirmation or error
+	if err := m.waitForServerStartup(ctx, errCh); err != nil {
+		return err
+	}
+
 	// Wait for context cancellation or server error
 	select {
 	case <-ctx.Done():
 		return m.Shutdown(context.Background())
 	case err := <-errCh:
 		return err
-	case <-time.After(100 * time.Millisecond):
-		// Give server time to start and fail fast if port is already in use
+	}
+}
+
+// waitForServerStartup waits for the server to start up using health check polling
+func (m *MetricsServer) waitForServerStartup(ctx context.Context, errCh chan error) error {
+	maxAttempts := 10
+	backoff := 50 * time.Millisecond
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
 		select {
 		case err := <-errCh:
 			return err
+		case <-ctx.Done():
+			return ctx.Err()
 		default:
-			m.logger.Info("Metrics server started successfully")
-			return nil
+			// Try to connect to the health endpoint
+			client := &http.Client{Timeout: 100 * time.Millisecond}
+			resp, err := client.Get(fmt.Sprintf("http://localhost%s/health", m.server.Addr))
+			if err == nil {
+				resp.Body.Close()
+				m.logger.Info("Metrics server started successfully")
+				return nil
+			}
+
+			// Wait before next attempt with exponential backoff
+			time.Sleep(backoff)
+			backoff = time.Duration(float64(backoff) * 1.5)
 		}
 	}
+
+	return fmt.Errorf("metrics server failed to start after %d attempts", maxAttempts)
 }
 
 // Shutdown gracefully shuts down the metrics server
@@ -280,28 +313,16 @@ func (m *MetricsServer) UpdateHelmCacheStats(stats interface{}) {
 	case HelmCacheStats:
 		helmStats = v
 	default:
-		// Use reflection to extract fields from helm.CacheStats
-		// This allows us to avoid circular dependencies
-		rv := reflect.ValueOf(stats)
-		if rv.Kind() == reflect.Struct {
-			// Extract fields by name
-			helmStats = HelmCacheStats{
-				Entries:         int(utils.GetFieldInt(rv, "Entries")),
-				CurrentSize:     utils.GetFieldInt64(rv, "CurrentSize"),
-				MaxSize:         utils.GetFieldInt64(rv, "MaxSize"),
-				MaxEntries:      int(utils.GetFieldInt(rv, "MaxEntries")),
-				Hits:            utils.GetFieldInt64(rv, "Hits"),
-				Misses:          utils.GetFieldInt64(rv, "Misses"),
-				Evictions:       utils.GetFieldInt64(rv, "Evictions"),
-				HitRate:         utils.GetFieldFloat64(rv, "HitRate"),
-				UsagePercent:    utils.GetFieldFloat64(rv, "UsagePercent"),
-				MetadataEntries: int(utils.GetFieldInt(rv, "MetadataEntries")),
-				MetadataHits:    utils.GetFieldInt64(rv, "MetadataHits"),
-				MetadataMisses:  utils.GetFieldInt64(rv, "MetadataMisses"),
-				MetadataHitRate: utils.GetFieldFloat64(rv, "MetadataHitRate"),
-			}
-		} else {
-			m.logger.Warn("Invalid stats type received", zap.String("type", fmt.Sprintf("%T", v)))
+		// Try to convert using JSON marshaling/unmarshaling for better performance
+		// This avoids reflection and is more efficient
+		data, err := json.Marshal(stats)
+		if err != nil {
+			m.logger.Warn("Failed to marshal stats", zap.Error(err))
+			return
+		}
+
+		if err := json.Unmarshal(data, &helmStats); err != nil {
+			m.logger.Warn("Failed to unmarshal stats", zap.Error(err))
 			return
 		}
 	}
@@ -334,112 +355,107 @@ func (m *MetricsServer) UpdateHelmCacheStats(stats interface{}) {
 
 // HelmCacheStats represents cache statistics from the Helm package
 type HelmCacheStats struct {
-	Entries         int
-	CurrentSize     int64
-	MaxSize         int64
-	MaxEntries      int
-	Hits            int64
-	Misses          int64
-	Evictions       int64
-	HitRate         float64
-	UsagePercent    float64
-	MetadataEntries int
-	MetadataHits    int64
-	MetadataMisses  int64
-	MetadataHitRate float64
+	Entries         int     `json:"entries"`
+	CurrentSize     int64   `json:"currentSize"`
+	MaxSize         int64   `json:"maxSize"`
+	MaxEntries      int     `json:"maxEntries"`
+	Hits            int64   `json:"hits"`
+	Misses          int64   `json:"misses"`
+	Evictions       int64   `json:"evictions"`
+	HitRate         float64 `json:"hitRate"`
+	UsagePercent    float64 `json:"usagePercent"`
+	MetadataEntries int     `json:"metadataEntries"`
+	MetadataHits    int64   `json:"metadataHits"`
+	MetadataMisses  int64   `json:"metadataMisses"`
+	MetadataHitRate float64 `json:"metadataHitRate"`
 }
 
 // Command metrics methods
 
 // RecordCommandExecution records a command execution
-func (m *MetricsServer) RecordCommandExecution(command string, duration time.Duration, err error) {
+func (m *MetricsServer) RecordCommandExecution(ctx context.Context, command string, duration time.Duration, err error) {
 	m.commandExecutions.WithLabelValues(command).Inc()
 	m.commandDuration.WithLabelValues(command).Observe(duration.Seconds())
 	if err != nil {
 		m.commandErrors.WithLabelValues(command).Inc()
 	}
+	// Context can be used for distributed tracing integration
 }
 
 // Schema generation metrics methods
 
 // RecordSchemaGeneration records schema generation metrics
-func (m *MetricsServer) RecordSchemaGeneration(fieldCount int, duration time.Duration, err error) {
+func (m *MetricsServer) RecordSchemaGeneration(ctx context.Context, fieldCount int, duration time.Duration, err error) {
 	m.schemaGenerations.Inc()
 	m.schemaFields.Observe(float64(fieldCount))
 	m.schemaGenerationTime.Observe(duration.Seconds())
 	if err != nil {
 		m.schemaGenerationErrors.Inc()
 	}
+	// Context can be used for distributed tracing integration
 }
 
 // File operation metrics methods
 
 // RecordFileRead records a file read operation
-func (m *MetricsServer) RecordFileRead(size int64, err error) {
+func (m *MetricsServer) RecordFileRead(ctx context.Context, size int64, err error) {
 	m.fileReads.Inc()
 	if err != nil {
 		m.fileReadErrors.Inc()
 	} else {
 		m.fileSize.Observe(float64(size))
 	}
+	// Context can be used for distributed tracing integration
 }
 
 // RecordFileWrite records a file write operation
-func (m *MetricsServer) RecordFileWrite(size int64, err error) {
+func (m *MetricsServer) RecordFileWrite(ctx context.Context, size int64, err error) {
 	m.fileWrites.Inc()
 	if err != nil {
 		m.fileWriteErrors.Inc()
 	} else {
 		m.fileSize.Observe(float64(size))
 	}
+	// Context can be used for distributed tracing integration
 }
 
 // Internal state tracking for delta calculations
-var (
-	lastHits           int64
-	lastMisses         int64
-	lastEvictions      int64
-	lastMetadataHits   int64
-	lastMetadataMisses int64
-	stateMu            sync.Mutex
-)
-
 func (m *MetricsServer) getLastHits() int64 {
-	stateMu.Lock()
-	defer stateMu.Unlock()
-	return lastHits
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
+	return m.lastHits
 }
 
 func (m *MetricsServer) getLastMisses() int64 {
-	stateMu.Lock()
-	defer stateMu.Unlock()
-	return lastMisses
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
+	return m.lastMisses
 }
 
 func (m *MetricsServer) getLastEvictions() int64 {
-	stateMu.Lock()
-	defer stateMu.Unlock()
-	return lastEvictions
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
+	return m.lastEvictions
 }
 
 func (m *MetricsServer) getLastMetadataHits() int64 {
-	stateMu.Lock()
-	defer stateMu.Unlock()
-	return lastMetadataHits
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
+	return m.lastMetadataHits
 }
 
 func (m *MetricsServer) getLastMetadataMisses() int64 {
-	stateMu.Lock()
-	defer stateMu.Unlock()
-	return lastMetadataMisses
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
+	return m.lastMetadataMisses
 }
 
 func (m *MetricsServer) storeLastValues(stats HelmCacheStats) {
-	stateMu.Lock()
-	defer stateMu.Unlock()
-	lastHits = stats.Hits
-	lastMisses = stats.Misses
-	lastEvictions = stats.Evictions
-	lastMetadataHits = stats.MetadataHits
-	lastMetadataMisses = stats.MetadataMisses
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
+	m.lastHits = stats.Hits
+	m.lastMisses = stats.Misses
+	m.lastEvictions = stats.Evictions
+	m.lastMetadataHits = stats.MetadataHits
+	m.lastMetadataMisses = stats.MetadataMisses
 }

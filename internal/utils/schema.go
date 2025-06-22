@@ -164,17 +164,16 @@ func InferReflectedFloatSchema(floatVal float64) map[string]any {
 }
 
 // GetContextDirectory extracts the context directory from arguments
-func GetContextDirectory(args []string) string {
+func GetContextDirectory(args []string) (string, error) {
 	if len(args) > 0 {
-		return args[0]
+		return args[0], nil
 	}
 	// Get the current working directory
 	dir, err := os.Getwd()
 	if err != nil {
-		fmt.Println("Error getting current working directory:", err)
-		return ""
+		return "", fmt.Errorf("failed to get current working directory: %w", err)
 	}
-	return dir
+	return dir, nil
 }
 
 // InferArraySchema processes array types and generates array schema

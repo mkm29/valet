@@ -53,6 +53,9 @@ func GenerateWithApp(app *App, ctxDir, overridesFlag string) (string, error) {
 		// Record command metrics
 		if cmdMetrics, metricsErr := tel.NewCommandMetrics(); metricsErr == nil {
 			cmdMetrics.RecordCommandExecution(ctx, "generate", duration, err)
+		} else {
+			// Log metrics initialization error
+			app.Logger.Warn("Failed to initialize command metrics", zap.Error(metricsErr))
 		}
 
 		// Set span status
@@ -553,7 +556,10 @@ You can generate a schema from either:
 // generateCmdRunWithApp is the main execution function with dependency injection
 func generateCmdRunWithApp(cmd *cobra.Command, args []string, app *App) error {
 	// Get context directory if provided
-	ctx := utils.GetContextDirectory(args)
+	ctx, err := utils.GetContextDirectory(args)
+	if err != nil {
+		return fmt.Errorf("failed to determine context directory: %w", err)
+	}
 
 	// Parse command configuration
 	cmdConfig, err := parseGenerateCommandConfigWithApp(cmd, ctx, app)
