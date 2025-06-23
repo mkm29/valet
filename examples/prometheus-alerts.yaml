@@ -1,0 +1,182 @@
+# Prometheus Alerting Rules for Valet
+# 
+# This file contains example Prometheus alerting rules for monitoring Valet
+# These rules can be loaded into Prometheus using the rule_files configuration
+#
+# Example prometheus.yml configuration:
+# rule_files:
+#   - "/path/to/prometheus-alerts.yaml"
+
+groups:
+  - name: valet_performance
+    interval: 30s
+    rules:
+      # Alert when command execution is consistently slow
+      - alert: ValetSlowCommandExecution
+        expr: |
+          histogram_quantile(0.95, sum(rate(valet_command_duration_seconds_bucket[5m])) by (command, le)) > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: valet
+        annotations:
+          summary: "Valet command {{ $labels.command }} is executing slowly"
+          description: "The 95th percentile execution time for command {{ $labels.command }} is {{ $value }}s (threshold: 5s)"
+          
+      # Alert when command error rate is high
+      - alert: ValetHighCommandErrorRate
+        expr: |
+          (sum(rate(valet_command_errors_total[5m])) by (command) / sum(rate(valet_command_executions_total[5m])) by (command)) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          component: valet
+        annotations:
+          summary: "High error rate for Valet command {{ $labels.command }}"
+          description: "Command {{ $labels.command }} has an error rate of {{ $value | humanizePercentage }} over the last 5 minutes"
+
+  - name: valet_cache
+    interval: 30s
+    rules:
+      # Alert when Helm cache hit rate is low
+      - alert: ValetLowCacheHitRate
+        expr: |
+          valet_helm_cache_hit_rate < 50
+        for: 10m
+        labels:
+          severity: warning
+          component: valet
+          cache: helm
+        annotations:
+          summary: "Low Helm cache hit rate"
+          description: "Helm cache hit rate is {{ $value }}% (threshold: 50%). Consider increasing cache size or TTL."
+          
+      # Alert when cache is nearly full
+      - alert: ValetCacheNearlyFull
+        expr: |
+          (valet_helm_cache_size_bytes / (10 * 1024 * 1024)) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: valet
+          cache: helm
+        annotations:
+          summary: "Helm cache is nearly full"
+          description: "Helm cache is {{ $value | humanizePercentage }} full. Consider increasing max cache size."
+          
+      # Alert on high cache eviction rate
+      - alert: ValetHighCacheEvictionRate
+        expr: |
+          rate(valet_helm_cache_evictions_total[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: valet
+          cache: helm
+        annotations:
+          summary: "High Helm cache eviction rate"
+          description: "Helm cache is evicting {{ $value }} entries per second. Cache may be undersized."
+
+  - name: valet_metrics_server
+    interval: 30s
+    rules:
+      # Alert when metrics server is down
+      - alert: ValetMetricsServerDown
+        expr: |
+          up{job="valet"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: valet
+        annotations:
+          summary: "Valet metrics server is down"
+          description: "Valet metrics server has been down for more than 2 minutes"
+          
+      # Alert on metrics server restarts
+      - alert: ValetMetricsServerRestarting
+        expr: |
+          increase(valet_metrics_server_startups_total[1h]) > 3
+        labels:
+          severity: warning
+          component: valet
+        annotations:
+          summary: "Valet metrics server is restarting frequently"
+          description: "Valet metrics server has restarted {{ $value }} times in the last hour"
+          
+      # Alert on slow graceful shutdown
+      - alert: ValetSlowShutdown
+        expr: |
+          histogram_quantile(0.95, rate(valet_metrics_server_shutdown_duration_seconds_bucket[5m])) > 30
+        for: 5m
+        labels:
+          severity: warning
+          component: valet
+        annotations:
+          summary: "Valet metrics server shutdown is slow"
+          description: "95th percentile shutdown time is {{ $value }}s (threshold: 30s)"
+          
+      # Alert on unhealthy metrics server
+      - alert: ValetMetricsServerUnhealthy
+        expr: |
+          valet_metrics_server_state != 2
+        for: 5m
+        labels:
+          severity: warning
+          component: valet
+        annotations:
+          summary: "Valet metrics server is not in running state"
+          description: "Metrics server state is {{ $value }} (0=stopped, 1=starting, 2=running, 3=shutting_down)"
+
+  - name: valet_schema_generation
+    interval: 30s
+    rules:
+      # Alert on schema generation failures
+      - alert: ValetSchemaGenerationFailures
+        expr: |
+          (sum(rate(valet_schema_generation_errors_total[5m])) / sum(rate(valet_schema_generations_total[5m]))) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: valet
+        annotations:
+          summary: "High schema generation failure rate"
+          description: "Schema generation is failing {{ $value | humanizePercentage }} of the time"
+          
+      # Alert on slow schema generation
+      - alert: ValetSlowSchemaGeneration
+        expr: |
+          histogram_quantile(0.95, rate(valet_schema_generation_duration_seconds_bucket[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: valet
+        annotations:
+          summary: "Schema generation is slow"
+          description: "95th percentile schema generation time is {{ $value }}s (threshold: 10s)"
+
+  - name: valet_file_operations
+    interval: 30s
+    rules:
+      # Alert on file operation errors
+      - alert: ValetFileOperationErrors
+        expr: |
+          (sum(rate(valet_file_read_errors_total[5m])) + sum(rate(valet_file_write_errors_total[5m]))) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: valet
+        annotations:
+          summary: "High file operation error rate"
+          description: "File operations are failing at {{ $value }} errors per second"
+          
+      # Alert on large file operations
+      - alert: ValetLargeFileOperations
+        expr: |
+          histogram_quantile(0.95, rate(valet_file_size_bytes_bucket[5m])) > 104857600
+        for: 5m
+        labels:
+          severity: info
+          component: valet
+        annotations:
+          summary: "Large files being processed"
+          description: "95th percentile file size is {{ $value | humanize1024 }}B (threshold: 100MB)"

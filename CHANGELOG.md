@@ -9,11 +9,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Docker Support**:
+  - Multistage Dockerfile using Chainguard's distroless static image for minimal attack surface
+  - Runs as non-root user (UID 65532) for enhanced security
+  - Includes only essential files: binary, CA certificates, and timezone data
+  - Docker Compose configuration with security hardening examples
+  - Support for both standalone and telemetry-enabled configurations
+  - `.dockerignore` file to optimize build context
+  - Documentation for Docker usage in README
+
+- **Prometheus Monitoring Examples**:
+  - Comprehensive Prometheus alerting rules covering performance, cache health, server health, and operational issues
+  - Full Grafana dashboard JSON with visualizations for command execution, error rates, cache metrics, and server state
+  - Complete monitoring stack configuration with Docker Compose setup
+  - Alertmanager configuration for routing alerts to multiple notification channels
+  - Updated examples/README.md with detailed documentation of all monitoring resources
+
 - **Security and Logging Enhancements**:
   - Security section in README documenting sensitive information handling
   - Automatic redaction of sensitive credentials in debug output (passwords, tokens show as `[REDACTED]`)
   - `InitializeLogger` method to `App` struct for centralized logger initialization with cleanup function
   - Logger flush logic ensures buffered logs are written before exit
+
+- **Server Lifecycle Metrics**:
+  - New Prometheus metrics for monitoring server lifecycle events:
+    - `valet_metrics_server_start_time_seconds`: Unix timestamp when metrics server started
+    - `valet_metrics_server_uptime_seconds`: Current server uptime in seconds (updated every 10 seconds)
+    - `valet_metrics_server_startups_total`: Total number of metrics server startups
+    - `valet_metrics_server_shutdowns_total`: Total number of metrics server shutdowns
+    - `valet_metrics_server_shutdown_duration_seconds`: Histogram of graceful shutdown durations
+    - `valet_metrics_server_health_checks_total`: Total number of health check requests
+    - `valet_metrics_server_health_check_duration_seconds`: Histogram of health check response times
+    - `valet_metrics_server_state`: Current server state (0=stopped, 1=starting, 2=running, 3=shutting_down)
+  - Enhanced health endpoint with custom headers:
+    - `X-Server-State`: Current server state as string (stopped/starting/running/shutting_down)
+    - `X-Server-Uptime`: Server uptime in seconds
+    - `Retry-After`: Suggested retry interval for clients
+  - Support for port 0 (random available port) for testing scenarios
 
 - **Helm Chart Caching System**:
   - In-memory caching for remote charts to avoid redundant downloads
@@ -36,6 +68,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
     - `yaml.go`: YAML processing (`DeepMerge`, `LoadYAML`)
     - `string.go`: String manipulation (`MaskString`, `FormatBytes`)
     - `build.go`: Build information utilities (`GetBuildVersion`)
+    - `error.go`: Error handling utilities (`ErrorType`, `IsIgnorableSyncError`)
+    - `math.go`: Mathematical utilities (`CalculateDelta` for counter reset detection)
+    - `performance.go`: Performance utilities (`CategorizePerformance`, `ServerStateToString`)
 
 - **Enhanced Error Messages**:
   - Detailed error messages for remote chart failures with troubleshooting hints
@@ -51,6 +86,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Moved Helm config building functions to `internal/helm/config_builder.go`
   - `GetContextDirectory` now returns current working directory if no argument provided
   - Logger initialization moved from `cmd/root.go` to `App.InitializeLogger()` method
+  - Moved generic helper functions from `telemetry` package to `utils` package for better reusability:
+    - `errorType` → `utils.ErrorType`
+    - `isIgnorableSyncError` → `utils.IsIgnorableSyncError`
+    - `calculateDelta` → `utils.CalculateDelta`
+    - `categorizePerformance` → `utils.CategorizePerformance`
+    - `getServerStateString` → `utils.ServerStateToString`
+
+- **Documentation Updates**:
+  - Cleaned up root README.md to be more concise and user-friendly
+  - Moved detailed observability documentation to examples directory
+  - Created comprehensive `.valet.yaml.example` file with all configuration options
+  - Root README now links to examples directory for detailed configurations
 
 - **BREAKING: Configuration Changes**:
   - Replaced `Debug` boolean with `LogLevel` field (accepts: debug/info/warn/error/dpanic/panic/fatal)
@@ -82,6 +129,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Remote Chart Configuration**: Fixed issue where remote chart configuration from config file was incorrectly treated as conflicting with local context when no explicit context directory was provided
+
 - **Build and Dependency Injection Issues**:
   - Build errors caused by undefined `inferSchema` function - updated to use `inferSchema`
   - Build errors from undefined `globalApp` variable after removing backward compatibility code
@@ -104,7 +153,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - **Optimized metrics collection performance**: Replaced JSON marshaling/unmarshaling with efficient `CacheStatsProvider` interface
   - **Enhanced tracing integration**: Metrics recording methods now use context for span correlation and add relevant attributes
   - **Robust counter reset detection**: Added `calculateDelta()` method to gracefully handle cache clearing and counter resets
-  - **Configurable health checks**: Made metrics server startup timing configurable via `HealthCheckMaxAttempts` and `HealthCheckBackoff` settings
+  - **Configurable health checks**: Made metrics server startup timing configurable via `HealthCheckMaxAttempts`, `HealthCheckBackoff`, and `HealthCheckTimeout` settings
+  - **Health check improvements**: Added configurable overall timeout for server startup and Retry-After header in health endpoint responses
+  - **Context-based correlation**: Enhanced `RecordCommandExecution` with request correlation IDs, sampling priority propagation, and performance categorization using OpenTelemetry baggage
+  - **Server lifecycle metrics**: Added comprehensive Prometheus metrics for tracking server state transitions, uptime, startup/shutdown counts, health check frequency, and graceful shutdown duration
 
 ## [v0.2.4] - 2025-06-19
 

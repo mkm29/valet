@@ -1,0 +1,22 @@
+[
+  {
+    "targets": [
+      "valet-1.example.com:9090",
+      "valet-2.example.com:9090",
+      "valet-3.example.com:9090"
+    ],
+    "labels": {
+      "environment": "production",
+      "region": "us-east-1"
+    }
+  },
+  {
+    "targets": [
+      "valet-staging.example.com:9090"
+    ],
+    "labels": {
+      "environment": "staging",
+      "region": "us-west-2"
+    }
+  }
+]

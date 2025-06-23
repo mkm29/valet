@@ -5,11 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
-	"syscall"
 	"time"
 
 	"github.com/mkm29/valet/internal/config"
+	"github.com/mkm29/valet/internal/utils"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -98,14 +97,8 @@ func NewTelemetry(ctx context.Context, opts TelemetryOptions) (*Telemetry, error
 	// Create metrics server if enabled
 	var metricsServer *MetricsServer
 	if cfg.Metrics != nil && cfg.Metrics.Enabled {
-		// Convert config.MetricsConfig to telemetry.MetricsConfig
-		metricsConfig := &MetricsConfig{
-			Enabled: cfg.Metrics.Enabled,
-			Port:    cfg.Metrics.Port,
-			Path:    cfg.Metrics.Path,
-		}
-		// Use the embedded zap logger
-		metricsServer = NewMetricsServer(metricsConfig, logger.Logger)
+		// Use the metrics config directly from the config package
+		metricsServer = NewMetricsServer(cfg.Metrics, logger.Logger)
 		if err := metricsServer.Start(ctx); err != nil {
 			// Cleanup on error
 			_ = meterProvider.Shutdown(context.Background())
@@ -171,7 +164,7 @@ func (t *Telemetry) Shutdown(ctx context.Context) error {
 		if err := t.logger.Sync(); err != nil {
 			// Ignore sync errors for stdout/stderr which are common in tests
 			// These errors occur when file descriptors are redirected or closed
-			if !isIgnorableSyncError(err) {
+			if !utils.IsIgnorableSyncError(err) {
 				errs = append(errs, fmt.Errorf("failed to sync logger: %w", err))
 			}
 		}
@@ -353,37 +346,4 @@ func AddAttributes(ctx context.Context, attrs ...attribute.KeyValue) {
 	if span.IsRecording() {
 		span.SetAttributes(attrs...)
 	}
-}
-
-// isIgnorableSyncError checks if a logger sync error can be safely ignored
-func isIgnorableSyncError(err error) bool {
-	// Ignore errors related to syncing stdout/stderr
-	// These commonly occur in test environments
-	if err == nil {
-		return true
-	}
-
-	// Check for specific error messages and types
-	errStr := err.Error()
-
-	// Common sync errors to ignore
-	ignorableErrors := []string{
-		"bad file descriptor",
-		"invalid argument",
-		"/dev/stdout",
-		"/dev/stderr",
-	}
-
-	for _, ignore := range ignorableErrors {
-		if strings.Contains(errStr, ignore) {
-			return true
-		}
-	}
-
-	// Check for specific syscall errors
-	if errors.Is(err, syscall.EBADF) || errors.Is(err, syscall.EINVAL) {
-		return true
-	}
-
-	return false
 }

@@ -30,12 +30,20 @@ func GenerateWithApp(app *App, ctxDir, overridesFlag string) (string, error) {
 		tel = &telemetry.Telemetry{}
 	}
 
+	// Generate a request ID for correlation
+	requestID := utils.GenerateRequestID()
+	ctx = telemetry.EnrichContextWithRequestID(ctx, requestID)
+
+	// Set sampling priority for command execution
+	ctx = telemetry.EnrichContextWithSamplingPriority(ctx, telemetry.SamplingPriorityAccept)
+
 	// Start main span
 	start := time.Now()
 	ctx, span := tel.StartSpan(ctx, "generate.command",
 		trace.WithAttributes(
 			attribute.String("context_dir", ctxDir),
 			attribute.Bool("has_overrides", overridesFlag != ""),
+			attribute.String("request.id", requestID),
 		),
 	)
 	defer span.End()
@@ -50,13 +58,8 @@ func GenerateWithApp(app *App, ctxDir, overridesFlag string) (string, error) {
 		result, err := executeGenerate()
 		duration := time.Since(start)
 
-		// Record command metrics
-		if cmdMetrics, metricsErr := tel.NewCommandMetrics(); metricsErr == nil {
-			cmdMetrics.RecordCommandExecution(ctx, "generate", duration, err)
-		} else {
-			// Log metrics initialization error
-			app.Logger.Warn("Failed to initialize command metrics", zap.Error(metricsErr))
-		}
+		// Record command metrics to both OpenTelemetry and Prometheus
+		tel.RecordCommandExecutionWithServer(ctx, "generate", duration, err)
 
 		// Set span status
 		if err != nil {
@@ -562,7 +565,8 @@ func generateCmdRunWithApp(cmd *cobra.Command, args []string, app *App) error {
 	}
 
 	// Parse command configuration
-	cmdConfig, err := parseGenerateCommandConfigWithApp(cmd, ctx, app)
+	// Pass args to determine if context was explicitly provided
+	cmdConfig, err := parseGenerateCommandConfigWithApp(cmd, ctx, app, args)
 	if err != nil {
 		return err
 	}
@@ -584,7 +588,7 @@ func generateCmdRunWithApp(cmd *cobra.Command, args []string, app *App) error {
 }
 
 // parseGenerateCommandConfigWithApp parses configuration with dependency injection
-func parseGenerateCommandConfigWithApp(cmd *cobra.Command, ctx string, app *App) (*generateCommandConfig, error) {
+func parseGenerateCommandConfigWithApp(cmd *cobra.Command, ctx string, app *App, args []string) (*generateCommandConfig, error) {
 	chartName, _ := cmd.Flags().GetString("chart-name")
 	overridesFlag, err := cmd.Flags().GetString("overrides")
 	if err != nil {
@@ -597,7 +601,7 @@ func parseGenerateCommandConfigWithApp(cmd *cobra.Command, ctx string, app *App)
 		overridesFlag:        overridesFlag,
 		hasRemoteChartFlags:  chartName != "",
 		hasRemoteChartConfig: app.Config != nil && app.Config.Helm != nil && app.Config.Helm.Chart != nil && app.Config.Helm.Chart.Name != "",
-		hasLocalContext:      ctx != "",
+		hasLocalContext:      len(args) > 0, // Only true if context directory was explicitly provided
 	}
 
 	config.isRemote = config.hasRemoteChartFlags || config.hasRemoteChartConfig

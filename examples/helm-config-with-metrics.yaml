@@ -17,6 +17,9 @@ telemetry:
     enabled: true
     port: 9090
     path: /metrics
+    healthCheckMaxAttempts: 10
+    healthCheckBackoff: 50ms
+    healthCheckTimeout: 5s
 
 # Helm chart configuration
 helm:

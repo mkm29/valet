@@ -1,0 +1,53 @@
+# Example Valet Configuration File
+# Copy this to .valet.yaml or use with --config-file flag
+
+# Logging configuration
+logLevel: info  # Options: debug, info, warn, error, dpanic, panic, fatal
+
+# Default paths (can be overridden by CLI flags)
+context: .                      # Directory containing values.yaml
+overrides: ""                   # Path to overrides file (optional)
+output: values.schema.json      # Output file name
+
+# Telemetry configuration
+telemetry:
+  enabled: false                # Enable OpenTelemetry integration
+  serviceName: valet            # Service name for traces/metrics
+  serviceVersion: 0.1.0         # Service version
+  exporterType: otlp            # Options: none, stdout, otlp
+  otlpEndpoint: localhost:4317  # OTLP collector endpoint
+  insecure: true                # Use insecure connection
+  sampleRate: 1.0               # Trace sampling rate (0.0-1.0)
+  headers: {}                   # Additional OTLP headers
+  
+  # Prometheus metrics server configuration
+  metrics:
+    enabled: false              # Enable metrics endpoint
+    port: 9090                  # Metrics server port
+    path: /metrics              # Metrics endpoint path
+    healthCheckMaxAttempts: 10  # Max startup health checks
+    healthCheckBackoff: 50ms    # Backoff between checks
+    healthCheckTimeout: 5s      # Overall startup timeout
+
+# Helm chart configuration (for remote charts)
+helm:
+  chart:
+    name: prometheus            # Chart name
+    version: 25.27.0            # Chart version
+    registry:
+      url: https://prometheus-community.github.io/helm-charts
+      type: HTTPS               # Options: HTTP, HTTPS, OCI
+      insecure: false           # Allow insecure connections
+      
+      # Authentication (optional)
+      auth:
+        username: ""            # Basic auth username
+        password: ""            # Basic auth password  
+        token: ""               # Bearer token
+      
+      # TLS configuration (optional)
+      tls:
+        insecureSkipTLSVerify: false  # Skip cert verification
+        certFile: ""            # Client certificate path
+        keyFile: ""             # Client key path
+        caFile: ""              # CA certificate path

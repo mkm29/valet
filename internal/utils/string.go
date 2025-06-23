@@ -1,9 +1,12 @@
 package utils
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // MaskString returns a masked representation for logging
@@ -54,4 +57,16 @@ func FormatBytes(bytes int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %ciB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// GenerateRequestID generates a unique request ID for correlation
+func GenerateRequestID() string {
+	// Generate 8 random bytes
+	bytes := make([]byte, 8)
+	if _, err := rand.Read(bytes); err != nil {
+		// Fallback to timestamp-based ID if random generation fails
+		return fmt.Sprintf("req-%d", time.Now().UnixNano())
+	}
+	// Convert to hex string with prefix
+	return fmt.Sprintf("req-%s", hex.EncodeToString(bytes))
 }

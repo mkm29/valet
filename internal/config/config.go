@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/mkm29/valet/internal/utils"
 	"go.uber.org/zap/zapcore"
@@ -77,17 +78,23 @@ type TelemetryConfig struct {
 
 // MetricsConfig holds configuration for the metrics server
 type MetricsConfig struct {
-	Enabled bool   `yaml:"enabled"`
-	Port    int    `yaml:"port"`
-	Path    string `yaml:"path"`
+	Enabled                bool          `yaml:"enabled"`
+	Port                   int           `yaml:"port"`
+	Path                   string        `yaml:"path"`
+	HealthCheckMaxAttempts int           `yaml:"healthCheckMaxAttempts,omitempty"`
+	HealthCheckBackoff     time.Duration `yaml:"healthCheckBackoff,omitempty"`
+	HealthCheckTimeout     time.Duration `yaml:"healthCheckTimeout,omitempty"`
 }
 
 // NewMetricsConfig returns the default metrics configuration
 func NewMetricsConfig() *MetricsConfig {
 	return &MetricsConfig{
-		Enabled: false,
-		Port:    9090,
-		Path:    "/metrics",
+		Enabled:                false,
+		Port:                   9090,
+		Path:                   "/metrics",
+		HealthCheckMaxAttempts: 10,
+		HealthCheckBackoff:     50 * time.Millisecond,
+		HealthCheckTimeout:     5 * time.Second,
 	}
 }
 

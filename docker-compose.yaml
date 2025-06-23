@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  valet:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: valet:latest
+    container_name: valet
+    # Run as non-root user (65532)
+    user: "65532"
+    # Example: generate schema from a mounted values.yaml
+    volumes:
+      - ./examples/sample-chart:/data:ro
+      - ./output:/output
+    working_dir: /data
+    command: ["generate", "--output", "/output/values.schema.json"]
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+
+  # Example with telemetry enabled
+  valet-with-telemetry:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: valet:latest
+    container_name: valet-telemetry
+    user: "65532"
+    volumes:
+      - ./examples/sample-chart:/data:ro
+      - ./output:/output
+      - ./examples/valet-config.yaml:/config/valet.yaml:ro
+    working_dir: /data
+    command: ["generate", "--config-file", "/config/valet.yaml", "--output", "/output/values.schema.json"]
+    environment:
+      - OTEL_SERVICE_NAME=valet-docker
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+    depends_on:
+      - otel-collector
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+
+  # OpenTelemetry Collector for telemetry example
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./examples/otel-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8888:8888"   # Prometheus metrics
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  output:
+    driver: local

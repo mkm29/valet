@@ -80,18 +80,22 @@ func (m *CommandMetrics) RecordCommandExecution(ctx context.Context, command str
 	}
 
 	if err != nil && m.ErrorCounter != nil {
-		errorAttrs := append(attrs, attribute.String("error.type", errorType(err)))
+		errorAttrs := append(attrs, attribute.String("error.type", utils.ErrorType(err)))
 		m.ErrorCounter.Add(ctx, 1, metric.WithAttributes(errorAttrs...))
 	}
 }
 
-// errorType returns a simplified error type for metrics
-func errorType(err error) string {
-	if err == nil {
-		return ""
+// RecordCommandExecutionWithServer records command execution metrics to both OpenTelemetry and Prometheus
+func (t *Telemetry) RecordCommandExecutionWithServer(ctx context.Context, command string, duration time.Duration, err error) {
+	// Record to OpenTelemetry metrics
+	if cmdMetrics, metricsErr := t.NewCommandMetrics(); metricsErr == nil {
+		cmdMetrics.RecordCommandExecution(ctx, command, duration, err)
 	}
-	// You can add more specific error type detection here
-	return "generic"
+
+	// Also record to Prometheus metrics server if available
+	if t.metricsServer != nil {
+		t.metricsServer.RecordCommandExecution(ctx, command, duration, err)
+	}
 }
 
 // WithCommandSpan wraps a command execution with a span and metrics
