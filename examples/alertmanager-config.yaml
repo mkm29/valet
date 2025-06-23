@@ -1,0 +1,98 @@
+# Example Alertmanager configuration for Valet alerts
+#
+# This configuration routes Valet alerts to different receivers
+# based on severity and component labels
+
+global:
+  # The smarthost and SMTP sender used for mail notifications.
+  smtp_smarthost: 'localhost:25'
+  smtp_from: 'alertmanager@example.com'
+  smtp_require_tls: false
+
+# The directory from which notification templates are read.
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# The root route on which each incoming alert enters.
+route:
+  # The labels by which incoming alerts are grouped together
+  group_by: ['alertname', 'cluster', 'service']
+  
+  # When a new group of alerts is created by an incoming alert
+  group_wait: 10s
+  
+  # When the first notification was sent, wait 'group_interval' to send a batch
+  group_interval: 10s
+  
+  # If an alert has successfully been sent, wait 'repeat_interval' to resend
+  repeat_interval: 1h
+  
+  # Default receiver
+  receiver: 'default-receiver'
+  
+  # Child routes
+  routes:
+    # Critical alerts go to pagerduty
+    - match:
+        severity: critical
+      receiver: critical-receiver
+      continue: true
+      
+    # Valet-specific alerts
+    - match:
+        component: valet
+      receiver: valet-team
+      routes:
+        # Performance alerts
+        - match_re:
+            alertname: 'Valet.*Performance.*|Valet.*Slow.*'
+          receiver: valet-performance
+          
+        # Cache alerts
+        - match_re:
+            alertname: 'Valet.*Cache.*'
+          receiver: valet-cache
+          
+    # All other warnings
+    - match:
+        severity: warning
+      receiver: warning-receiver
+
+# Inhibition rules allow to mute a set of alerts given that another alert is firing
+inhibit_rules:
+  # Inhibit less severe alerts if critical alert is firing
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']
+
+receivers:
+  - name: 'default-receiver'
+    # Add your notification config here
+    # webhook_configs:
+    #   - url: 'http://localhost:5001/webhook'
+    
+  - name: 'critical-receiver'
+    # pagerduty_configs:
+    #   - service_key: '<your-pagerduty-service-key>'
+    
+  - name: 'valet-team'
+    # slack_configs:
+    #   - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+    #     channel: '#valet-alerts'
+    #     title: 'Valet Alert'
+    
+  - name: 'valet-performance'
+    # email_configs:
+    #   - to: 'performance-team@example.com'
+    #     headers:
+    #       Subject: 'Valet Performance Alert'
+    
+  - name: 'valet-cache'
+    # webhook_configs:
+    #   - url: 'http://cache-monitor:9094/alerts'
+    
+  - name: 'warning-receiver'
+    # discord_configs:
+    #   - webhook_url: 'YOUR_DISCORD_WEBHOOK_URL'

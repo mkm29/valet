@@ -9,6 +9,7 @@ import (
 
 	"github.com/mkm29/valet/internal/config"
 	"github.com/mkm29/valet/internal/telemetry"
+	"github.com/mkm29/valet/internal/utils"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -232,7 +233,7 @@ func initializeConfig(cmd *cobra.Command) (*config.Config, error) {
 
 	// Always set the service version from build info, regardless of config source
 	if c.Telemetry != nil {
-		c.Telemetry.ServiceVersion = GetBuildVersion()
+		c.Telemetry.ServiceVersion = utils.GetBuildVersion()
 	}
 
 	// Apply CLI flag overrides

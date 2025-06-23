@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/mkm29/valet/internal/config"
+	"github.com/mkm29/valet/internal/utils"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -32,6 +33,7 @@ type Telemetry struct {
 	tracer         oteltrace.Tracer
 	meter          metric.Meter
 	logger         *Logger
+	metricsServer  *MetricsServer
 }
 
 // TelemetryOptions configures a Telemetry instance
@@ -92,6 +94,19 @@ func NewTelemetry(ctx context.Context, opts TelemetryOptions) (*Telemetry, error
 		return nil, fmt.Errorf("failed to create logger: %w", err)
 	}
 
+	// Create metrics server if enabled
+	var metricsServer *MetricsServer
+	if cfg.Metrics != nil && cfg.Metrics.Enabled {
+		// Use the metrics config directly from the config package
+		metricsServer = NewMetricsServer(cfg.Metrics, logger.Logger)
+		if err := metricsServer.Start(ctx); err != nil {
+			// Cleanup on error
+			_ = meterProvider.Shutdown(context.Background())
+			_ = traceProvider.Shutdown(context.Background())
+			return nil, fmt.Errorf("failed to start metrics server: %w", err)
+		}
+	}
+
 	return &Telemetry{
 		config:         cfg,
 		tracerProvider: traceProvider,
@@ -99,6 +114,7 @@ func NewTelemetry(ctx context.Context, opts TelemetryOptions) (*Telemetry, error
 		tracer:         tracer,
 		meter:          meter,
 		logger:         logger,
+		metricsServer:  metricsServer,
 	}, nil
 }
 
@@ -136,10 +152,21 @@ func (t *Telemetry) Shutdown(ctx context.Context) error {
 		}
 	}
 
+	// Shutdown metrics server
+	if t.metricsServer != nil {
+		if err := t.metricsServer.Shutdown(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("failed to shutdown metrics server: %w", err))
+		}
+	}
+
 	// Sync logger
 	if t.logger != nil {
 		if err := t.logger.Sync(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to sync logger: %w", err))
+			// Ignore sync errors for stdout/stderr which are common in tests
+			// These errors occur when file descriptors are redirected or closed
+			if !utils.IsIgnorableSyncError(err) {
+				errs = append(errs, fmt.Errorf("failed to sync logger: %w", err))
+			}
 		}
 	}
 
@@ -179,6 +206,14 @@ func (t *Telemetry) Logger() *Logger {
 		return logger
 	}
 	return t.logger
+}
+
+// MetricsServer returns the metrics server instance
+func (t *Telemetry) MetricsServer() *MetricsServer {
+	if t == nil {
+		return nil
+	}
+	return t.metricsServer
 }
 
 // newResource creates a new resource with service information

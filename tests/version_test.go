@@ -1,6 +1,9 @@
 package tests
 
-import "github.com/mkm29/valet/cmd"
+import (
+	"github.com/mkm29/valet/cmd"
+	"github.com/mkm29/valet/internal/utils"
+)
 
 func (ts *ValetTestSuite) TestNewVersionCmd() {
 	app := cmd.NewApp()
@@ -13,7 +16,7 @@ func (ts *ValetTestSuite) TestNewVersionCmd() {
 
 func (ts *ValetTestSuite) TestGetBuildVersion() {
 	// Test that GetBuildVersion returns a non-empty string
-	version := cmd.GetBuildVersion()
+	version := utils.GetBuildVersion()
 	ts.NotEmpty(version, "expected GetBuildVersion to return a non-empty string")
 
 	// In development mode, it should return "development" or a commit hash

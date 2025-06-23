@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/mkm29/valet/internal/config"
+	"github.com/mkm29/valet/internal/utils"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"helm.sh/helm/v3/pkg/chart"
@@ -32,6 +33,11 @@ const (
 	DefaultMaxCacheEntries = 50
 )
 
+// MetricsServerInterface defines the interface for updating metrics
+type MetricsServerInterface interface {
+	UpdateHelmCacheStats(stats interface{})
+}
+
 // Helm provides functionality for working with Helm charts
 type Helm struct {
 	logger          *zap.Logger
@@ -40,6 +46,7 @@ type Helm struct {
 	maxChartSize    int64
 	maxCacheSize    int64
 	maxCacheEntries int
+	metricsServer   MetricsServerInterface
 }
 
 // HelmOptions configures a Helm instance
@@ -207,7 +214,7 @@ func (h *Helm) evictLRU() {
 		if h.debug {
 			h.logger.Debug("Evicted chart from cache",
 				zap.String("key", key),
-				zap.String("size", h.formatBytes(entry.size)),
+				zap.String("size", utils.FormatBytes(entry.size)),
 				zap.Int64("evictions", h.cache.evictions),
 				zap.String("reason", h.getEvictionReason()),
 			)
@@ -363,10 +370,12 @@ func (h *Helm) getOrLoadChart(c *config.HelmChart) (*chart.Chart, error) {
 				zap.Int64("totalHits", h.cache.hits),
 				zap.Int64("totalMisses", h.cache.misses),
 				zap.Float64("hitRate", hitRate),
-				zap.String("entrySize", h.formatBytes(entry.size)),
+				zap.String("entrySize", utils.FormatBytes(entry.size)),
 				zap.Duration("age", time.Since(entry.lastAccess)),
 			)
 		}
+		// Update metrics after cache hit
+		h.updateMetrics()
 		return entry.chart, nil
 	}
 	h.cache.mu.RUnlock()
@@ -421,8 +430,8 @@ func (h *Helm) getOrLoadChart(c *config.HelmChart) (*chart.Chart, error) {
 		if h.debug || h.logger.Core().Enabled(zapcore.WarnLevel) {
 			h.logger.Warn("Chart too large to cache",
 				zap.String("chart", fmt.Sprintf("%s/%s", c.Name, c.Version)),
-				zap.String("chartSize", h.formatBytes(chartSize)),
-				zap.String("maxCacheSize", h.formatBytes(h.maxCacheSize)),
+				zap.String("chartSize", utils.FormatBytes(chartSize)),
+				zap.String("maxCacheSize", utils.FormatBytes(h.maxCacheSize)),
 				zap.Float64("sizeRatio", float64(chartSize)/float64(h.maxCacheSize)),
 			)
 		}
@@ -463,16 +472,18 @@ func (h *Helm) getOrLoadChart(c *config.HelmChart) (*chart.Chart, error) {
 			zap.String("chart", fmt.Sprintf("%s/%s", c.Name, c.Version)),
 			zap.String("cacheKey", cacheKey),
 			zap.Duration("loadTime", loadDuration),
-			zap.String("chartSize", h.formatBytes(chartSize)),
+			zap.String("chartSize", utils.FormatBytes(chartSize)),
 			zap.Int("evictedEntries", evictionCount),
 			zap.Duration("evictionTime", evictionDuration),
 			zap.Int("totalEntries", len(h.cache.entries)),
-			zap.String("cacheSize", h.formatBytes(h.cache.currentSize)),
+			zap.String("cacheSize", utils.FormatBytes(h.cache.currentSize)),
 			zap.Float64("cacheSizeUsage", cacheUsagePercent),
 			zap.Float64("cacheEntriesUsage", entriesUsagePercent),
 		)
 	}
 
+	// Update metrics after cache addition
+	h.updateMetrics()
 	return loadedChart, nil
 }
 
@@ -557,14 +568,14 @@ func (h *Helm) loadChart(c *config.HelmChart) (*chart.Chart, error) {
 			zap.String("name", c.Name),
 			zap.String("version", c.Version),
 			zap.Int64("sizeBytes", chartSize),
-			zap.String("sizeHuman", h.formatBytes(chartSize)),
+			zap.String("sizeHuman", utils.FormatBytes(chartSize)),
 		)
 	}
 
 	// Check if chart exceeds size limit
 	if chartSize > h.maxChartSize {
 		return nil, fmt.Errorf("chart size (%s) exceeds maximum allowed size (%s)",
-			h.formatBytes(chartSize), h.formatBytes(h.maxChartSize))
+			utils.FormatBytes(chartSize), utils.FormatBytes(h.maxChartSize))
 	}
 
 	// Load the chart archive
@@ -575,7 +586,7 @@ func (h *Helm) loadChart(c *config.HelmChart) (*chart.Chart, error) {
 		errMsg += "\n- The downloaded file is not a valid Helm chart archive"
 		errMsg += "\n- The chart archive is corrupted or incomplete"
 		errMsg += "\n- The chart format is incompatible with this version of Helm"
-		errMsg += fmt.Sprintf("\n- Downloaded size: %s", h.formatBytes(chartSize))
+		errMsg += fmt.Sprintf("\n- Downloaded size: %s", utils.FormatBytes(chartSize))
 
 		return nil, fmt.Errorf("%s", errMsg)
 	}
@@ -734,20 +745,6 @@ func (h *Helm) DownloadSchema(c *config.HelmChart) (string, func(), error) {
 	return tmp.Name(), cleanup, nil
 }
 
-// formatBytes converts bytes to human-readable format
-func (h *Helm) formatBytes(bytes int64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %ciB", float64(bytes)/float64(div), "KMGTPE"[exp])
-}
-
 // CacheStats represents cache statistics
 type CacheStats struct {
 	Entries      int     `json:"entries"`
@@ -766,6 +763,21 @@ type CacheStats struct {
 	MetadataMisses  int64   `json:"metadataMisses"`
 	MetadataHitRate float64 `json:"metadataHitRate"`
 }
+
+// CacheStatsProvider interface implementation for efficient metrics collection
+func (c CacheStats) GetEntries() int             { return c.Entries }
+func (c CacheStats) GetCurrentSize() int64       { return c.CurrentSize }
+func (c CacheStats) GetMaxSize() int64           { return c.MaxSize }
+func (c CacheStats) GetMaxEntries() int          { return c.MaxEntries }
+func (c CacheStats) GetHits() int64              { return c.Hits }
+func (c CacheStats) GetMisses() int64            { return c.Misses }
+func (c CacheStats) GetEvictions() int64         { return c.Evictions }
+func (c CacheStats) GetHitRate() float64         { return c.HitRate }
+func (c CacheStats) GetUsagePercent() float64    { return c.UsagePercent }
+func (c CacheStats) GetMetadataEntries() int     { return c.MetadataEntries }
+func (c CacheStats) GetMetadataHits() int64      { return c.MetadataHits }
+func (c CacheStats) GetMetadataMisses() int64    { return c.MetadataMisses }
+func (c CacheStats) GetMetadataHitRate() float64 { return c.MetadataHitRate }
 
 // GetCacheStats returns current cache statistics
 func (h *Helm) GetCacheStats() CacheStats {
@@ -834,4 +846,24 @@ func (h *Helm) ClearCache() {
 	if h.debug {
 		h.logger.Debug("Cache cleared (including metadata)")
 	}
+
+	// Update metrics after clearing
+	h.updateMetrics()
+}
+
+// SetMetricsServer sets the metrics server for cache statistics reporting
+func (h *Helm) SetMetricsServer(server MetricsServerInterface) {
+	h.metricsServer = server
+	// Send initial metrics
+	h.updateMetrics()
+}
+
+// updateMetrics sends current cache statistics to the metrics server if available
+func (h *Helm) updateMetrics() {
+	if h.metricsServer == nil {
+		return
+	}
+
+	stats := h.GetCacheStats()
+	h.metricsServer.UpdateHelmCacheStats(stats)
 }

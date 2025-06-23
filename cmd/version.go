@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/mkm29/valet/internal/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -16,7 +17,7 @@ func NewVersionCmdWithApp(app *App) *cobra.Command {
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Use the refactored GetBuildVersion function
-			version := GetBuildVersion()
+			version := utils.GetBuildVersion()
 			fmt.Println(version)
 			return nil
 		},

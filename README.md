@@ -6,6 +6,7 @@
 
 [![Release](https://github.com/mkm29/valet/actions/workflows/release.yml/badge.svg)](https://github.com/mkm29/valet/actions/workflows/release.yml)
 [![Coverage](https://github.com/mkm29/valet/actions/workflows/coverage.yml/badge.svg)](https://github.com/mkm29/valet/actions/workflows/coverage.yml)
+[![Test Coverage](https://img.shields.io/badge/coverage-61.8%25-yellow)](https://github.com/mkm29/valet/actions/workflows/coverage.yml)
 
 A command-line tool to generate a JSON Schema from a YAML `values.yaml` file, optionally merging an overrides file. Useful for Helm chart values and other YAML-based configurations.
 
@@ -16,37 +17,51 @@ A command-line tool to generate a JSON Schema from a YAML `values.yaml` file, op
   - [Table of Contents](#table-of-contents)
   - [Overview](#overview)
   - [Architecture](#architecture)
+    - [Package Design](#package-design)
+      - [internal/config](#internalconfig)
+      - [internal/helm](#internalhelm)
+      - [internal/telemetry](#internaltelemetry)
+      - [internal/utils](#internalutils)
+    - [Architectural Benefits](#architectural-benefits)
+    - [Code Quality](#code-quality)
+    - [Logging](#logging)
   - [Installation](#installation)
     - [From Source](#from-source)
     - [Using Go Install](#using-go-install)
+    - [Using Docker](#using-docker)
   - [Usage](#usage)
     - [Configuration](#configuration)
-      - [Configuration File](#configuration-file)
-      - [Environment Variables](#environment-variables)
     - [Examples](#examples)
+    - [Example](#example)
+    - [Debug Mode](#debug-mode)
     - [Observability](#observability)
-      - [Telemetry Configuration](#telemetry-configuration)
-      - [Configuration Options](#configuration-options)
-      - [Distributed Tracing](#distributed-tracing)
-      - [Metrics](#metrics)
-      - [Structured Logging](#structured-logging)
-      - [Integration with Observability Platforms](#integration-with-observability-platforms)
-      - [Example Input/Output](#example-inputoutput)
   - [How it works](#how-it-works)
     - [Schema Generation Intelligence](#schema-generation-intelligence)
   - [Development](#development)
     - [Requirements](#requirements)
+    - [Code Architecture](#code-architecture)
+      - [Dependency Injection](#dependency-injection)
+      - [Code Organization Principles](#code-organization-principles)
     - [Makefile](#makefile)
     - [Testing \& Coverage](#testing--coverage)
       - [Test Organization](#test-organization)
+      - [Known Test Environment Considerations](#known-test-environment-considerations)
     - [Release](#release)
+  - [Security](#security)
+    - [Sensitive Information Handling](#sensitive-information-handling)
+    - [Container Security](#container-security)
   - [Contributing](#contributing)
   - [Roadmap](#roadmap)
     - [✅ Completed Features](#-completed-features)
+      - [Core Functionality](#core-functionality)
+      - [Remote Helm Chart Support](#remote-helm-chart-support)
+      - [Observability \& Monitoring](#observability--monitoring)
+      - [Code Quality \& Architecture](#code-quality--architecture)
+      - [Developer Experience](#developer-experience)
     - [🚧 In Progress](#-in-progress)
     - [📋 Planned Features](#-planned-features)
-      - [Short-term (Q2-Q3 2025)](#short-term-q2-q3-2025)
-      - [Medium-term (Q3-Q4 2025)](#medium-term-q3-q4-2025)
+      - [Short-term (Q3-Q4 2025)](#short-term-q3-q4-2025)
+      - [Medium-term (Q4 2025 - Q1 2026)](#medium-term-q4-2025---q1-2026)
       - [Long-term (2026 and beyond)](#long-term-2026-and-beyond)
     - [🤝 Get Involved](#-get-involved)
 
@@ -92,11 +107,16 @@ graph TD
     GenerateCmd --> Helm[internal/helm]
     Config --> |config loading| YAML[YAML Config Files]
     Helm --> |chart operations| HelmSDK[Helm SDK]
+    Config --> Utils[internal/utils]
+    Helm --> Utils
+    Telemetry --> Utils
+    SchemaGen --> Utils
 
     subgraph "Core Functionality"
         SchemaGen --> TypeInference[Type Inference]
         SchemaGen --> ComponentHandling[Component Processing]
         SchemaGen --> OverrideMerging[Override Merging]
+        Utils
     end
 
     subgraph "Helm Integration"
@@ -143,6 +163,7 @@ graph TD
     class Telemetry,Tracing,Metrics,Logging,OTLP,Logger telemetry;
     class Helm,HelmSDK helm;
     class App app;
+    class Utils core;
 ```
 
 ### Package Design
@@ -150,6 +171,7 @@ graph TD
 Valet follows Go best practices with well-structured packages using a consistent Options pattern:
 
 #### internal/config
+
 - Centralized configuration management
 - All configuration structs (including Helm configuration)
 - YAML marshaling/unmarshaling support
@@ -157,6 +179,7 @@ Valet follows Go best practices with well-structured packages using a consistent
 - Constructor functions for each configuration type
 
 #### internal/helm
+
 - Helm chart operations with clean, DRY code
 - Struct-based design with `Helm` type and `NewHelm` constructor
 - Flexible initialization via `HelmOptions` pattern
@@ -194,6 +217,7 @@ Valet follows Go best practices with well-structured packages using a consistent
   - Network connectivity and URL format troubleshooting
   - Helpful suggestions when charts lack schema files
 - Example usage:
+
   ```go
   // Using options pattern with custom limits
   h := helm.NewHelm(helm.HelmOptions{
@@ -203,17 +227,17 @@ Valet follows Go best practices with well-structured packages using a consistent
       MaxCacheSize:    20 * 1024 * 1024,    // 20MB total cache (default is 10MB)
       MaxCacheEntries: 100,                 // Max 100 charts cached (default is 50)
   })
-  
+
   // Get cache statistics
   stats := h.GetCacheStats()
   fmt.Printf("Cache hit rate: %.2f%%, Usage: %.2f%%\n", 
       stats.HitRate, stats.UsagePercent)
   fmt.Printf("Metadata cache hit rate: %.2f%%, Entries: %d\n",
       stats.MetadataHitRate, stats.MetadataEntries)
-  
+
   // Clear cache if needed
   h.ClearCache()
-  
+
   // Check and download schema (uses cache automatically)
   if hasSchema, err := h.HasSchema(chartConfig); hasSchema {
       schemaPath, cleanup, err := h.DownloadSchema(chartConfig)
@@ -222,6 +246,7 @@ Valet follows Go best practices with well-structured packages using a consistent
   ```
 
 #### internal/telemetry
+
 - OpenTelemetry integration
 - Struct-based design with `Telemetry` type and `NewTelemetry` constructor
 - Flexible initialization via `TelemetryOptions` pattern
@@ -229,12 +254,45 @@ Valet follows Go best practices with well-structured packages using a consistent
 - Metrics and tracing support
 - Configurable exporters (OTLP, stdout)
 - Example usage:
+
   ```go
   // Using options pattern
   tel := telemetry.NewTelemetry(ctx, telemetry.TelemetryOptions{
       Config: cfg,
   })
   ```
+
+#### internal/utils
+
+- Centralized utility functions for common operations
+- Organized into focused modules:
+  - `reflection.go`: Reflection utilities for struct field extraction and empty value detection
+    - `GetFieldInt`, `GetFieldInt64`, `GetFieldFloat64`: Extract typed values from reflect.Value
+    - `IsEmptyValue`: Check if a value is empty (nil, empty string/slice/map)
+  - `schema.go`: Schema generation helper functions
+    - `BuildNestedDefaults`, `BuildObjectDefaults`: Build default values for schemas
+    - `IsNullValue`, `IsDisabledComponent`: Check value states
+    - `CountSchemaFields`: Recursively count schema fields
+  - `yaml.go`: YAML processing utilities
+    - `DeepMerge`: Recursively merge YAML maps
+    - `ConvertToStringKeyMap`: Convert interface{} maps to string-keyed maps
+    - `LoadYAML`: Load and parse YAML files with proper type conversion
+  - `string.go`: String manipulation utilities
+    - `MaskString`: Mask sensitive values for logging
+    - `SanitizePath`: Remove sensitive path information
+    - `FormatBytes`: Convert bytes to human-readable format (KB, MB, GB, etc.)
+  - `build.go`: Build information utilities
+    - `GetBuildVersion`: Extract version information from the binary
+  - `error.go`: Error handling utilities
+    - `ErrorType`: Returns a simplified error type for metrics
+    - `IsIgnorableSyncError`: Checks if file sync errors should be ignored
+  - `math.go`: Mathematical utilities
+    - `CalculateDelta`: Calculate delta with counter reset detection
+  - `performance.go`: Performance and state utilities
+    - `CategorizePerformance`: Categorize performance based on duration
+    - `ServerStateToString`: Convert numeric server state to string representation
+- All functions are exported and reusable across packages
+- Provides consistent utilities for telemetry, monitoring, and general operations
 
 ### Architectural Benefits
 
@@ -296,6 +354,29 @@ Install directly using Go modules:
 go install github.com/mkm29/valet@latest
 ```
 
+### Using Docker
+
+Run Valet using the official Docker image based on Chainguard's distroless static image:
+
+```bash
+# Build the image
+docker build -t valet:latest .
+
+# Run with mounted values.yaml
+docker run --rm -v $(pwd):/data:ro -v $(pwd)/output:/output \
+  valet:latest generate --output /output/values.schema.json
+
+# Or use docker-compose
+docker-compose run --rm valet
+```
+
+The Docker image:
+
+- Uses a minimal distroless base image for security
+- Runs as non-root user (UID 65532)
+- Contains only the static binary and essential files (CA certificates, timezone data)
+- Supports all Valet features including remote chart downloads and telemetry
+
 ## Usage
 
 Generate a JSON Schema from a `values.yaml` using the `generate` command:
@@ -332,65 +413,45 @@ Remote chart flags:
 ```
 
 The tool can generate schemas from:
-- **Local Helm charts**: Provide a context directory containing `values.yaml`
+
+- **Local Helm charts**: Provide a context directory containing `values.yaml` (defaults to current directory if not specified)
 - **Remote Helm charts**: Use `--chart-name` and related flags, or configure in a config file
 
 The tool writes a `values.schema.json` (or custom output file) in the context directory for local charts, or the current directory for remote charts.
 
 ### Configuration
 
-Valet supports configuration through multiple sources, with precedence in the following order:
+Valet supports configuration through multiple sources (in order of precedence):
 
-1. CLI flags (highest priority)
-2. Environment variables
-3. Configuration file
-4. Default values (lowest priority)
+1. **CLI flags** (highest priority)
+2. **Environment variables** (`VALET_CONTEXT`, `VALET_OVERRIDES`, `VALET_OUTPUT`, `VALET_DEBUG`)
+3. **Configuration file** (`.valet.yaml` or `--config-file`)
+4. **Default values**
 
-#### Configuration File
+Create a `.valet.yaml` file based on [.valet.yaml.example](.valet.yaml.example):
 
-The CLI supports a YAML configuration file (default: `.valet.yaml`) in the current directory. Use the `--config-file` flag to specify a custom path. The following keys are supported:
+```yaml
+logLevel: info
+context: .
+output: values.schema.json
 
-- `context`: directory containing `values.yaml`
-- `overrides`: path to an overrides YAML file
-- `output`: name of the output schema file (default: `values.schema.json`)
-- `logLevel`: log level (string) - one of: debug, info, warn, error, dpanic, panic, fatal (default: info)
-- `telemetry`: telemetry configuration (object)
-  - `enabled`: enable telemetry (boolean)
-  - `serviceName`: service name for telemetry (default: `valet`)
-  - `serviceVersion`: service version for telemetry (default: `0.1.0`)
-  - `exporterType`: type of exporter (`none`, `stdout`, `otlp`)
-  - `otlpEndpoint`: OTLP endpoint for traces and metrics
-  - `insecure`: use insecure connection for OTLP
-  - `sampleRate`: trace sampling rate (0.0 to 1.0)
-  - `headers`: additional headers for OTLP requests (map)
-- `helm`: Helm chart configuration for remote charts (object)
-  - `chart`: chart details (object)
-    - `name`: chart name (e.g., `postgresql`)
-    - `version`: chart version (e.g., `12.1.9`)
-    - `registry`: registry configuration (object)
-      - `url`: registry URL (e.g., `https://charts.bitnami.com/bitnami`)
-      - `type`: registry type (`HTTP`, `HTTPS`, `OCI`)
-      - `insecure`: allow insecure connections
-      - `auth`: authentication configuration (object)
-        - `username`: username for basic auth
-        - `password`: password for basic auth
-        - `token`: token for token-based auth
-      - `tls`: TLS configuration (object)
-        - `insecureSkipTLSVerify`: skip TLS verification
-        - `certFile`: path to client certificate
-        - `keyFile`: path to client key
-        - `caFile`: path to CA certificate
+telemetry:
+  enabled: true
+  exporterType: otlp
+  otlpEndpoint: localhost:4317
+  metrics:
+    enabled: true
+    port: 9090
 
-See `examples/helm-config.yaml` for a complete example of working with remote Helm charts.
+helm:
+  chart:
+    name: prometheus
+    version: 25.27.0
+    registry:
+      url: https://prometheus-community.github.io/helm-charts
+```
 
-#### Environment Variables
-
-Configuration can also be set via environment variables:
-
-- `VALET_CONTEXT`
-- `VALET_OVERRIDES`
-- `VALET_OUTPUT`
-- `VALET_DEBUG`
+For complete configuration options and examples, see the [examples directory](examples/README.md).
 
 ### Examples
 
@@ -398,6 +459,12 @@ Generate schema from a directory containing `values.yaml`:
 
 ```bash
 ./bin/valet generate charts/mychart
+```
+
+Generate schema from the current directory (if it contains `values.yaml`):
+
+```bash
+./bin/valet generate
 ```
 
 Generate schema merging an override file:
@@ -433,197 +500,18 @@ Print version/build information:
 ./bin/valet version
 ```
 
-```text
-github.com/mkm29/valet@v0.1.1 (commit 9153c14b9ffddeaccba93268a0851d5da0ae8cbf)
-```
+### Example
 
-### Debug Mode
-
-When debug log level is enabled (`--log-level debug` flag or `logLevel: debug` in config), Valet provides:
-
-- Pretty-printed configuration output to stdout (with sensitive fields redacted)
-- Detailed debug logging from all components
-- Verbose Helm operations logging
-- Human-readable console output format
-
-**Security Note**: Registry credentials and authentication tokens are automatically redacted as `[REDACTED]` in debug output to prevent accidental exposure of sensitive information.
-
-Example:
-```bash
-./bin/valet generate --config-file examples/helm-config.yaml --log-level debug
-```
-
-### Observability
-
-Valet includes comprehensive observability capabilities through OpenTelemetry integration, providing distributed tracing and metrics for monitoring. Logging is always available independent of telemetry settings.
-
-#### Telemetry Configuration
-
-Enable telemetry using CLI flags or configuration:
-
-```bash
-# Enable with stdout exporter (for development)
-valet generate --telemetry-enabled --telemetry-exporter stdout charts/mychart
-
-# Enable with OTLP exporter (for production)
-valet generate --telemetry-enabled --telemetry-exporter otlp \
-  --telemetry-endpoint localhost:4317 \
-  --telemetry-insecure charts/mychart
-```
-
-#### Configuration Options
-
-Telemetry can be configured via:
-
-1. **CLI Flags**:
-   - `--telemetry-enabled`: Enable telemetry (default: false)
-   - `--telemetry-exporter`: Exporter type: `none`, `stdout`, `otlp` (default: none)
-   - `--telemetry-endpoint`: OTLP endpoint (default: localhost:4317)
-   - `--telemetry-insecure`: Use insecure connection for OTLP (default: false for better security)
-   - `--telemetry-sample-rate`: Trace sampling rate 0.0-1.0 (default: 1.0)
-
-2. **Configuration File** (`.valet.yaml`):
-
-```yaml
-telemetry:
-  enabled: true
-  serviceName: valet
-  exporterType: otlp
-  otlpEndpoint: localhost:4317
-  insecure: false
-  sampleRate: 1.0
-  headers:
-    api-key: your-api-key
-```
-
-1. **Environment Variables**:
-   - `VALET_TELEMETRY`
-   - `VALET_TELEMETRY_EXPORTER`
-   - `VALET_TELEMETRY_ENDPOINT`
-   - `VALET_TELEMETRY_INSECURE`
-   - `VALET_TELEMETRY_SAMPLE_RATE`
-
-#### Distributed Tracing
-
-Valet creates detailed traces for all operations:
-
-- **Command execution**: Root span for the entire command
-- **File operations**: Loading values.yaml, overrides, writing schema
-- **Schema generation**: Type inference, merging, validation
-- **Component processing**: Individual spans for complex operations
-
-Example trace structure:
-
-```bash
-generate.command
-├── load.values_yaml
-├── load.overrides_yaml (if applicable)
-├── merge.yaml_files
-├── generate.schema
-├── marshal.json
-└── write.schema_file
-```
-
-#### Metrics
-
-The following metrics are collected:
-
-- **Command Metrics**:
-  - `valet.command.executions`: Total command executions (counter)
-  - `valet.command.duration`: Command execution duration (histogram)
-  - `valet.command.errors`: Total command errors (counter)
-
-- **File Operation Metrics**:
-  - `valet.file.reads`: File read operations (counter)
-  - `valet.file.writes`: File write operations (counter)
-  - `valet.file.size`: File size distribution (histogram)
-
-- **Schema Generation Metrics**:
-  - `valet.schema.generations`: Total schema generations (counter)
-  - `valet.schema.fields`: Number of fields in schemas (histogram)
-  - `valet.schema.generation_duration`: Schema generation time (histogram)
-
-All file path attributes in metrics are sanitized to protect sensitive information - only the filename and immediate parent directory are included in telemetry data.
-
-#### Structured Logging
-
-Valet uses [Uber's zap](https://github.com/uber-go/zap) for high-performance structured logging:
-
-- **Always available**: Logging works regardless of telemetry settings
-- **Zero-allocation logging**: Zap's design ensures minimal performance overhead
-- **Structured fields**: All log data is structured for easy parsing and querying
-- **OpenTelemetry integration**: When telemetry is enabled, log entries automatically include trace and span IDs
-- **Span events**: When telemetry is enabled, logs are also recorded as events in the active span
-- **Level control**: Configurable via `--log-level` flag or `logLevel` in config (default: info)
-- **Format control**: Development format (human-readable) when log level is debug, JSON format otherwise
-
-Example log output:
-
-```json
-{
-  "timestamp": "2024-01-20T10:15:30.123Z",
-  "level": "debug",
-  "logger": "valet",
-  "caller": "generate.go:459",
-  "message": "Original YAML values loaded",
-  "trace_id": "7d3e8f9a1b2c3d4e5f6a7b8c9d0e1f2a",
-  "span_id": "1a2b3c4d5e6f7890",
-  "file": "charts/mychart/values.yaml",
-  "top_level_keys": 15
-}
-```
-
-#### Integration with Observability Platforms
-
-Valet's OTLP exporter can send telemetry data to any OpenTelemetry-compatible backend:
-
-- **Jaeger**: For distributed tracing
-- **Prometheus**: For metrics collection
-- **Grafana**: For visualization
-- **Elastic APM**: For application performance monitoring
-- **New Relic, Datadog, etc.**: Via OTLP support
-
-Example docker-compose setup for local observability:
-
-```yaml
-services:
-  otel-collector:
-    image: otel/opentelemetry-collector:latest
-    ports:
-      - "4317:4317"  # OTLP gRPC
-      - "4318:4318"  # OTLP HTTP
-    volumes:
-      - ./otel-config.yaml:/etc/otel-collector-config.yaml
-    command: ["--config=/etc/otel-collector-config.yaml"]
-
-  jaeger:
-    image: jaegertracing/all-in-one:latest
-    ports:
-      - "16686:16686"  # Jaeger UI
-      - "14250:14250"  # Jaeger gRPC
-```
-
-#### Example Input/Output
-
-Given a `values.yaml`:
+Given this `values.yaml`:
 
 ```yaml
 replicaCount: 3
 image:
   repository: nginx
   tag: stable
-env:
-  - name: LOG_LEVEL
-    value: debug
 ```
 
-Running the `generate` command:
-
-```bash
-./bin/valet generate .
-```
-
-Produces `values.schema.json` with contents:
+Running `valet generate` produces `values.schema.json`:
 
 ```json
 {
@@ -645,31 +533,64 @@ Produces `values.schema.json` with contents:
           "type": "string",
           "default": "stable"
         }
-      },
-      "default": {}
-    },
-    "env": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "default": "LOG_LEVEL"
-          },
-          "value": {
-            "type": "string",
-            "default": "debug"
-          }
-        },
-        "default": {}
-      },
-      "default": []
+      }
     }
-  },
-  "required": ["replicaCount", "image", "env"]
+  }
 }
 ```
+
+### Debug Mode
+
+When debug log level is enabled (`--log-level debug` flag or `logLevel: debug` in config), Valet provides:
+
+- Pretty-printed configuration output to stdout (with sensitive fields redacted)
+- Detailed debug logging from all components
+- Verbose Helm operations logging
+- Human-readable console output format
+
+**Security Note**: Registry credentials and authentication tokens are automatically redacted as `[REDACTED]` in debug output to prevent accidental exposure of sensitive information.
+
+Example:
+
+```bash
+./bin/valet generate --config-file examples/helm-config.yaml --log-level debug
+```
+
+### Observability
+
+Valet includes comprehensive observability features powered by OpenTelemetry:
+
+- **Distributed Tracing**: Track command execution, file operations, and schema generation
+- **Metrics Collection**: Command performance, cache statistics, and error rates
+- **Structured Logging**: All logs include trace context for correlation
+- **Prometheus Endpoint**: Expose metrics at `/metrics` for monitoring
+
+Enable telemetry:
+
+```bash
+# Via CLI flags
+valet generate --telemetry-enabled --telemetry-exporter otlp \
+  --telemetry-endpoint localhost:4317 .
+
+# Via configuration
+telemetry:
+  enabled: true
+  exporterType: otlp
+  otlpEndpoint: localhost:4317
+  metrics:
+    enabled: true
+    port: 9090
+```
+
+For complete observability documentation including:
+
+- Prometheus alerting rules
+- Grafana dashboards
+- Docker Compose setup
+- Metrics reference
+
+See the [examples directory](examples/README.md#monitoring-and-observability).
+
 
 ## How it works
 
@@ -707,6 +628,7 @@ When contributing to Valet, please follow these architectural patterns:
 Valet uses dependency injection for better testability and maintainability:
 
 1. **App Structure**: The `cmd.App` struct holds all application dependencies:
+
    ```go
    type App struct {
        Config    *config.Config
@@ -716,6 +638,7 @@ Valet uses dependency injection for better testability and maintainability:
    ```
 
 2. **WithApp Pattern**: All commands support dependency injection:
+
    ```go
    // With dependency injection (preferred for testing)
    app := cmd.NewApp().
@@ -726,6 +649,7 @@ Valet uses dependency injection for better testability and maintainability:
    ```
 
 3. **Logger Initialization**: The App struct includes a method to initialize the logger based on log level:
+
    ```go
    // Initialize logger internally based on configuration
    app := cmd.NewApp().WithConfig(cfg)
@@ -748,12 +672,31 @@ When contributing to Valet, please follow these architectural patterns:
 
 1. **Package Structure**: Each package should have:
    - A main struct type (e.g., `Helm`, `Telemetry`)
+   - Clear separation of concerns between packages
+
+2. **Utils Package**: The `internal/utils` package contains shared utility functions organized by domain:
+   - `schema.go`: Schema generation utilities (`InferBooleanSchema`, `InferArraySchema`, etc.)
+   - `yaml.go`: YAML processing functions (`DeepMerge`, `LoadYAML`)
+   - `string.go`: String manipulation utilities (`MaskString`, `FormatBytes`)
+   - `reflection.go`: Reflection helpers for struct field extraction
+   - `build.go`: Build information utilities (`GetBuildVersion`)
+
+3. **Command Package Organization**: The `cmd` package focuses on CLI orchestration:
+   - Command setup and flag management
+   - Dependency injection through the `App` struct
+   - Minimal business logic (delegated to internal packages)
+   - Command-specific helpers remain in `schema_helpers.go`
+
+4. **Helm Package**: The `internal/helm` package handles all Helm-related functionality:
+   - Chart downloading and caching
+   - Schema extraction from charts
+   - Configuration building from CLI flags (`config_builder.go`)
    - An Options struct for configuration (e.g., `HelmOptions`, `TelemetryOptions`)
    - A primary constructor `New<Package>(opts <Package>Options)`
    - Convenience constructors for common use cases
    - Methods on the struct rather than standalone functions
 
-2. **Code Organization**:
+5. **Code Organization**:
    - Follow DRY (Don't Repeat Yourself) principle
    - Extract common logic into private helper methods
    - Keep public methods focused on their primary responsibility
@@ -761,14 +704,15 @@ When contributing to Valet, please follow these architectural patterns:
    - Apply Single Responsibility Principle - each function should do one thing well
    - Break complex functions into smaller, testable units
 
-3. **Logging**: Use zap with named loggers:
+6. **Logging**: Use zap with named loggers:
+
    ```go
    logger := zap.L().Named("packagename")
    ```
 
-4. **Configuration**: All configuration structs belong in `internal/config`
+7. **Configuration**: All configuration structs belong in `internal/config`
 
-5. **Error Handling**: 
+8. **Error Handling**:
    - Wrap errors with context using `fmt.Errorf`
    - Provide meaningful error messages
    - Handle errors at the appropriate level
@@ -830,10 +774,15 @@ All tests are located in the `tests` directory and use the `ValetTestSuite` as t
 - Consistent assertion methods via Testify
 
 Test structure:
+
 - All test files belong to the `tests` package
 - Tests either embed `ValetTestSuite` directly or use specialized suites that embed it
 - Specialized test suites (e.g., `HelmTestSuite`, `ConfigValidationTestSuite`) provide domain-specific test helpers
 - Tests follow testify/suite patterns for better organization and reusability
+
+#### Known Test Environment Considerations
+
+- **Logger Sync**: The telemetry package includes special handling for logger sync errors that commonly occur in test environments when stdout/stderr are redirected or closed. These harmless errors are automatically filtered out to prevent spurious test failures.
 
 The project maintains high test coverage standards:
 
@@ -867,11 +816,29 @@ Valet takes security seriously when handling sensitive configuration:
 - **TLS Certificates**: Certificate file paths are logged, but certificate contents are never exposed
 - **Environment Variables**: Sensitive values can be provided via environment variables instead of command-line flags for better security
 
+### Container Security
+
+The Docker image is built with security best practices:
+
+- **Distroless Base**: Uses Chainguard's static image, containing only the application binary and essential files
+- **Non-root User**: Runs as user 65532 (nonroot) by default
+- **Read-only Filesystem**: Designed to work with read-only root filesystem
+- **No Shell**: No shell or package manager in the final image
+- **Minimal Attack Surface**: Only includes CA certificates and timezone data beyond the binary
+- **Security Options**: Example docker-compose.yaml includes security hardening:
+  - `no-new-privileges:true`
+  - `read_only: true`
+  - All capabilities dropped
+  - Temporary filesystems for any required write operations
+
 **Best Practices**:
+
 - Store sensitive credentials in environment variables or secure secret management systems
 - Use `--registry-token` with CI/CD service tokens instead of username/password when possible
 - Enable TLS verification (`--registry-tls-skip-verify=false`) in production environments
 - Review debug logs before sharing to ensure no sensitive data is exposed
+- Run containers with minimal privileges and read-only filesystems
+- Use volume mounts for input/output rather than building files into the image
 
 ## Contributing
 
@@ -883,30 +850,83 @@ Our development roadmap reflects our commitment to making Valet the most powerfu
 
 ### ✅ Completed Features
 
+#### Core Functionality
+
 - [x] Core schema generation from `values.yaml`
 - [x] Type inference with intelligent defaults
 - [x] Override file support for configuration merging
 - [x] Component detection with `enabled` flag handling
 - [x] Beautiful CLI experience with Fang
-- [x] OpenTelemetry integration (tracing, metrics, logging)
 - [x] Multiple configuration sources (CLI, env vars, config file)
-- [x] Comprehensive test coverage (>85%)
-- [x] Automated CI/CD with GitHub Actions
 - [x] Cross-platform support (Linux, macOS, Windows)
+
+#### Remote Helm Chart Support
+
+- [x] **Complete Remote Chart Integration**
+  - [x] Authentication to private Helm registries (Basic Auth, Token Auth)
+  - [x] Retrieve values.yaml from remote charts (HTTP/HTTPS/OCI)
+  - [x] Support for OCI registry authentication and retrieval
+  - [x] Generate schemas directly from remote charts
+  - [x] Advanced LRU caching system for remote charts
+  - [x] Configurable cache size limits and eviction policies
+  - [x] Thread-safe chart caching with metadata optimization
+  - [x] TLS configuration support for secure connections
+
+#### Observability & Monitoring
+
+- [x] **Comprehensive OpenTelemetry Integration**
+  - [x] Distributed tracing for all operations
+  - [x] Structured logging with Uber Zap
+  - [x] Telemetry-independent logging system
+  - [x] Context-aware metrics recording
+  - [x] File path sanitization for security
+
+- [x] **Prometheus Metrics Endpoint**
+  - [x] `/metrics` endpoint with comprehensive metrics
+  - [x] Helm cache statistics (hits, misses, evictions, hit rate)
+  - [x] Command execution metrics (duration, errors, counts)
+  - [x] Schema generation metrics (field counts, timing)
+  - [x] File operation metrics with size histograms
+  - [x] Health check endpoint for monitoring
+  - [x] **Performance optimizations**: Interface-based metrics collection for optimal performance
+  - [x] **Counter reset detection**: Graceful handling of cache clearing and counter resets
+  - [x] **Configurable health checks**: Tunable startup timing and backoff strategies
+  - [x] **Enhanced trace correlation**: Context-aware metrics with automatic span attributes
+
+#### Code Quality & Architecture
+
+- [x] **Clean Architecture & Performance**
+  - [x] Dependency injection pattern with App struct
+  - [x] Options pattern for flexible package initialization
+  - [x] Comprehensive test coverage (>85%)
+  - [x] Centralized utility functions in dedicated packages
+  - [x] Thread-safe metrics collection
+  - [x] High-performance metrics collection with interface-based approach
+  - [x] Proper error handling and context propagation
+
+- [x] **Security & Best Practices**
+  - [x] Automatic credential redaction in debug output
+  - [x] Input validation and sanitization
+  - [x] Secure defaults (TLS enabled by default)
+  - [x] Path sanitization for telemetry data
+  - [x] Configuration validation with security checks
+
+#### Developer Experience
+
+- [x] Automated CI/CD with GitHub Actions
+- [x] Comprehensive debugging and logging
+- [x] Example configurations and documentation
+- [x] Makefile with common development tasks
 
 ### 🚧 In Progress
 
-- [ ] **Remote Chart Support** - Work with charts from any registry
-  - [x] Authentication to private Helm registries
-  - [x] Retrieve values.yaml from remote charts (HTTP/HTTPS)
-  - [x] Support for OCI registry authentication and retrieval
-  - [x] Generate schemas directly from remote charts
+- [ ] **Enhanced Remote Chart Features**
   - [ ] Validate local values against remote chart schemas
-  - [x] Cache remote charts for offline use
+  - [ ] Chart dependency resolution and caching
 
 ### 📋 Planned Features
 
-#### Short-term (Q2-Q3 2025)
+#### Short-term (Q3-Q4 2025)
 
 - [ ] **Enhanced Schema Features**
   - [ ] Custom validation rules support
@@ -914,6 +934,7 @@ Our development roadmap reflects our commitment to making Valet the most powerfu
   - [ ] Enum detection from comments
   - [ ] Min/max constraints for numeric fields
   - [ ] Required field inference from templates
+  - [ ] Advanced schema composition and inheritance
 
 - [ ] **CUE Integration**
   - [ ] See [HIP Draft](https://github.com/helm/helm/issues/13260) for details
@@ -922,19 +943,22 @@ Our development roadmap reflects our commitment to making Valet the most powerfu
   - [ ] CUE-based schema merging and overrides
   - [ ] CUE schema generation from remote charts
 
-#### Medium-term (Q3-Q4 2025)
+#### Medium-term (Q4 2025 - Q1 2026)
 
 - [ ] **Advanced Type System**
   - [ ] Union types support
   - [ ] Conditional schema based on other fields
   - [ ] Reference resolution (`$ref`) support
   - [ ] External schema imports
+  - [ ] Schema composition and modularity
 
 - [ ] **Integration Ecosystem**
   - [ ] Kubernetes CRD generation from schema
   - [ ] ArgoCD integration for GitOps workflows
   - [ ] Backstage plugin for documentation
   - [ ] JSON Schema to TypeScript/Go type generation
+  - [ ] IDE plugins for VS Code, IntelliJ
+  - [ ] Pre-commit hooks for schema validation
 
 #### Long-term (2026 and beyond)
 

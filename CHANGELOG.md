@@ -9,205 +9,154 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- Security section in README documenting sensitive information handling
-- `InitializeLogger` method to the `App` struct for centralized logger initialization
-- Automatic redaction of sensitive credentials in debug output
-- Logger flush logic with `defer logger.Sync()` to ensure buffered logs are written before exit
-  - `InitializeLogger` now returns a cleanup function that should be deferred
-  - Cleanup function is automatically called in `PersistentPostRunE`
-- **Chart caching in helm package**: Remote charts are now cached in memory to avoid redundant downloads
-  - Thread-safe implementation using read-write locks
-  - Cache key includes registry URL, chart name, and version
-  - Both `HasSchema` and `DownloadSchema` now benefit from caching
-  - Debug logging shows cache hits and misses
-  - Significantly improves performance when working with the same chart multiple times
-- **Size limits for chart downloads**: Charts exceeding the configured size limit are rejected before loading
-  - Default limit is 1MB (matching etcd's limit)
-  - Configurable via `MaxChartSize` option in `HelmOptions`
-  - Size check happens after download but before loading into memory
-  - Human-readable size formatting in error messages and debug logs
-  - Total cache size tracking for monitoring memory usage
-- **Cache eviction policy**: Implemented LRU (Least Recently Used) eviction to prevent unbounded memory growth
-  - Configurable maximum cache size (default: 10MB) via `MaxCacheSize` in `HelmOptions`
-  - Configurable maximum number of entries (default: 50) via `MaxCacheEntries` in `HelmOptions`
-  - Charts larger than the total cache size are not cached but still returned
-  - Automatic eviction of least recently used entries when limits are exceeded
-  - Cache statistics tracking: hits, misses, evictions, hit rate, and usage percentage
-- **Cache monitoring and management**:
-  - `GetCacheStats()` method returns detailed cache statistics
-  - `ClearCache()` method to manually clear all cache entries
-  - Enhanced debug logging with cache usage metrics
-  - Hit rate and cache utilization tracking
-- **Chart metadata caching for faster schema checks**:
-  - Separate metadata cache that stores just the `hasSchema` flag and basic chart info
-  - `HasSchema()` method now checks metadata cache first before loading full chart
-  - Metadata cache capacity is 2x chart cache size for better hit rates
-  - Independent LRU eviction for metadata cache
-  - Metadata cache statistics: hits, misses, entries, hit rate
-  - Significantly improves performance for repeated `HasSchema()` calls
-- **Enhanced error messages for remote chart troubleshooting**:
-  - Detailed error messages when chart download fails with context-specific hints
-  - Registry-type specific troubleshooting suggestions (HTTP/HTTPS/OCI)
-  - Common issues highlighted: network, authentication, URL format
-  - Improved validation error messages with examples and current state
-  - Better guidance for authentication configuration conflicts
-  - Clear instructions when charts don't contain schema files
+- **Docker Support**:
+  - Multistage Dockerfile using Chainguard's distroless static image for minimal attack surface
+  - Runs as non-root user (UID 65532) for enhanced security
+  - Includes only essential files: binary, CA certificates, and timezone data
+  - Docker Compose configuration with security hardening examples
+  - Support for both standalone and telemetry-enabled configurations
+  - `.dockerignore` file to optimize build context
+  - Documentation for Docker usage in README
+
+- **Prometheus Monitoring Examples**:
+  - Comprehensive Prometheus alerting rules covering performance, cache health, server health, and operational issues
+  - Full Grafana dashboard JSON with visualizations for command execution, error rates, cache metrics, and server state
+  - Complete monitoring stack configuration with Docker Compose setup
+  - Alertmanager configuration for routing alerts to multiple notification channels
+  - Updated examples/README.md with detailed documentation of all monitoring resources
+
+- **Security and Logging Enhancements**:
+  - Security section in README documenting sensitive information handling
+  - Automatic redaction of sensitive credentials in debug output (passwords, tokens show as `[REDACTED]`)
+  - `InitializeLogger` method to `App` struct for centralized logger initialization with cleanup function
+  - Logger flush logic ensures buffered logs are written before exit
+
+- **Server Lifecycle Metrics**:
+  - New Prometheus metrics for monitoring server lifecycle events:
+    - `valet_metrics_server_start_time_seconds`: Unix timestamp when metrics server started
+    - `valet_metrics_server_uptime_seconds`: Current server uptime in seconds (updated every 10 seconds)
+    - `valet_metrics_server_startups_total`: Total number of metrics server startups
+    - `valet_metrics_server_shutdowns_total`: Total number of metrics server shutdowns
+    - `valet_metrics_server_shutdown_duration_seconds`: Histogram of graceful shutdown durations
+    - `valet_metrics_server_health_checks_total`: Total number of health check requests
+    - `valet_metrics_server_health_check_duration_seconds`: Histogram of health check response times
+    - `valet_metrics_server_state`: Current server state (0=stopped, 1=starting, 2=running, 3=shutting_down)
+  - Enhanced health endpoint with custom headers:
+    - `X-Server-State`: Current server state as string (stopped/starting/running/shutting_down)
+    - `X-Server-Uptime`: Server uptime in seconds
+    - `Retry-After`: Suggested retry interval for clients
+  - Support for port 0 (random available port) for testing scenarios
+
+- **Helm Chart Caching System**:
+  - In-memory caching for remote charts to avoid redundant downloads
+  - Thread-safe LRU (Least Recently Used) eviction policy
+  - Configurable size limits: individual charts (default 1MB), total cache (default 10MB), max entries (default 50)
+  - Separate metadata cache for faster `HasSchema()` checks
+  - Cache statistics: hits, misses, evictions, hit rate, usage percentage
+  - `GetCacheStats()` and `ClearCache()` methods for cache management
+
+- **Prometheus Metrics Exposure**:
+  - `/metrics` endpoint with comprehensive metrics for monitoring
+  - Metrics include: Helm cache stats, command execution times, schema generation stats, file operations
+  - Configurable metrics server via configuration file
+  - Example configuration in `examples/helm-config-with-metrics.yaml`
+
+- **Utils Package**:
+  - Created `internal/utils` package with organized utility functions:
+    - `reflection.go`: Struct field extraction utilities
+    - `schema.go`: Schema generation utilities (`InferBooleanSchema`, `InferArraySchema`, etc.)
+    - `yaml.go`: YAML processing (`DeepMerge`, `LoadYAML`)
+    - `string.go`: String manipulation (`MaskString`, `FormatBytes`)
+    - `build.go`: Build information utilities (`GetBuildVersion`)
+    - `error.go`: Error handling utilities (`ErrorType`, `IsIgnorableSyncError`)
+    - `math.go`: Mathematical utilities (`CalculateDelta` for counter reset detection)
+    - `performance.go`: Performance utilities (`CategorizePerformance`, `ServerStateToString`)
+
+- **Enhanced Error Messages**:
+  - Detailed error messages for remote chart failures with troubleshooting hints
+  - Registry-type specific suggestions (HTTP/HTTPS/OCI)
+  - Better authentication configuration conflict guidance
 
 ### Changed
 
-- Updated documentation to reflect removal of backward compatibility code
-- Refactored logger initialization logic from `cmd/root.go` to `cmd/app.go`
-  - Moved `initializeLogger` function to `App.InitializeLogger()` method
-  - Improved separation of concerns by centralizing dependency initialization in the App struct
-  - Logger creation logic now uses private `createLogger` helper function
-  - **BREAKING**: `InitializeLogger` now returns `(func(), error)` instead of just `error`
-    - The returned cleanup function ensures logs are properly flushed
-    - Prevents potential loss of buffered log entries on program exit
-- **BREAKING**: Replaced `Debug` boolean field in Config with `LogLevel` field that accepts zapcore.Level values
-  - CLI flag changed from `--debug` (`-d`) to `--log-level` (`-l`)
-  - Config file field changed from `debug: true/false` to `logLevel: debug/info/warn/error/dpanic/panic/fatal`
-  - Default log level is `info` instead of implicit `false` for debug
-  - Backward compatibility: Config files with `debug: true` are automatically converted to `logLevel: debug`
-  - Logger initialization now accepts zapcore.Level instead of boolean
-  - Development console format is used when log level is debug, production JSON format otherwise
-- `Helm` struct completely redesigned with enhanced caching:
-  - Replaced simple map cache with LRU-based `chartCache` structure
-  - Added `maxCacheSize` and `maxCacheEntries` fields for cache limits
-  - Cache now tracks access time, size, and provides eviction capabilities
-- `HelmOptions` expanded with new cache configuration:
-  - `MaxChartSize`: Maximum size for individual charts (default: 1MB)
-  - `MaxCacheSize`: Maximum total cache size (default: 10MB)  
-  - `MaxCacheEntries`: Maximum number of cached entries (default: 50)
-- `DownloadSchema` method signature changed to return cleanup function:
-  - Old: `(string, error)`
-  - New: `(string, func(), error)` - cleanup function should be deferred
-- Cache implementation improvements:
-  - Charts are now stored with metadata (size, last access time)
-  - LRU eviction based on both size and entry count
-  - Cache statistics tracking for monitoring
-  - Enhanced debug logging with hit rates and usage metrics
+- **Code Organization and Refactoring**:
+  - Moved all utility functions to centralized `internal/utils` package
+  - Removed wrapper functions - direct calls to `utils` package throughout codebase
+  - Moved schema inference functions from `cmd/schema_helpers.go` to `utils/schema.go` with exported names
+  - Moved Helm config building functions to `internal/helm/config_builder.go`
+  - `GetContextDirectory` now returns current working directory if no argument provided
+  - Logger initialization moved from `cmd/root.go` to `App.InitializeLogger()` method
+  - Moved generic helper functions from `telemetry` package to `utils` package for better reusability:
+    - `errorType` → `utils.ErrorType`
+    - `isIgnorableSyncError` → `utils.IsIgnorableSyncError`
+    - `calculateDelta` → `utils.CalculateDelta`
+    - `categorizePerformance` → `utils.CategorizePerformance`
+    - `getServerStateString` → `utils.ServerStateToString`
+
+- **Documentation Updates**:
+  - Cleaned up root README.md to be more concise and user-friendly
+  - Moved detailed observability documentation to examples directory
+  - Created comprehensive `.valet.yaml.example` file with all configuration options
+  - Root README now links to examples directory for detailed configurations
+
+- **BREAKING: Configuration Changes**:
+  - Replaced `Debug` boolean with `LogLevel` field (accepts: debug/info/warn/error/dpanic/panic/fatal)
+  - CLI flag changed from `--debug` to `--log-level`
+  - `InitializeLogger` now returns `(func(), error)` - cleanup function must be deferred
+  - Backward compatibility: `debug: true` automatically converts to `logLevel: debug`
+
+- **Helm Package Enhancements**:
+  - Complete redesign with LRU-based caching system
+  - `DownloadSchema` now returns `(string, func(), error)` with cleanup function
+  - New `HelmOptions` fields: `MaxChartSize`, `MaxCacheSize`, `MaxCacheEntries`
+  - Cache tracks metadata, access time, and provides automatic eviction
+
 - **Test Suite Migration**:
-  - All test files moved from internal package directories to centralized `tests` directory
-  - All tests now use `ValetTestSuite` as the base test suite
-  - Test files updated to belong to the `tests` package
-  - Specialized test suites (e.g., `HelmTestSuite`, `ConfigValidationTestSuite`) embed `ValetTestSuite`
-  - Maintains consistent test patterns and improved test organization
-  - Fixed compilation issues after migration and updated function calls to new APIs
+  - All tests moved to centralized `tests` directory
+  - Unified under `ValetTestSuite` base test suite
+  - Improved test organization and consistency
 
 ### Removed
 
-- All backward compatibility wrapper functions have been removed:
-  - `telemetry.Initialize()` - use `telemetry.NewTelemetry()` with options instead
-  - `telemetry.NewTelemetryWithConfig()` - use `telemetry.NewTelemetry()` with options instead
-  - `helm.NewHelmWithDebug()` - use `helm.NewHelm()` with options instead
-  - `cmd.Generate()` - use `cmd.GenerateWithApp()` with dependency injection instead
-  - `cmd.GetTelemetry()` - use proper dependency injection with App struct instead
-  - Global `cmd.NewRootCmd()` wrapper - use `cmd.NewRootCmdWithApp()` instead
-- Removed references to backward compatibility in documentation
-- Removed undefined `globalApp` variable and associated backward compatibility code
+- **Backward Compatibility Functions**:
+  - `telemetry.Initialize()` - use `telemetry.NewTelemetry()` with options
+  - `telemetry.NewTelemetryWithConfig()` - use `telemetry.NewTelemetry()` with options
+  - `helm.NewHelmWithDebug()` - use `helm.NewHelm()` with options
+  - `cmd.Generate()` - use `cmd.GenerateWithApp()` with dependency injection
+  - `cmd.GetTelemetry()` - use dependency injection with App struct
+  - Global `cmd.NewRootCmd()` wrapper - use `cmd.NewRootCmdWithApp()`
+  - All wrapper functions that called utils package functions
 
 ### Fixed
 
-- Build errors caused by undefined `inferSchema` function - updated to use `inferSchema` 
-- Build errors from undefined `globalApp` variable after removing backward compatibility code
-- Updated `inferArraySchema` to accept `app` parameter for proper dependency injection
+- **Remote Chart Configuration**: Fixed issue where remote chart configuration from config file was incorrectly treated as conflicting with local context when no explicit context directory was provided
 
-### Security
+- **Build and Dependency Injection Issues**:
+  - Build errors caused by undefined `inferSchema` function - updated to use `inferSchema`
+  - Build errors from undefined `globalApp` variable after removing backward compatibility code
+  - Updated `inferArraySchema` to accept `app` parameter for proper dependency injection
+  - Configuration file loading when using `--config-file` flag with subcommands
+  - Persistent flags are now properly accessible in subcommands using `cmd.Root().PersistentFlags()`
 
-- Configuration logging now requires proper redaction of sensitive fields (passwords, tokens, etc.)
-- Debug output must redact registry credentials and authentication tokens as `[REDACTED]`
-- All sensitive configuration values should be masked before logging
+- **Logger and Debug Issues**:
+  - Logger sync error in test environments: Fixed "sync /dev/stdout: bad file descriptor" error
+  - Added `isIgnorableSyncError` function to filter out harmless sync errors
+  - Ignores errors related to stdout/stderr file descriptors common in test environments
+  - Checks for specific error messages and syscall errors (EBADF, EINVAL)
+  - Logger initialization happens before telemetry to ensure debug logs are always available
+  - Logger level configuration now properly respects debug setting (Debug level when true, Info level when false)
 
-- Dependency injection pattern for improved testability:
-  - Created `App` struct to hold dependencies (Config, Telemetry, Logger)
-  - Added builder pattern with `WithConfig`, `WithTelemetry`, `WithLogger` methods
-  - All commands now support `WithApp` variants for dependency injection
-- Support for remote Helm charts configuration in `internal/helm` package
-- Helm chart configuration in config file and CLI flags for the `generate` command
-  - `--chart-name`: Name of the remote Helm chart
-  - `--chart-version`: Version of the remote Helm chart
-  - `--registry-url`: URL of the Helm chart registry
-  - `--registry-type`: Type of registry (HTTP, HTTPS, OCI) - defaults to HTTPS
-  - `--registry-insecure`: Allow insecure connections
-  - Authentication flags: `--registry-username`, `--registry-password`, `--registry-token`
-  - TLS flags: `--registry-tls-skip-verify`, `--registry-cert-file`, `--registry-key-file`, `--registry-ca-file`
-- Default values for Helm configuration structs (e.g., registry type defaults to "HTTPS")
-- Validation for Helm configuration to ensure required fields are present
-- Example configuration file `examples/helm-config.yaml` demonstrating remote chart usage
-- CUE language support added to roadmap for future schema generation
-- Pretty printing of configuration to stdout when debug mode is enabled
-- Options pattern for flexible package initialization:
-  - `HelmOptions` for configuring helm package instances
-  - `TelemetryOptions` for configuring telemetry package instances
-- Named loggers for better debugging:
-  - Helm package uses `helm` logger name
-  - Each package can have its own named logger
-- Convenience functions for simple use cases:
-  - `NewHelmWithDebug` for helm package
-  - `NewTelemetryWithConfig` for telemetry package
+- **Helm Package Issues**:
+  - Fixed inconsistency in helm package where `HasSchema` used `chart.Raw` but `DownloadSchema` used `chart.Files`
 
-### Changed
-
-- **Major refactoring** to improve code maintainability and testability:
-  - Refactored `inferSchema` function from 290+ lines to ~20 smaller, focused functions:
-    - Type-specific handlers: `inferArraySchema`, `inferBooleanSchema`, `inferIntegerSchema`, etc.
-    - Object handling: `inferObjectSchemaWithApp`, `generateObjectPropertiesWithApp`, `determineRequiredFieldsWithApp`
-    - Helper functions for validation and processing
-  - Refactored `NewGenerateCmd` function from 200+ lines to ~15 smaller functions:
-    - Configuration parsing: `parseGenerateCommandConfigWithApp`, `getContextDirectory`
-    - Validation: `validateGenerateCommandConfig`, `validateOverridesFile`
-    - Command execution: `generateCmdRunWithApp`, `handleRemoteChartGenerationWithApp`
-    - Flag management: `addGenerateFlags`, `applyOptionalHelmFlags`
-  - Applied Single Responsibility Principle throughout the codebase
-  - Improved separation of concerns with clear function boundaries
-- Replaced global variables (`cfg` and `tel`) with dependency injection:
-  - Global variables created hidden dependencies and made unit testing difficult
-  - Now using explicit dependency passing through the `App` struct
-  - Improved testability by allowing mock dependencies to be injected
-  - Context key properly typed to avoid collisions (`contextKey` type)
-- `generate` command now accepts optional context directory: `generate [context-dir]` instead of `generate <context-dir>`
-- `generate` command validates that either a local context directory OR remote chart configuration is provided (but not both)
-- Improved configuration file loading to properly detect and load config files when specified
-- Logging is now independent of telemetry - logger is always initialized based on debug setting
-- Debug logging is available whenever `debug: true` is set, regardless of telemetry state
-- Consolidated Helm configuration structs in the `internal/config` package to avoid duplication
-- Migrated helm package from standard `log` to `zap` for consistent structured logging
-- Refactored packages to follow Go best practices with consistent struct-based design:
-  - **Helm package**:
-    - Created `Helm` struct with encapsulated logger and configuration
-    - Added `NewHelm` constructor with `HelmOptions` for flexible initialization
-    - Converted standalone functions to methods on the `Helm` struct
-    - Added `NewHelmWithDebug` convenience function for simple use cases
-    - Functions now accept debug flag for conditional logging
-  - **Telemetry package**:
-    - Enhanced existing struct-based design with Options pattern
-    - Added `NewTelemetry` constructor with `TelemetryOptions` for flexible initialization
-    - Maintained backward compatibility with existing `Initialize` function
-    - Added `NewTelemetryWithConfig` convenience function
-    - Consistent with helm package architecture
-- Helm functions (`HasSchema`, `DownloadSchema`) now use `chart.Raw` consistently for file iteration
-- All packages now follow the same architectural patterns for consistency and maintainability
-- Refactored helm package to eliminate code duplication:
-  - Extracted common chart loading logic into private `loadChart` method
-  - Both `HasSchema` and `DownloadSchema` now use the shared `loadChart` method
-  - Centralized chart downloading, getter creation, and error handling
-  - Improved debug logging with consistent use of package logger
-  - Reduced code duplication by ~40 lines
-
-### Fixed
-
-- Configuration file loading when using `--config-file` flag with subcommands
-- Persistent flags are now properly accessible in subcommands using `cmd.Root().PersistentFlags()`
-- Logger initialization happens before telemetry to ensure debug logs are always available
-- Fixed inconsistency in helm package where `HasSchema` used `chart.Raw` but `DownloadSchema` used `chart.Files`
-- Logger level configuration now properly respects debug setting (Debug level when true, Info level when false)
-
-### Technical Notes
-
-- The refactoring maintains 100% backward compatibility - all existing code continues to work unchanged
-- Helper functions were consolidated into `cmd/schema_helpers.go` for better organization
-- Context keys now use a proper type (`contextKey`) to avoid potential collisions
-- All linter issues in the cmd package have been resolved
+- **Metrics and Observability Performance**:
+  - **Optimized metrics collection performance**: Replaced JSON marshaling/unmarshaling with efficient `CacheStatsProvider` interface
+  - **Enhanced tracing integration**: Metrics recording methods now use context for span correlation and add relevant attributes
+  - **Robust counter reset detection**: Added `calculateDelta()` method to gracefully handle cache clearing and counter resets
+  - **Configurable health checks**: Made metrics server startup timing configurable via `HealthCheckMaxAttempts`, `HealthCheckBackoff`, and `HealthCheckTimeout` settings
+  - **Health check improvements**: Added configurable overall timeout for server startup and Retry-After header in health endpoint responses
+  - **Context-based correlation**: Enhanced `RecordCommandExecution` with request correlation IDs, sampling priority propagation, and performance categorization using OpenTelemetry baggage
+  - **Server lifecycle metrics**: Added comprehensive Prometheus metrics for tracking server state transitions, uptime, startup/shutdown counts, health check frequency, and graceful shutdown duration
 
 ## [v0.2.4] - 2025-06-19
 
@@ -406,8 +355,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Updated README with release badge and GoReleaser usage instructions
 
 
+[v0.2.4]: https://github.com/mkm29/valet/releases/tag/v0.2.4
 [v0.2.3]: https://github.com/mkm29/valet/releases/tag/v0.2.3
 [v0.2.2]: https://github.com/mkm29/valet/releases/tag/v0.2.2
 [v0.2.1]: https://github.com/mkm29/valet/releases/tag/v0.2.1
 [v0.2.0]: https://github.com/mkm29/valet/releases/tag/v0.2.0
 [v0.1.2]: https://github.com/mkm29/valet/releases/tag/v0.1.2
+[v0.1.1]: https://github.com/mkm29/valet/releases/tag/v0.1.1
+[0.1.0]: https://github.com/mkm29/valet/releases/tag/v0.1.0
