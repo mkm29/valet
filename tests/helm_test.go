@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,19 +16,18 @@ import (
 	"github.com/mkm29/valet/internal/config"
 	"github.com/mkm29/valet/internal/helm"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest"
 	"helm.sh/helm/v3/pkg/chart"
 )
 
 type HelmTestSuite struct {
 	suite.Suite
-	logger  *zap.Logger
+	logger  *slog.Logger
 	tempDir string
 }
 
 func (suite *HelmTestSuite) SetupSuite() {
-	suite.logger = zaptest.NewLogger(suite.T())
+	// Create a test logger that discards output
+	suite.logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	suite.tempDir = suite.T().TempDir()
 }
 

@@ -2,13 +2,13 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/mkm29/valet/internal/utils"
-	"go.uber.org/zap/zapcore"
 	"gopkg.in/yaml.v2"
 )
 
@@ -22,9 +22,9 @@ type Config struct {
 	Helm      *HelmConfig      `yaml:"helm"`
 }
 
-// LogLevel wraps zapcore.Level to provide YAML unmarshaling
+// LogLevel wraps slog.Level to provide YAML unmarshaling
 type LogLevel struct {
-	zapcore.Level
+	slog.Level
 }
 
 // UnmarshalYAML implements yaml.Unmarshaler for LogLevel
@@ -35,9 +35,18 @@ func (l *LogLevel) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 
 	// Parse the level string
-	level, err := zapcore.ParseLevel(levelStr)
-	if err != nil {
-		return fmt.Errorf("invalid log level %q: %w", levelStr, err)
+	var level slog.Level
+	switch strings.ToLower(levelStr) {
+	case "debug":
+		level = slog.LevelDebug
+	case "info":
+		level = slog.LevelInfo
+	case "warn", "warning":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
+	default:
+		return fmt.Errorf("invalid log level %q: must be debug, info, warn, or error", levelStr)
 	}
 
 	l.Level = level
@@ -458,7 +467,7 @@ func isDigit(b byte) bool {
 // NewConfig returns a new Config with default values
 func NewConfig() *Config {
 	return &Config{
-		LogLevel:  LogLevel{Level: zapcore.InfoLevel},
+		LogLevel:  LogLevel{Level: slog.LevelInfo},
 		Telemetry: NewTelemetryConfig(),
 	}
 }

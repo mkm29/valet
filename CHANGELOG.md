@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Logging Migration** (reverting [0.2.0] change):
+  - Migrated back from Uber's zap logger to Go's built-in log/slog package
+  - Updated all packages to use slog for logging
+  - Removed zap and zapcore dependencies from go.mod
+  - Updated test suites to use slog instead of zap test utilities
+  - Maintains same logging behavior with structured logging support
+  - Aligns with Go standard library recommendations for simpler dependency management
+
 ### Added
 
 - **Docker Support**:

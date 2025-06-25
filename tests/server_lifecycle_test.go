@@ -2,6 +2,8 @@ package tests
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"net/http"
 	"testing"
 	"time"
@@ -9,18 +11,18 @@ import (
 	"github.com/mkm29/valet/internal/config"
 	"github.com/mkm29/valet/internal/telemetry"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/zap"
 )
 
 // ServerLifecycleTestSuite tests the server lifecycle metrics
 type ServerLifecycleTestSuite struct {
 	suite.Suite
 	metricsServer *telemetry.MetricsServer
-	logger        *zap.Logger
+	logger        *slog.Logger
 }
 
 func (suite *ServerLifecycleTestSuite) SetupTest() {
-	logger, _ := zap.NewDevelopment()
+	// Create a test logger
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	suite.logger = logger
 
 	// Create metrics server with custom port to avoid conflicts

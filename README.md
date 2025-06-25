@@ -704,10 +704,10 @@ When contributing to Valet, please follow these architectural patterns:
    - Apply Single Responsibility Principle - each function should do one thing well
    - Break complex functions into smaller, testable units
 
-6. **Logging**: Use zap with named loggers:
+6. **Logging**: Use slog with component context:
 
    ```go
-   logger := zap.L().Named("packagename")
+   logger := slog.Default().With("component", "packagename")
    ```
 
 7. **Configuration**: All configuration structs belong in `internal/config`

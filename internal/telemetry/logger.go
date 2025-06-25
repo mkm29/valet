@@ -2,63 +2,60 @@ package telemetry
 
 import (
 	"context"
-	"math"
+	"log/slog"
+	"os"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
-// Logger wraps zap logger with OpenTelemetry integration
+// Logger wraps slog logger with OpenTelemetry integration
 type Logger struct {
-	*zap.Logger
+	*slog.Logger
 }
 
-// NewLogger creates a new zap logger with OpenTelemetry integration
+// NewLogger creates a new slog logger with OpenTelemetry integration
 func NewLogger(debug bool) (*Logger, error) {
-	config := zap.NewProductionConfig()
-
 	// Set log level based on debug flag
+	var level slog.Level
 	if debug {
-		config.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
+		level = slog.LevelDebug
 	} else {
-		config.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
+		level = slog.LevelInfo
 	}
 
-	// Use JSON encoding for structured logs
-	config.Encoding = "json"
-
-	// Add caller information
-	config.EncoderConfig.TimeKey = "timestamp"
-	config.EncoderConfig.LevelKey = "level"
-	config.EncoderConfig.NameKey = "logger"
-	config.EncoderConfig.CallerKey = "caller"
-	config.EncoderConfig.FunctionKey = zapcore.OmitKey
-	config.EncoderConfig.MessageKey = "message"
-	config.EncoderConfig.StacktraceKey = "stacktrace"
-	config.EncoderConfig.LineEnding = zapcore.DefaultLineEnding
-	config.EncoderConfig.EncodeLevel = zapcore.LowercaseLevelEncoder
-	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	config.EncoderConfig.EncodeDuration = zapcore.SecondsDurationEncoder
-	config.EncoderConfig.EncodeCaller = zapcore.ShortCallerEncoder
-
-	// Build the logger
-	logger, err := config.Build()
-	if err != nil {
-		return nil, err
+	// Create JSON handler with options
+	opts := &slog.HandlerOptions{
+		Level: level,
+		AddSource: true,
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			// Customize attribute names to match previous format
+			switch a.Key {
+			case slog.TimeKey:
+				return slog.Attr{Key: "timestamp", Value: a.Value}
+			case slog.MessageKey:
+				return slog.Attr{Key: "message", Value: a.Value}
+			case slog.SourceKey:
+				return slog.Attr{Key: "caller", Value: a.Value}
+			}
+			return a
+		},
 	}
+
+	// Use JSON handler for structured logs
+	handler := slog.NewJSONHandler(os.Stdout, opts)
+	logger := slog.New(handler)
 
 	return &Logger{Logger: logger}, nil
 }
 
-// SetDefault sets this logger as the global zap logger
+// SetDefault sets this logger as the global slog logger
 func (l *Logger) SetDefault() {
-	zap.ReplaceGlobals(l.Logger)
+	slog.SetDefault(l.Logger)
 }
 
 // WithContext returns a logger with trace information from the context
-func (l *Logger) WithContext(ctx context.Context) *zap.Logger {
+func (l *Logger) WithContext(ctx context.Context) *slog.Logger {
 	span := trace.SpanFromContext(ctx)
 	if !span.IsRecording() {
 		return l.Logger
@@ -70,94 +67,89 @@ func (l *Logger) WithContext(ctx context.Context) *zap.Logger {
 	}
 
 	return l.Logger.With(
-		zap.String("trace_id", spanCtx.TraceID().String()),
-		zap.String("span_id", spanCtx.SpanID().String()),
+		"trace_id", spanCtx.TraceID().String(),
+		"span_id", spanCtx.SpanID().String(),
 	)
 }
 
 // Debug logs a debug message with OpenTelemetry context
-func (l *Logger) Debug(ctx context.Context, msg string, fields ...zap.Field) {
+func (l *Logger) Debug(ctx context.Context, msg string, args ...any) {
 	logger := l.WithContext(ctx)
-	logger.Debug(msg, fields...)
-	l.addSpanEvent(ctx, zap.DebugLevel, msg, fields...)
+	logger.DebugContext(ctx, msg, args...)
+	l.addSpanEvent(ctx, slog.LevelDebug, msg, args...)
 }
 
 // Info logs an info message with OpenTelemetry context
-func (l *Logger) Info(ctx context.Context, msg string, fields ...zap.Field) {
+func (l *Logger) Info(ctx context.Context, msg string, args ...any) {
 	logger := l.WithContext(ctx)
-	logger.Info(msg, fields...)
-	l.addSpanEvent(ctx, zap.InfoLevel, msg, fields...)
+	logger.InfoContext(ctx, msg, args...)
+	l.addSpanEvent(ctx, slog.LevelInfo, msg, args...)
 }
 
 // Warn logs a warning message with OpenTelemetry context
-func (l *Logger) Warn(ctx context.Context, msg string, fields ...zap.Field) {
+func (l *Logger) Warn(ctx context.Context, msg string, args ...any) {
 	logger := l.WithContext(ctx)
-	logger.Warn(msg, fields...)
-	l.addSpanEvent(ctx, zap.WarnLevel, msg, fields...)
+	logger.WarnContext(ctx, msg, args...)
+	l.addSpanEvent(ctx, slog.LevelWarn, msg, args...)
 }
 
 // Error logs an error message with OpenTelemetry context
-func (l *Logger) Error(ctx context.Context, msg string, fields ...zap.Field) {
+func (l *Logger) Error(ctx context.Context, msg string, args ...any) {
 	logger := l.WithContext(ctx)
-	logger.Error(msg, fields...)
-	l.addSpanEvent(ctx, zap.ErrorLevel, msg, fields...)
+	logger.ErrorContext(ctx, msg, args...)
+	l.addSpanEvent(ctx, slog.LevelError, msg, args...)
 }
 
-// DPanic logs a message at DPanicLevel with OpenTelemetry context
-func (l *Logger) DPanic(ctx context.Context, msg string, fields ...zap.Field) {
+// Fatal logs a message at FatalLevel with OpenTelemetry context and exits
+func (l *Logger) Fatal(ctx context.Context, msg string, args ...any) {
 	logger := l.WithContext(ctx)
-	logger.DPanic(msg, fields...)
-	l.addSpanEvent(ctx, zap.DPanicLevel, msg, fields...)
-}
-
-// Panic logs a message at PanicLevel with OpenTelemetry context
-func (l *Logger) Panic(ctx context.Context, msg string, fields ...zap.Field) {
-	logger := l.WithContext(ctx)
-	logger.Panic(msg, fields...)
-	l.addSpanEvent(ctx, zap.PanicLevel, msg, fields...)
-}
-
-// Fatal logs a message at FatalLevel with OpenTelemetry context
-func (l *Logger) Fatal(ctx context.Context, msg string, fields ...zap.Field) {
-	logger := l.WithContext(ctx)
-	logger.Fatal(msg, fields...)
-	l.addSpanEvent(ctx, zap.FatalLevel, msg, fields...)
+	logger.ErrorContext(ctx, msg, args...)
+	l.addSpanEvent(ctx, slog.LevelError, msg, args...)
+	os.Exit(1)
 }
 
 // addSpanEvent adds a log event to the current span
-func (l *Logger) addSpanEvent(ctx context.Context, level zapcore.Level, msg string, fields ...zap.Field) {
+func (l *Logger) addSpanEvent(ctx context.Context, level slog.Level, msg string, args ...any) {
 	span := trace.SpanFromContext(ctx)
 	if !span.IsRecording() {
 		return
 	}
 
-	// Convert zap fields to OpenTelemetry attributes
+	// Convert slog args to OpenTelemetry attributes
 	attrs := []attribute.KeyValue{
 		attribute.String("log.severity", level.String()),
 		attribute.String("log.message", msg),
 	}
 
-	for _, field := range fields {
-		// Convert zap field to attribute
-		// This is a simplified conversion - you might want to handle more types
-		switch field.Type {
-		case zapcore.StringType:
-			attrs = append(attrs, attribute.String("log."+field.Key, field.String))
-		case zapcore.Int64Type, zapcore.Int32Type, zapcore.Int16Type, zapcore.Int8Type:
-			attrs = append(attrs, attribute.Int64("log."+field.Key, field.Integer))
-		case zapcore.Float64Type:
-			attrs = append(attrs, attribute.Float64("log."+field.Key, math.Float64frombits(uint64(field.Integer))))
-		case zapcore.Float32Type:
-			attrs = append(attrs, attribute.Float64("log."+field.Key, float64(math.Float32frombits(uint32(field.Integer)))))
-		case zapcore.BoolType:
-			attrs = append(attrs, attribute.Bool("log."+field.Key, field.Integer == 1))
-		case zapcore.ErrorType:
-			if err, ok := field.Interface.(error); ok {
-				attrs = append(attrs, attribute.String("log."+field.Key, err.Error()))
-			}
+	// Process args in pairs (key, value)
+	for i := 0; i < len(args)-1; i += 2 {
+		key, ok := args[i].(string)
+		if !ok {
+			continue
+		}
+		value := args[i+1]
+
+		// Convert value to attribute based on type
+		switch v := value.(type) {
+		case string:
+			attrs = append(attrs, attribute.String("log."+key, v))
+		case int:
+			attrs = append(attrs, attribute.Int64("log."+key, int64(v)))
+		case int64:
+			attrs = append(attrs, attribute.Int64("log."+key, v))
+		case int32:
+			attrs = append(attrs, attribute.Int64("log."+key, int64(v)))
+		case float64:
+			attrs = append(attrs, attribute.Float64("log."+key, v))
+		case float32:
+			attrs = append(attrs, attribute.Float64("log."+key, float64(v)))
+		case bool:
+			attrs = append(attrs, attribute.Bool("log."+key, v))
+		case error:
+			attrs = append(attrs, attribute.String("log."+key, v.Error()))
 		default:
 			// For complex types, use string representation
-			attrs = append(attrs, attribute.String("log."+field.Key, field.String))
+			attrs = append(attrs, attribute.String("log."+key, slog.AnyValue(v).String()))
 		}
 	}
 
@@ -165,14 +157,15 @@ func (l *Logger) addSpanEvent(ctx context.Context, level zapcore.Level, msg stri
 }
 
 // WithError returns a logger with an error field
-func (l *Logger) WithError(err error) *zap.Logger {
+func (l *Logger) WithError(err error) *slog.Logger {
 	if err == nil {
 		return l.Logger
 	}
-	return l.With(zap.Error(err))
+	return l.With("error", err)
 }
 
 // Sync flushes any buffered log entries
+// Note: slog doesn't have a Sync method, so this is a no-op
 func (l *Logger) Sync() error {
-	return l.Logger.Sync()
+	return nil
 }

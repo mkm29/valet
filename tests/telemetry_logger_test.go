@@ -2,14 +2,13 @@ package tests
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 
 	"github.com/mkm29/valet/internal/telemetry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 type TelemetryLoggerTestSuite struct {
@@ -20,17 +19,17 @@ func (suite *TelemetryLoggerTestSuite) TestNewLogger() {
 	tests := []struct {
 		name      string
 		debug     bool
-		wantLevel zapcore.Level
+		wantLevel slog.Level
 	}{
 		{
 			name:      "debug logger",
 			debug:     true,
-			wantLevel: zapcore.DebugLevel,
+			wantLevel: slog.LevelDebug,
 		},
 		{
 			name:      "production logger",
 			debug:     false,
-			wantLevel: zapcore.InfoLevel,
+			wantLevel: slog.LevelInfo,
 		},
 	}
 
@@ -42,12 +41,12 @@ func (suite *TelemetryLoggerTestSuite) TestNewLogger() {
 			suite.NotNil(logger.Logger)
 
 			// Replace global logger for test
-			oldLogger := zap.L()
-			defer zap.ReplaceGlobals(oldLogger)
-			zap.ReplaceGlobals(logger.Logger)
+			oldLogger := slog.Default()
+			defer slog.SetDefault(oldLogger)
+			slog.SetDefault(logger.Logger)
 
 			// Verify it was set
-			suite.Equal(logger.Logger, zap.L())
+			suite.Equal(logger.Logger, slog.Default())
 		})
 	}
 }
@@ -105,22 +104,22 @@ func (suite *TelemetryLoggerTestSuite) TestLoggerMethods() {
 
 	// Test Info level
 	suite.NotPanics(func() {
-		logger.Info(ctx, "test message", zap.String("key", "value"))
+		logger.Info(ctx, "test message", "key", "value")
 	})
 
 	// Test Error level
 	suite.NotPanics(func() {
-		logger.Error(ctx, "error message", zap.Error(assert.AnError))
+		logger.Error(ctx, "error message", "error", assert.AnError)
 	})
 
 	// Test Debug level
 	suite.NotPanics(func() {
-		logger.Debug(ctx, "debug message", zap.Int("count", 42))
+		logger.Debug(ctx, "debug message", "count", 42)
 	})
 
 	// Test Warn level
 	suite.NotPanics(func() {
-		logger.Warn(ctx, "warning message", zap.Float64("ratio", 0.5))
+		logger.Warn(ctx, "warning message", "ratio", 0.5)
 	})
 }
 
@@ -129,14 +128,14 @@ func (suite *TelemetryLoggerTestSuite) TestSetDefault() {
 	suite.NoError(err)
 
 	// Store the original global logger
-	originalLogger := zap.L()
-	defer zap.ReplaceGlobals(originalLogger)
+	originalLogger := slog.Default()
+	defer slog.SetDefault(originalLogger)
 
 	// Set our logger as default
 	logger.SetDefault()
 
 	// Verify it was set
-	suite.Equal(logger.Logger, zap.L())
+	suite.Equal(logger.Logger, slog.Default())
 }
 
 func TestTelemetryLoggerSuite(t *testing.T) {

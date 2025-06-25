@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"sync"
@@ -17,7 +18,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap"
 )
 
 // Context keys for correlation
@@ -47,7 +47,7 @@ const (
 // MetricsServer handles Prometheus metrics collection and exposure
 type MetricsServer struct {
 	server *http.Server
-	logger *zap.Logger
+	logger *slog.Logger
 	config *config.MetricsConfig
 	mu     sync.RWMutex
 
@@ -102,9 +102,9 @@ type MetricsServer struct {
 }
 
 // NewMetricsServer creates a new metrics server instance
-func NewMetricsServer(config *config.MetricsConfig, logger *zap.Logger) *MetricsServer {
+func NewMetricsServer(config *config.MetricsConfig, logger *slog.Logger) *MetricsServer {
 	if logger == nil {
-		logger = zap.L().Named("metrics")
+		logger = slog.Default().With("component", "metrics")
 	}
 
 	m := &MetricsServer{
@@ -362,7 +362,7 @@ func (m *MetricsServer) Start(ctx context.Context) error {
 		m.server.Addr = ln.Addr().String()
 
 		m.logger.Info("Starting metrics server on random port",
-			zap.String("address", m.server.Addr),
+			"address", m.server.Addr,
 		)
 
 		go func() {
@@ -372,7 +372,7 @@ func (m *MetricsServer) Start(ctx context.Context) error {
 		}()
 	} else {
 		m.logger.Info("Starting metrics server",
-			zap.String("address", m.server.Addr),
+			"address", m.server.Addr,
 		)
 
 		go func() {
@@ -449,8 +449,8 @@ func (m *MetricsServer) waitForServerStartup(ctx context.Context, errCh chan err
 				resp.Body.Close()
 
 				m.logger.Info("Metrics server started successfully",
-					zap.Duration("startupTime", time.Since(startTime)),
-					zap.String("retryAfterHeader", retryAfter),
+					"startupTime", time.Since(startTime),
+					"retryAfterHeader", retryAfter,
 				)
 				return nil
 			}
@@ -486,8 +486,8 @@ func (m *MetricsServer) Shutdown(ctx context.Context) error {
 	m.serverState.Set(0) // stopped
 
 	m.logger.Info("Metrics server shutdown complete",
-		zap.Duration("shutdownDuration", shutdownDuration),
-		zap.Error(err),
+		"shutdownDuration", shutdownDuration,
+		"error", err,
 	)
 
 	return err
@@ -549,23 +549,23 @@ func (m *MetricsServer) UpdateHelmCacheStats(stats interface{}) {
 		// WARNING: This approach has significant performance overhead and should be avoided
 		// in performance-critical code paths. Consider implementing CacheStatsProvider instead.
 		m.logger.Debug("Using JSON marshaling fallback for metrics collection",
-			zap.String("type", fmt.Sprintf("%T", stats)),
-			zap.String("recommendation", "implement CacheStatsProvider interface for better performance"),
+			"type", fmt.Sprintf("%T", stats),
+			"recommendation", "implement CacheStatsProvider interface for better performance",
 		)
 
 		data, err := json.Marshal(stats)
 		if err != nil {
 			m.logger.Warn("Failed to marshal stats for metrics collection",
-				zap.Error(err),
-				zap.String("stats_type", fmt.Sprintf("%T", stats)),
+				"error", err,
+				"stats_type", fmt.Sprintf("%T", stats),
 			)
 			return
 		}
 
 		if err := json.Unmarshal(data, &helmStats); err != nil {
 			m.logger.Warn("Failed to unmarshal stats for metrics collection",
-				zap.Error(err),
-				zap.String("stats_type", fmt.Sprintf("%T", stats)),
+				"error", err,
+				"stats_type", fmt.Sprintf("%T", stats),
 			)
 			return
 		}
@@ -808,18 +808,18 @@ func (m *MetricsServer) RecordCommandExecution(ctx context.Context, command stri
 	}
 
 	// Log with correlation context
-	logFields := []zap.Field{
-		zap.String("command", command),
-		zap.String("request_id", requestID),
-		zap.Duration("duration", duration),
-		zap.Int("sampling_priority", int(samplingPriority)),
+	logArgs := []any{
+		"command", command,
+		"request_id", requestID,
+		"duration", duration,
+		"sampling_priority", int(samplingPriority),
 	}
 
 	if err != nil {
-		logFields = append(logFields, zap.Error(err))
-		m.logger.Error("Command execution failed", logFields...)
-	} else if m.logger.Core().Enabled(zap.DebugLevel) {
-		m.logger.Debug("Command execution succeeded", logFields...)
+		logArgs = append(logArgs, "error", err)
+		m.logger.Error("Command execution failed", logArgs...)
+	} else if m.logger.Enabled(nil, slog.LevelDebug) {
+		m.logger.Debug("Command execution succeeded", logArgs...)
 	}
 }
 

@@ -5,14 +5,13 @@ package helm
 import (
 	"container/list"
 	"fmt"
+	"log/slog"
 	"os"
 	"sync"
 	"time"
 
 	"github.com/mkm29/valet/internal/config"
 	"github.com/mkm29/valet/internal/utils"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/getter"
@@ -40,7 +39,7 @@ type MetricsServerInterface interface {
 
 // Helm provides functionality for working with Helm charts
 type Helm struct {
-	logger          *zap.Logger
+	logger          *slog.Logger
 	debug           bool
 	cache           *chartCache
 	maxChartSize    int64
@@ -52,7 +51,7 @@ type Helm struct {
 // HelmOptions configures a Helm instance
 type HelmOptions struct {
 	Debug           bool
-	Logger          *zap.Logger
+	Logger          *slog.Logger
 	MaxChartSize    int64 // Maximum size in bytes for individual charts (0 = use default)
 	MaxCacheSize    int64 // Maximum total size in bytes for cache (0 = use default)
 	MaxCacheEntries int   // Maximum number of entries in cache (0 = use default)
@@ -97,7 +96,7 @@ type chartCache struct {
 func NewHelm(opts HelmOptions) *Helm {
 	logger := opts.Logger
 	if logger == nil {
-		logger = zap.L().Named("helm")
+		logger = slog.Default().With("component", "helm")
 	}
 
 	maxChartSize := opts.MaxChartSize
@@ -213,10 +212,10 @@ func (h *Helm) evictLRU() {
 
 		if h.debug {
 			h.logger.Debug("Evicted chart from cache",
-				zap.String("key", key),
-				zap.String("size", utils.FormatBytes(entry.size)),
-				zap.Int64("evictions", h.cache.evictions),
-				zap.String("reason", h.getEvictionReason()),
+				"key", key,
+				"size", utils.FormatBytes(entry.size),
+				"evictions", h.cache.evictions,
+				"reason", h.getEvictionReason(),
 			)
 		}
 	}
@@ -286,8 +285,8 @@ func (h *Helm) evictMetadataLRU() {
 
 		if h.debug {
 			h.logger.Debug("Evicted metadata from cache",
-				zap.String("key", key),
-				zap.Int("remainingEntries", len(h.cache.metadata)),
+				"key", key,
+				"remainingEntries", len(h.cache.metadata),
 			)
 		}
 	}
@@ -325,9 +324,9 @@ func (h *Helm) updateMetadataCache(cacheKey string, ch *chart.Chart, c *config.H
 
 	if h.debug {
 		h.logger.Debug("Updated metadata cache",
-			zap.String("chart", fmt.Sprintf("%s/%s", c.Name, c.Version)),
-			zap.Bool("hasSchema", hasSchema),
-			zap.Int("metadataEntries", len(h.cache.metadata)),
+			"chart", fmt.Sprintf("%s/%s", c.Name, c.Version),
+			"hasSchema", hasSchema,
+			"metadataEntries", len(h.cache.metadata),
 		)
 	}
 }
@@ -365,13 +364,13 @@ func (h *Helm) getOrLoadChart(c *config.HelmChart) (*chart.Chart, error) {
 
 		if h.debug {
 			h.logger.Debug("Cache hit",
-				zap.String("chart", fmt.Sprintf("%s/%s", c.Name, c.Version)),
-				zap.String("cacheKey", cacheKey),
-				zap.Int64("totalHits", h.cache.hits),
-				zap.Int64("totalMisses", h.cache.misses),
-				zap.Float64("hitRate", hitRate),
-				zap.String("entrySize", utils.FormatBytes(entry.size)),
-				zap.Duration("age", time.Since(entry.lastAccess)),
+				"chart", fmt.Sprintf("%s/%s", c.Name, c.Version),
+				"cacheKey", cacheKey,
+				"totalHits", h.cache.hits,
+				"totalMisses", h.cache.misses,
+				"hitRate", hitRate,
+				"entrySize", utils.FormatBytes(entry.size),
+				"age", time.Since(entry.lastAccess),
 			)
 		}
 		// Update metrics after cache hit
@@ -392,8 +391,8 @@ func (h *Helm) getOrLoadChart(c *config.HelmChart) (*chart.Chart, error) {
 
 		if h.debug {
 			h.logger.Debug("Cache hit (after write lock)",
-				zap.String("chart", fmt.Sprintf("%s/%s", c.Name, c.Version)),
-				zap.String("cacheKey", cacheKey),
+				"chart", fmt.Sprintf("%s/%s", c.Name, c.Version),
+				"cacheKey", cacheKey,
 			)
 		}
 		return entry.chart, nil
@@ -405,11 +404,11 @@ func (h *Helm) getOrLoadChart(c *config.HelmChart) (*chart.Chart, error) {
 
 	if h.debug {
 		h.logger.Debug("Cache miss - loading from registry",
-			zap.String("chart", fmt.Sprintf("%s/%s", c.Name, c.Version)),
-			zap.String("cacheKey", cacheKey),
-			zap.Int64("totalMisses", h.cache.misses),
-			zap.Float64("missRate", missRate),
-			zap.String("registry", c.Registry.URL),
+			"chart", fmt.Sprintf("%s/%s", c.Name, c.Version),
+			"cacheKey", cacheKey,
+			"totalMisses", h.cache.misses,
+			"missRate", missRate,
+			"registry", c.Registry.URL,
 		)
 	}
 
@@ -427,12 +426,12 @@ func (h *Helm) getOrLoadChart(c *config.HelmChart) (*chart.Chart, error) {
 
 	// Check if chart is too large for our cache
 	if chartSize > h.maxCacheSize {
-		if h.debug || h.logger.Core().Enabled(zapcore.WarnLevel) {
+		if h.debug || h.logger.Enabled(nil, slog.LevelWarn) {
 			h.logger.Warn("Chart too large to cache",
-				zap.String("chart", fmt.Sprintf("%s/%s", c.Name, c.Version)),
-				zap.String("chartSize", utils.FormatBytes(chartSize)),
-				zap.String("maxCacheSize", utils.FormatBytes(h.maxCacheSize)),
-				zap.Float64("sizeRatio", float64(chartSize)/float64(h.maxCacheSize)),
+				"chart", fmt.Sprintf("%s/%s", c.Name, c.Version),
+				"chartSize", utils.FormatBytes(chartSize),
+				"maxCacheSize", utils.FormatBytes(h.maxCacheSize),
+				"sizeRatio", float64(chartSize)/float64(h.maxCacheSize),
 			)
 		}
 		// Return the chart without caching
@@ -469,16 +468,16 @@ func (h *Helm) getOrLoadChart(c *config.HelmChart) (*chart.Chart, error) {
 
 	if h.debug {
 		h.logger.Debug("Chart cached successfully",
-			zap.String("chart", fmt.Sprintf("%s/%s", c.Name, c.Version)),
-			zap.String("cacheKey", cacheKey),
-			zap.Duration("loadTime", loadDuration),
-			zap.String("chartSize", utils.FormatBytes(chartSize)),
-			zap.Int("evictedEntries", evictionCount),
-			zap.Duration("evictionTime", evictionDuration),
-			zap.Int("totalEntries", len(h.cache.entries)),
-			zap.String("cacheSize", utils.FormatBytes(h.cache.currentSize)),
-			zap.Float64("cacheSizeUsage", cacheUsagePercent),
-			zap.Float64("cacheEntriesUsage", entriesUsagePercent),
+			"chart", fmt.Sprintf("%s/%s", c.Name, c.Version),
+			"cacheKey", cacheKey,
+			"loadTime", loadDuration,
+			"chartSize", utils.FormatBytes(chartSize),
+			"evictedEntries", evictionCount,
+			"evictionTime", evictionDuration,
+			"totalEntries", len(h.cache.entries),
+			"cacheSize", utils.FormatBytes(h.cache.currentSize),
+			"cacheSizeUsage", cacheUsagePercent,
+			"cacheEntriesUsage", entriesUsagePercent,
 		)
 	}
 
@@ -493,10 +492,10 @@ func (h *Helm) loadChart(c *config.HelmChart) (*chart.Chart, error) {
 
 	if h.debug {
 		h.logger.Debug("Loading chart",
-			zap.String("name", c.Name),
-			zap.String("version", c.Version),
-			zap.String("url", url),
-			zap.Int64("maxSizeBytes", h.maxChartSize),
+			"name", c.Name,
+			"version", c.Version,
+			"url", url,
+			"maxSizeBytes", h.maxChartSize,
 		)
 	}
 
@@ -565,10 +564,10 @@ func (h *Helm) loadChart(c *config.HelmChart) (*chart.Chart, error) {
 	chartSize := int64(provider.Len())
 	if h.debug {
 		h.logger.Debug("Chart file size",
-			zap.String("name", c.Name),
-			zap.String("version", c.Version),
-			zap.Int64("sizeBytes", chartSize),
-			zap.String("sizeHuman", utils.FormatBytes(chartSize)),
+			"name", c.Name,
+			"version", c.Version,
+			"sizeBytes", chartSize,
+			"sizeHuman", utils.FormatBytes(chartSize),
 		)
 	}
 
@@ -593,9 +592,9 @@ func (h *Helm) loadChart(c *config.HelmChart) (*chart.Chart, error) {
 
 	if h.debug {
 		h.logger.Debug("Chart loaded successfully",
-			zap.String("name", chart.Name()),
-			zap.String("version", chart.Metadata.Version),
-			zap.Int64("sizeBytes", chartSize),
+			"name", chart.Name(),
+			"version", chart.Metadata.Version,
+			"sizeBytes", chartSize,
 		)
 	}
 
@@ -616,7 +615,7 @@ func (h *Helm) getSchemaFile(c *config.HelmChart) (*chart.File, error) {
 	// Find the values.schema.json file
 	for _, file := range chart.Raw {
 		if h.debug {
-			h.logger.Debug("Checking file", zap.String("file", file.Name))
+			h.logger.Debug("Checking file", "file", file.Name)
 		}
 		if file.Name == "values.schema.json" {
 			if h.debug {
@@ -659,10 +658,10 @@ func (h *Helm) HasSchema(c *config.HelmChart) (bool, error) {
 
 		if h.debug {
 			h.logger.Debug("Metadata cache hit",
-				zap.String("chart", fmt.Sprintf("%s/%s", c.Name, c.Version)),
-				zap.Bool("hasSchema", entry.hasSchema),
-				zap.Int64("totalHits", h.cache.metadataHits),
-				zap.Float64("hitRate", hitRate),
+				"chart", fmt.Sprintf("%s/%s", c.Name, c.Version),
+				"hasSchema", entry.hasSchema,
+				"totalHits", h.cache.metadataHits,
+				"hitRate", hitRate,
 			)
 		}
 
@@ -682,9 +681,9 @@ func (h *Helm) HasSchema(c *config.HelmChart) (bool, error) {
 
 	if h.debug {
 		h.logger.Debug("Metadata cache miss",
-			zap.String("chart", fmt.Sprintf("%s/%s", c.Name, c.Version)),
-			zap.Int64("totalMisses", h.cache.metadataMisses),
-			zap.Float64("missRate", missRate),
+			"chart", fmt.Sprintf("%s/%s", c.Name, c.Version),
+			"totalMisses", h.cache.metadataMisses,
+			"missRate", missRate,
 		)
 	}
 
@@ -738,7 +737,7 @@ func (h *Helm) DownloadSchema(c *config.HelmChart) (string, func(), error) {
 	}
 
 	if h.debug {
-		h.logger.Debug("Schema saved to temporary file", zap.String("path", tmp.Name()))
+		h.logger.Debug("Schema saved to temporary file", "path", tmp.Name())
 	}
 	cleanup := func() { os.Remove(tmp.Name()) }
 

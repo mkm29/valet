@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,8 +17,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 // GenerateWithApp is a version of Generate that accepts dependencies
@@ -110,7 +109,7 @@ func generateInternalWithApp(ctx context.Context, app *App, tel *telemetry.Telem
 	}
 
 	// Log some of the top-level default values to help with debugging
-	isDebug := app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel
+	isDebug := app.Config != nil && app.Config.LogLevel.Level == slog.LevelDebug
 	if isDebug && tel.IsEnabled() && app.Logger != nil {
 		logDefaultValues(ctx, app.Logger, valuesPath, yaml1)
 	}
@@ -189,10 +188,10 @@ func generateInternalWithApp(ctx context.Context, app *App, tel *telemetry.Telem
 }
 
 // logDefaultValues logs debugging information about default values
-func logDefaultValues(_ context.Context, logger *zap.Logger, valuesPath string, yaml1 map[string]any) {
+func logDefaultValues(_ context.Context, logger *slog.Logger, valuesPath string, yaml1 map[string]any) {
 	logger.Debug("Original YAML values loaded",
-		zap.String("file", valuesPath),
-		zap.Int("top_level_keys", len(yaml1)),
+		"file", valuesPath,
+		"top_level_keys", len(yaml1),
 	)
 
 	// Count components with enabled field
@@ -209,16 +208,16 @@ func logDefaultValues(_ context.Context, logger *zap.Logger, valuesPath string, 
 						disabledComponentCount++
 					}
 					logger.Debug("Component status",
-						zap.String("component", key),
-						zap.Bool("enabled", enabledBool),
+						"component", key,
+						"enabled", enabledBool,
 					)
 				}
 			}
 		}
 	}
 	logger.Debug("Component summary",
-		zap.Int("enabled_count", enabledComponentCount),
-		zap.Int("disabled_count", disabledComponentCount),
+		"enabled_count", enabledComponentCount,
+		"disabled_count", disabledComponentCount,
 	)
 }
 
@@ -307,11 +306,11 @@ func shouldFieldBeRequiredWithApp(app *App, fieldName string, fieldValue, defaul
 
 	// Check for empty values
 	if utils.IsEmptyValue(defaultValue) {
-		isDebug := app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel
+		isDebug := app.Config != nil && app.Config.LogLevel.Level == slog.LevelDebug
 		if isDebug && app.Logger != nil {
 			app.Logger.Debug("Skipping field because it has an empty default value",
-				zap.String("field", fieldName),
-				zap.String("type", fmt.Sprintf("%T", defaultValue)))
+				"field", fieldName,
+				"type", fmt.Sprintf("%T", defaultValue))
 		}
 		return false
 	}
@@ -452,7 +451,7 @@ func processPropertiesWithApp(app *App, schema map[string]any, defaults map[stri
 	// Check if this object itself has an 'enabled' key that is false
 	if enabled, hasEnabled := defaults["enabled"]; hasEnabled {
 		if enabledBool, isBool := enabled.(bool); isBool && !enabledBool {
-			isDebug := app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel
+			isDebug := app.Config != nil && app.Config.LogLevel.Level == slog.LevelDebug
 			if isDebug && app.Logger != nil {
 				app.Logger.Debug("Post-processing: Removing required fields from component because it has enabled=false")
 			}
@@ -469,10 +468,10 @@ func processPropertiesWithApp(app *App, schema map[string]any, defaults map[stri
 
 		// If the default value is empty, don't include it in required
 		if hasDef && utils.IsEmptyValue(defVal) {
-			isDebug := app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel
+			isDebug := app.Config != nil && app.Config.LogLevel.Level == slog.LevelDebug
 			if isDebug && app.Logger != nil {
 				app.Logger.Debug("Post-processing: Removing field from required list because it has an empty default value",
-					zap.String("field", fieldName))
+					"field", fieldName)
 			}
 			continue
 		}
@@ -483,10 +482,10 @@ func processPropertiesWithApp(app *App, schema map[string]any, defaults map[stri
 			// Check if this component has an 'enabled' field
 			if enabled, hasEnabled := propObj["enabled"]; hasEnabled {
 				if enabledBool, isBool := enabled.(bool); isBool && !enabledBool {
-					isDebug := app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel
+					isDebug := app.Config != nil && app.Config.LogLevel.Level == slog.LevelDebug
 					if isDebug && app.Logger != nil {
 						app.Logger.Debug("Post-processing: Removing field from required list because it is disabled",
-							zap.String("field", fieldName))
+							"field", fieldName)
 					}
 					continue
 				}
@@ -494,10 +493,10 @@ func processPropertiesWithApp(app *App, schema map[string]any, defaults map[stri
 
 			// Also check if the component has a nil value by default
 			if utils.IsEmptyValue(propObj) {
-				isDebug := app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel
+				isDebug := app.Config != nil && app.Config.LogLevel.Level == slog.LevelDebug
 				if isDebug && app.Logger != nil {
 					app.Logger.Debug("Post-processing: Removing field from required list because it has a nil default value",
-						zap.String("field", fieldName))
+						"field", fieldName)
 				}
 				continue
 			}
@@ -611,13 +610,13 @@ func parseGenerateCommandConfigWithApp(cmd *cobra.Command, ctx string, app *App,
 
 // logGenerateCommandDebugWithApp logs debug information with dependency injection
 func logGenerateCommandDebugWithApp(cmdConfig *generateCommandConfig, app *App) {
-	if app.Config != nil && app.Config.LogLevel.Level == zapcore.DebugLevel && app.Logger != nil {
+	if app.Config != nil && app.Config.LogLevel.Level == slog.LevelDebug && app.Logger != nil {
 		app.Logger.Debug("Generate command configuration",
-			zap.Bool("hasRemoteChartFlags", cmdConfig.hasRemoteChartFlags),
-			zap.Bool("hasRemoteChartConfig", cmdConfig.hasRemoteChartConfig),
-			zap.Bool("hasLocalContext", cmdConfig.hasLocalContext),
-			zap.String("chartName", cmdConfig.chartName),
-			zap.Any("helmConfig", app.Config.Helm),
+			"hasRemoteChartFlags", cmdConfig.hasRemoteChartFlags,
+			"hasRemoteChartConfig", cmdConfig.hasRemoteChartConfig,
+			"hasLocalContext", cmdConfig.hasLocalContext,
+			"chartName", cmdConfig.chartName,
+			"helmConfig", app.Config.Helm,
 		)
 	}
 }
@@ -634,8 +633,8 @@ func handleRemoteChartGenerationWithApp(cmd *cobra.Command, cmdConfig *generateC
 func handleRemoteChartFromConfigWithApp(app *App) error {
 	// Create Helm instance with options
 	h := helm.NewHelm(helm.HelmOptions{
-		Debug: app.Config.LogLevel.Level == zapcore.DebugLevel,
-		// Logger will use the default zap.L().Named("helm")
+		Debug: app.Config.LogLevel.Level == slog.LevelDebug,
+		// Logger will use the default slog logger
 	})
 
 	// First check if the chart has a schema

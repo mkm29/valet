@@ -45,6 +45,3 @@ COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 # Set the entrypoint
 ENTRYPOINT ["/valet"]
-
-# Default command (can be overridden)
-CMD ["--help"]

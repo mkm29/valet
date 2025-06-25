@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
@@ -11,8 +12,6 @@ import (
 	"github.com/mkm29/valet/internal/telemetry"
 	"github.com/mkm29/valet/internal/utils"
 	"github.com/spf13/cobra"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 // CommandContext extends cobra.Command to carry dependencies
@@ -53,7 +52,7 @@ func NewRootCmdWithApp(app *App) *cobra.Command {
 			app.loggerCleanup = cleanup
 
 			// Log config if debug level is enabled
-			if app.Config.LogLevel.Level == zapcore.DebugLevel {
+			if app.Config.LogLevel.Level == slog.LevelDebug {
 				logDebugConfiguration(app.Logger, app.Config)
 			}
 
@@ -63,7 +62,7 @@ func NewRootCmdWithApp(app *App) *cobra.Command {
 				t, err := telemetry.Initialize(ctx, app.Config.Telemetry)
 				if err != nil {
 					// Log error but don't fail - telemetry is optional
-					app.Logger.Debug("Failed to initialize telemetry", zap.Error(err))
+					app.Logger.Debug("Failed to initialize telemetry", "error", err)
 				} else {
 					app.Telemetry = t
 				}
@@ -82,7 +81,7 @@ func NewRootCmdWithApp(app *App) *cobra.Command {
 
 				if err := app.Telemetry.Shutdown(shutdownCtx); err != nil {
 					if app.Logger != nil {
-						app.Logger.Error("Error shutting down telemetry", zap.Error(err))
+						app.Logger.Error("Error shutting down telemetry", "error", err)
 					}
 				}
 			}
@@ -123,11 +122,11 @@ func NewRootCmdWithApp(app *App) *cobra.Command {
 }
 
 // logDebugConfiguration logs the configuration in debug mode
-func logDebugConfiguration(logger *zap.Logger, cfg *config.Config) {
+func logDebugConfiguration(logger *slog.Logger, cfg *config.Config) {
 	// Pretty print configuration to stdout as JSON
 	configJSON, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
-		logger.Error("Failed to marshal config", zap.Error(err))
+		logger.Error("Failed to marshal config", "error", err)
 	} else {
 		fmt.Println("=== Valet Configuration ===")
 		fmt.Println(string(configJSON))
@@ -139,39 +138,39 @@ func logDebugConfiguration(logger *zap.Logger, cfg *config.Config) {
 	logger.Debug("Configuration loaded", fields...)
 }
 
-// buildConfigFields builds zap fields from config
-func buildConfigFields(cfg *config.Config) []zap.Field {
-	fields := []zap.Field{
-		zap.String("logLevel", cfg.LogLevel.String()),
-		zap.String("context", cfg.Context),
-		zap.String("overrides", cfg.Overrides),
-		zap.String("output", cfg.Output),
+// buildConfigFields builds slog fields from config
+func buildConfigFields(cfg *config.Config) []any {
+	fields := []any{
+		"logLevel", cfg.LogLevel.String(),
+		"context", cfg.Context,
+		"overrides", cfg.Overrides,
+		"output", cfg.Output,
 	}
 
 	// Add telemetry config if present
 	if cfg.Telemetry != nil {
 		fields = append(fields,
-			zap.Bool("telemetry.enabled", cfg.Telemetry.Enabled),
-			zap.String("telemetry.serviceName", cfg.Telemetry.ServiceName),
-			zap.String("telemetry.serviceVersion", cfg.Telemetry.ServiceVersion),
-			zap.String("telemetry.exporterType", cfg.Telemetry.ExporterType),
-			zap.String("telemetry.otlpEndpoint", cfg.Telemetry.OTLPEndpoint),
-			zap.Bool("telemetry.insecure", cfg.Telemetry.Insecure),
-			zap.Float64("telemetry.sampleRate", cfg.Telemetry.SampleRate),
+			"telemetry.enabled", cfg.Telemetry.Enabled,
+			"telemetry.serviceName", cfg.Telemetry.ServiceName,
+			"telemetry.serviceVersion", cfg.Telemetry.ServiceVersion,
+			"telemetry.exporterType", cfg.Telemetry.ExporterType,
+			"telemetry.otlpEndpoint", cfg.Telemetry.OTLPEndpoint,
+			"telemetry.insecure", cfg.Telemetry.Insecure,
+			"telemetry.sampleRate", cfg.Telemetry.SampleRate,
 		)
 	}
 
 	// Add helm config if present
 	if cfg.Helm != nil && cfg.Helm.Chart != nil {
 		fields = append(fields,
-			zap.String("helm.chart.name", cfg.Helm.Chart.Name),
-			zap.String("helm.chart.version", cfg.Helm.Chart.Version),
+			"helm.chart.name", cfg.Helm.Chart.Name,
+			"helm.chart.version", cfg.Helm.Chart.Version,
 		)
 		if cfg.Helm.Chart.Registry != nil {
 			fields = append(fields,
-				zap.String("helm.chart.registry.url", cfg.Helm.Chart.Registry.URL),
-				zap.String("helm.chart.registry.type", cfg.Helm.Chart.Registry.Type),
-				zap.Bool("helm.chart.registry.insecure", cfg.Helm.Chart.Registry.Insecure),
+				"helm.chart.registry.url", cfg.Helm.Chart.Registry.URL,
+				"helm.chart.registry.type", cfg.Helm.Chart.Registry.Type,
+				"helm.chart.registry.insecure", cfg.Helm.Chart.Registry.Insecure,
 			)
 			if cfg.Helm.Chart.Registry.Auth != nil {
 				auth := cfg.Helm.Chart.Registry.Auth
@@ -181,8 +180,8 @@ func buildConfigFields(cfg *config.Config) []zap.Field {
 					maskedPassword = "[REDACTED]"
 				}
 				fields = append(fields,
-					zap.String("helm.registry.auth.username", maskedUsername),
-					zap.String("helm.registry.auth.password", maskedPassword),
+					"helm.registry.auth.username", maskedUsername,
+					"helm.registry.auth.password", maskedPassword,
 				)
 			}
 		}
@@ -259,11 +258,20 @@ func applyFlagOverrides(cmd *cobra.Command, c *config.Config) {
 	}
 	if cmd.PersistentFlags().Changed("log-level") {
 		levelStr, _ := cmd.PersistentFlags().GetString("log-level")
-		// Parse the log level string to zapcore.Level
-		var level zapcore.Level
-		if err := level.UnmarshalText([]byte(levelStr)); err != nil {
+		// Parse the log level string to slog.Level
+		var level slog.Level
+		switch levelStr {
+		case "debug":
+			level = slog.LevelDebug
+		case "info":
+			level = slog.LevelInfo
+		case "warn", "warning":
+			level = slog.LevelWarn
+		case "error":
+			level = slog.LevelError
+		default:
 			// Default to info level if parsing fails
-			level = zapcore.InfoLevel
+			level = slog.LevelInfo
 		}
 		c.LogLevel = config.LogLevel{Level: level}
 	}

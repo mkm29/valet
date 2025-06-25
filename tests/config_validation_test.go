@@ -1,13 +1,13 @@
 package tests
 
 import (
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/mkm29/valet/internal/config"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/zap/zapcore"
 )
 
 type ConfigValidationTestSuite struct {
@@ -555,7 +555,7 @@ helm:
 		cfg, err := config.LoadConfig(configFile)
 		suite.NoError(err)
 		suite.NotNil(cfg)
-		suite.Equal(zapcore.DebugLevel, cfg.LogLevel.Level)
+		suite.Equal(slog.LevelDebug, cfg.LogLevel.Level)
 		suite.Equal("my-chart", cfg.Helm.Chart.Name)
 	})
 }
