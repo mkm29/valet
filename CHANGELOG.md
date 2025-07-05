@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - **Interface-Based Telemetry Architecture**:
+
   - Implemented comprehensive interface-based design for all telemetry components
   - Created `Provider` interface for telemetry providers with implementations:
     - `OpenTelemetryProvider`: Full OpenTelemetry integration
@@ -24,14 +25,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
     - `MockMetricsCollector`: Metrics collector mock
     - `MockMetricsExporter`: Metrics exporter mock
     - `MockTracerProvider` and `MockMeterProvider`: Specialized mocks
+  - **Comprehensive test coverage**:
+    - Unit tests for all provider implementations
+    - Unit tests for all metrics collector implementations
+    - Integration tests demonstrating interface usage
+    - Mock behavior customization tests
+    - Factory pattern validation tests
+    - Thread-safety and concurrent access tests
+    - End-to-end tests with mixed implementations
   - Benefits:
     - Easy unit testing with comprehensive mocks
     - Flexible runtime provider/collector selection
     - Clear separation of concerns
     - Easy to add new implementations (Jaeger, StatsD, etc.)
     - No tight coupling to specific implementations
+    - Full test coverage ensuring reliability
 
 - **Unified Telemetry-Aware Logging Architecture**:
+
   - Consolidated logging functionality into the telemetry package for cohesive observability
   - Implemented backend-agnostic logging with pluggable implementations
   - Created two built-in backends:
@@ -49,9 +60,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
     - Better testability with mock backends
     - Future-proof design for new logging backends (zap, zerolog, etc.)
 
+- **Telemetry Testing Infrastructure**:
+
+  - Added `provider_test.go` with tests for:
+    - Provider factory function behavior
+    - OpenTelemetry provider with various configurations
+    - No-op provider functionality
+    - Mock provider customization and call tracking
+    - Interface compliance validation
+    - Context cancellation handling
+  - Added `metrics_collector_test.go` with tests for:
+    - Metrics collector factory function
+    - Prometheus collector with metrics recording
+    - No-op collector behavior
+    - Mock collector with detailed call tracking
+    - Cache stats provider mock implementation
+  - Added `telemetry_interface_test.go` with:
+    - Integration tests for existing Telemetry struct
+    - End-to-end tests with mixed implementations
+    - Factory pattern usage demonstrations
+    - Real-world usage scenarios
+  - Enhanced `logger_backend_test.go` with:
+    - Backend registry tests
+    - Thread-safety validation
+    - Mock backend behavior tests
+
 ### Changed
 
 - **Logging Architecture Improvements**:
+
   - Implemented [logr](https://github.com/go-logr/logr) as the logging abstraction layer
   - Decoupled logging interface from concrete implementation using logr
   - Uses slog as the backend via official `logr.FromSlogHandler()` bridge
@@ -80,6 +117,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
     - Maintained backward compatibility with `NewLoggerFromSlog`
 
 - **Logging Migration** (reverting [0.2.0] change):
+
   - Migrated back from Uber's zap logger to Go's built-in log/slog package
   - Updated all packages to use slog for logging
   - Removed zap and zapcore dependencies from go.mod
@@ -90,6 +128,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - **Docker Support**:
+
   - Multistage Dockerfile using Chainguard's distroless static image for minimal attack surface
   - Runs as non-root user (UID 65532) for enhanced security
   - Includes only essential files: binary, CA certificates, and timezone data
@@ -99,6 +138,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Documentation for Docker usage in README
 
 - **Prometheus Monitoring Examples**:
+
   - Comprehensive Prometheus alerting rules covering performance, cache health, server health, and operational issues
   - Full Grafana dashboard JSON with visualizations for command execution, error rates, cache metrics, and server state
   - Complete monitoring stack configuration with Docker Compose setup
@@ -106,12 +146,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Updated examples/README.md with detailed documentation of all monitoring resources
 
 - **Security and Logging Enhancements**:
+
   - Security section in README documenting sensitive information handling
   - Automatic redaction of sensitive credentials in debug output (passwords, tokens show as `[REDACTED]`)
   - `InitializeLogger` method to `App` struct for centralized logger initialization with cleanup function
   - Logger flush logic ensures buffered logs are written before exit
 
 - **Server Lifecycle Metrics**:
+
   - New Prometheus metrics for monitoring server lifecycle events:
     - `valet_metrics_server_start_time_seconds`: Unix timestamp when metrics server started
     - `valet_metrics_server_uptime_seconds`: Current server uptime in seconds (updated every 10 seconds)
@@ -128,6 +170,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Support for port 0 (random available port) for testing scenarios
 
 - **Helm Chart Caching System**:
+
   - In-memory caching for remote charts to avoid redundant downloads
   - Thread-safe LRU (Least Recently Used) eviction policy
   - Configurable size limits: individual charts (default 1MB), total cache (default 10MB), max entries (default 50)
@@ -136,12 +179,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - `GetCacheStats()` and `ClearCache()` methods for cache management
 
 - **Prometheus Metrics Exposure**:
+
   - `/metrics` endpoint with comprehensive metrics for monitoring
   - Metrics include: Helm cache stats, command execution times, schema generation stats, file operations
   - Configurable metrics server via configuration file
   - Example configuration in `examples/helm-config-with-metrics.yaml`
 
 - **Utils Package**:
+
   - Created `internal/utils` package with organized utility functions:
     - `reflection.go`: Struct field extraction utilities
     - `schema.go`: Schema generation utilities (`InferBooleanSchema`, `InferArraySchema`, etc.)
@@ -153,6 +198,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
     - `performance.go`: Performance utilities (`CategorizePerformance`, `ServerStateToString`)
 
 - **Enhanced Error Messages**:
+
   - Detailed error messages for remote chart failures with troubleshooting hints
   - Registry-type specific suggestions (HTTP/HTTPS/OCI)
   - Better authentication configuration conflict guidance
@@ -160,6 +206,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 
 - **Code Organization and Refactoring**:
+
   - Moved all utility functions to centralized `internal/utils` package
   - Removed wrapper functions - direct calls to `utils` package throughout codebase
   - Moved schema inference functions from `cmd/schema_helpers.go` to `utils/schema.go` with exported names
@@ -174,24 +221,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
     - `getServerStateString` → `utils.ServerStateToString`
 
 - **Documentation Updates**:
+
   - Cleaned up root README.md to be more concise and user-friendly
   - Moved detailed observability documentation to examples directory
   - Created comprehensive `.valet.yaml.example` file with all configuration options
   - Root README now links to examples directory for detailed configurations
 
 - **BREAKING: Configuration Changes**:
+
   - Replaced `Debug` boolean with `LogLevel` field (accepts: debug/info/warn/error/dpanic/panic/fatal)
   - CLI flag changed from `--debug` to `--log-level`
   - `InitializeLogger` now returns `(func(), error)` - cleanup function must be deferred
   - Backward compatibility: `debug: true` automatically converts to `logLevel: debug`
 
 - **Helm Package Enhancements**:
+
   - Complete redesign with LRU-based caching system
   - `DownloadSchema` now returns `(string, func(), error)` with cleanup function
   - New `HelmOptions` fields: `MaxChartSize`, `MaxCacheSize`, `MaxCacheEntries`
   - Cache tracks metadata, access time, and provides automatic eviction
 
 - **Test Suite Migration**:
+
   - All tests moved to centralized `tests` directory
   - Unified under `ValetTestSuite` base test suite
   - Improved test organization and consistency
@@ -212,6 +263,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Remote Chart Configuration**: Fixed issue where remote chart configuration from config file was incorrectly treated as conflicting with local context when no explicit context directory was provided
 
 - **Build and Dependency Injection Issues**:
+
   - Build errors caused by undefined `inferSchema` function - updated to use `inferSchema`
   - Build errors from undefined `globalApp` variable after removing backward compatibility code
   - Updated `inferArraySchema` to accept `app` parameter for proper dependency injection
@@ -219,6 +271,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Persistent flags are now properly accessible in subcommands using `cmd.Root().PersistentFlags()`
 
 - **Logger and Debug Issues**:
+
   - Logger sync error in test environments: Fixed "sync /dev/stdout: bad file descriptor" error
   - Added `isIgnorableSyncError` function to filter out harmless sync errors
   - Ignores errors related to stdout/stderr file descriptors common in test environments
@@ -227,9 +280,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Logger level configuration now properly respects debug setting (Debug level when true, Info level when false)
 
 - **Helm Package Issues**:
+
   - Fixed inconsistency in helm package where `HasSchema` used `chart.Raw` but `DownloadSchema` used `chart.Files`
 
 - **Metrics and Observability Performance**:
+
   - **Optimized metrics collection performance**: Replaced JSON marshaling/unmarshaling with efficient `CacheStatsProvider` interface
   - **Enhanced tracing integration**: Metrics recording methods now use context for span correlation and add relevant attributes
   - **Robust counter reset detection**: Added `calculateDelta()` method to gracefully handle cache clearing and counter resets
@@ -361,7 +416,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 
 - Updated debug output to use generic terms instead of hardcoded component names
-- Enhanced schema validation to handle empty YAML files 
+- Enhanced schema validation to handle empty YAML files
 - Refactored code to improve maintainability and readability
 - Updated documentation with detailed information about schema generation capabilities
 
@@ -421,6 +476,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [0.1.0] - 2025-05-17
 
 ### Added
+
 - Initial implementation:
   - Loading of YAML files (`values.yaml` and optional overrides) via `loadYAML`
   - Recursive deep merge of YAML maps (`deepMerge`)
@@ -434,12 +490,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - GitHub Actions workflow (`.github/workflows/release.yml`) for automated releases with GoReleaser
   - Updated README with release badge and GoReleaser usage instructions
 
-
-[v0.2.4]: https://github.com/mkm29/valet/releases/tag/v0.2.4
-[v0.2.3]: https://github.com/mkm29/valet/releases/tag/v0.2.3
-[v0.2.2]: https://github.com/mkm29/valet/releases/tag/v0.2.2
-[v0.2.1]: https://github.com/mkm29/valet/releases/tag/v0.2.1
-[v0.2.0]: https://github.com/mkm29/valet/releases/tag/v0.2.0
-[v0.1.2]: https://github.com/mkm29/valet/releases/tag/v0.1.2
-[v0.1.1]: https://github.com/mkm29/valet/releases/tag/v0.1.1
 [0.1.0]: https://github.com/mkm29/valet/releases/tag/v0.1.0
+[v0.1.1]: https://github.com/mkm29/valet/releases/tag/v0.1.1
+[v0.1.2]: https://github.com/mkm29/valet/releases/tag/v0.1.2
+[v0.2.0]: https://github.com/mkm29/valet/releases/tag/v0.2.0
+[v0.2.1]: https://github.com/mkm29/valet/releases/tag/v0.2.1
+[v0.2.2]: https://github.com/mkm29/valet/releases/tag/v0.2.2
+[v0.2.3]: https://github.com/mkm29/valet/releases/tag/v0.2.3
+[v0.2.4]: https://github.com/mkm29/valet/releases/tag/v0.2.4

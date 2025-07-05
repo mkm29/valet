@@ -25,6 +25,7 @@ func newPrometheusCollector(opts MetricsCollectorOptions) (MetricsCollector, err
 		cfg = &config.MetricsConfig{
 			Enabled: true,
 			Port:    2112,
+			Path:    "/metrics",
 		}
 	}
 

@@ -43,7 +43,7 @@ A command-line tool to generate a JSON Schema from a YAML `values.yaml` file, op
       - [Dependency Injection](#dependency-injection)
       - [Code Organization Principles](#code-organization-principles)
     - [Makefile](#makefile)
-    - [Testing \& Coverage](#testing--coverage)
+    - [Testing & Coverage](#testing--coverage)
       - [Test Organization](#test-organization)
       - [Known Test Environment Considerations](#known-test-environment-considerations)
     - [Release](#release)
@@ -55,8 +55,8 @@ A command-line tool to generate a JSON Schema from a YAML `values.yaml` file, op
     - [✅ Completed Features](#-completed-features)
       - [Core Functionality](#core-functionality)
       - [Remote Helm Chart Support](#remote-helm-chart-support)
-      - [Observability \& Monitoring](#observability--monitoring)
-      - [Code Quality \& Architecture](#code-quality--architecture)
+      - [Observability & Monitoring](#observability--monitoring)
+      - [Code Quality & Architecture](#code-quality--architecture)
       - [Developer Experience](#developer-experience)
     - [🚧 In Progress](#-in-progress)
     - [📋 Planned Features](#-planned-features)
@@ -181,15 +181,22 @@ Valet follows Go best practices with well-structured packages using a consistent
 #### internal/helm
 
 - Helm chart operations with clean, DRY code
+
 - Struct-based design with `Helm` type and `NewHelm` constructor
+
 - Flexible initialization via `HelmOptions` pattern
+
 - Named logger for better debugging (`helm`)
+
 - Core methods:
+
   - `HasSchema`: Checks if a remote chart contains values.schema.json
   - `DownloadSchema`: Downloads and saves the schema file
   - `loadChart`: Private method that centralizes chart loading logic
   - `getOrLoadChart`: Private method that implements chart caching
+
 - Features:
+
   - Support for HTTP, HTTPS, and OCI registries
   - Authentication support (basic auth, token)
   - TLS configuration options
@@ -202,7 +209,9 @@ Valet follows Go best practices with well-structured packages using a consistent
   - **Enhanced error messages**: Detailed troubleshooting hints for common remote chart issues
   - Thread-safe concurrent access with read-write locks
   - Comprehensive debug logging including cache hit/miss, size information, and eviction events
+
 - Cache features:
+
   - Maximum cache size limit (default: 10MB)
   - Maximum number of cached entries (default: 50)
   - Automatic eviction of least recently used entries
@@ -210,12 +219,15 @@ Valet follows Go best practices with well-structured packages using a consistent
   - Statistics tracking: hits, misses, evictions, hit rate
   - Metadata cache capacity is 2x chart cache for better hit rates
   - Independent LRU eviction for both caches
+
 - Error handling features:
+
   - Context-aware error messages with troubleshooting hints
   - Registry-specific guidance (HTTP/HTTPS/OCI)
   - Authentication configuration validation with clear feedback
   - Network connectivity and URL format troubleshooting
   - Helpful suggestions when charts lack schema files
+
 - Example usage:
 
   ```go
@@ -248,34 +260,46 @@ Valet follows Go best practices with well-structured packages using a consistent
 #### internal/telemetry
 
 - Comprehensive observability package with interface-based design
+
 - OpenTelemetry integration with unified logging, metrics, and tracing
+
 - **Interface-Based Architecture**:
+
   - `Provider` interface for telemetry providers (OpenTelemetry, no-op, future providers)
   - `MetricsCollector` interface for metrics collection backends
   - `LoggerBackendInterface` for pluggable logging implementations
   - Mock implementations for all interfaces enabling easy testing
+
 - **Telemetry Providers**:
+
   - `OpenTelemetryProvider`: Full OpenTelemetry integration with traces, metrics, and logs
   - `NoopProvider`: Lightweight no-op implementation for testing or disabled telemetry
   - Flexible provider selection via `ProviderType` enum
   - Easy to add new providers (Jaeger, Zipkin) by implementing the interface
+
 - **Metrics Collection**:
+
   - `PrometheusCollector`: Prometheus metrics with `/metrics` endpoint
   - `NoopMetricsCollector`: No-op implementation for testing
   - Support for future collectors (StatsD, CloudWatch) via interface
   - Separate interfaces for collection (`MetricsCollector`) and export (`MetricsExporter`)
+
 - **Unified Logging Architecture**:
+
   - Backend-agnostic design with `LoggerBackendInterface`
   - Two built-in backends:
     - **SimpleBackend**: Basic slog logging without telemetry integration
     - **TelemetryBackend**: OpenTelemetry-integrated logging that adds span events
   - Registry pattern for dynamic backend registration
   - Easy to add new backends (zap, zerolog) without changing application code
+
 - Key functions:
+
   - `NewProvider(ctx, opts)`: Creates a telemetry provider based on options
   - `NewMetricsCollector(opts)`: Creates a metrics collector based on options
   - `NewLoggerFromOptions(opts)`: Creates a logr.Logger with specified backend
   - `RegisterLoggerBackend(name, backend)`: Register custom logger backends
+
 - Example usage:
 
   ```go
@@ -284,13 +308,13 @@ Valet follows Go best practices with well-structured packages using a consistent
       Type:   telemetry.ProviderTypeOpenTelemetry,
       Config: cfg,
   })
-  
+
   // Create metrics collector using interface
   collector, err := telemetry.NewMetricsCollector(telemetry.MetricsCollectorOptions{
       Type:   telemetry.MetricsCollectorTypePrometheus,
       Config: metricsConfig,
   })
-  
+
   // Create logger with backend selection
   logger := telemetry.NewLoggerFromOptions(telemetry.LoggerOptions{
       Backend:   telemetry.BackendTelemetry,
@@ -298,11 +322,18 @@ Valet follows Go best practices with well-structured packages using a consistent
       Format:    "json",
       Component: "myapp",
   })
-  
+
   // Use mock implementations for testing
   mockProvider := telemetry.NewMockProvider()
   mockCollector := telemetry.NewMockMetricsCollector()
   ```
+
+- **Test Files**:
+
+  - `provider_test.go`: Tests for all provider implementations
+  - `metrics_collector_test.go`: Tests for all metrics collector implementations
+  - `logger_backend_test.go`: Tests for logger backend implementations
+  - `telemetry_interface_test.go`: Integration tests demonstrating real-world usage
 
 #### internal/utils
 
@@ -480,9 +511,9 @@ The tool writes a `values.schema.json` (or custom output file) in the context di
 Valet supports configuration through multiple sources (in order of precedence):
 
 1. **CLI flags** (highest priority)
-2. **Environment variables** (`VALET_CONTEXT`, `VALET_OVERRIDES`, `VALET_OUTPUT`, `VALET_DEBUG`)
-3. **Configuration file** (`.valet.yaml` or `--config-file`)
-4. **Default values**
+1. **Environment variables** (`VALET_CONTEXT`, `VALET_OVERRIDES`, `VALET_OUTPUT`, `VALET_DEBUG`)
+1. **Configuration file** (`.valet.yaml` or `--config-file`)
+1. **Default values**
 
 Create a `.valet.yaml` file based on [.valet.yaml.example](.valet.yaml.example):
 
@@ -647,24 +678,23 @@ For complete observability documentation including:
 
 See the [examples directory](examples/README.md#monitoring-and-observability).
 
-
 ## How it works
 
 1. Load configuration from the file specified by `--config-file` (default: `.valet.yaml`), environment variables, and CLI flags
-2. Load `values.yaml` in the specified directory
-3. Merge an overrides YAML if the `--overrides` flag is provided
-4. Recursively infer JSON Schema types and defaults
-5. Post-process the schema to intelligently handle:
+1. Load `values.yaml` in the specified directory
+1. Merge an overrides YAML if the `--overrides` flag is provided
+1. Recursively infer JSON Schema types and defaults
+1. Post-process the schema to intelligently handle:
    - Components with `enabled: false` field (skipping required fields)
    - Empty default values (strings, arrays, maps)
    - Nested component structures
-6. Write `values.schema.json` (or custom output file) in the same directory
+1. Write `values.schema.json` (or custom output file) in the same directory
 
 ### Schema Generation Intelligence
 
 The tool includes several smart features:
 
-- **Component detection**: Automatically detects components with an `enabled` field and handles their required fields intelligently 
+- **Component detection**: Automatically detects components with an `enabled` field and handles their required fields intelligently
 - **Empty value handling**: Fields with empty default values aren't marked as required
 - **Type conversion**: Maps and complex types are properly represented in the schema
 - **Nested processing**: Recursively processes properties at all levels of nesting
@@ -694,7 +724,7 @@ Valet uses dependency injection for better testability and maintainability:
    }
    ```
 
-2. **WithApp Pattern**: All commands support dependency injection:
+1. **WithApp Pattern**: All commands support dependency injection:
 
    ```go
    // With dependency injection (preferred for testing)
@@ -705,7 +735,7 @@ Valet uses dependency injection for better testability and maintainability:
    rootCmd := cmd.NewRootCmdWithApp(app)
    ```
 
-3. **Logger Initialization**: The App struct includes a method to initialize the logger based on log level:
+1. **Logger Initialization**: The App struct includes a method to initialize the logger based on log level:
 
    ```go
    // Initialize logger internally based on configuration
@@ -717,21 +747,60 @@ Valet uses dependency injection for better testability and maintainability:
    defer cleanup() // Ensures buffered logs are flushed
    ```
 
-4. **Benefits**:
+1. **Benefits**:
+
    - Easy unit testing with mock dependencies
    - Clear dependency relationships
    - No hidden global state
    - Better code organization
+
+#### Testing Best Practices
+
+When testing code that uses telemetry:
+
+1. **Use Mocks for Unit Tests**: The interface-based design allows you to use mock implementations for fast, isolated unit tests:
+
+   ```go
+   func TestMyFunction(t *testing.T) {
+       mockProvider := telemetry.NewMockProvider()
+       // Configure mock behavior as needed
+       result := MyFunction(mockProvider)
+       // Assert on mock call counts and parameters
+   }
+   ```
+
+1. **Use No-op for Integration Tests**: When you need a real implementation but don't want telemetry overhead:
+
+   ```go
+   provider, _ := telemetry.NewProvider(ctx, telemetry.ProviderOptions{
+       Type: telemetry.ProviderTypeNoop,
+   })
+   ```
+
+1. **Validate Mock Interactions**: The mocks track all calls and parameters:
+
+   ```go
+   assert.Equal(t, 1, mockProvider.TracerCallCount)
+   assert.Contains(t, mockProvider.TracerNames, "expected-component")
+   ```
+
+1. **Reset Mocks Between Tests**: Use the Reset() method to ensure test isolation:
+
+   ```go
+   defer mockProvider.Reset()
+   ```
 
 #### Code Organization Principles
 
 When contributing to Valet, please follow these architectural patterns:
 
 1. **Package Structure**: Each package should have:
+
    - A main struct type (e.g., `Helm`, `Telemetry`)
    - Clear separation of concerns between packages
 
-2. **Package Organization**: 
+1. **Package Organization**:
+
    - Each distinct concern gets its own package (e.g., `internal/logging` for logging abstraction)
    - The `internal/utils` package contains shared utility functions organized by domain:
      - `schema.go`: Schema generation utilities (`InferBooleanSchema`, `InferArraySchema`, etc.)
@@ -740,13 +809,15 @@ When contributing to Valet, please follow these architectural patterns:
      - `reflection.go`: Reflection helpers for struct field extraction
      - `build.go`: Build information utilities (`GetBuildVersion`)
 
-3. **Command Package Organization**: The `cmd` package focuses on CLI orchestration:
+1. **Command Package Organization**: The `cmd` package focuses on CLI orchestration:
+
    - Command setup and flag management
    - Dependency injection through the `App` struct
    - Minimal business logic (delegated to internal packages)
    - Command-specific helpers remain in `schema_helpers.go`
 
-4. **Helm Package**: The `internal/helm` package handles all Helm-related functionality:
+1. **Helm Package**: The `internal/helm` package handles all Helm-related functionality:
+
    - Chart downloading and caching
    - Schema extraction from charts
    - Configuration building from CLI flags (`config_builder.go`)
@@ -755,7 +826,8 @@ When contributing to Valet, please follow these architectural patterns:
    - Convenience constructors for common use cases
    - Methods on the struct rather than standalone functions
 
-5. **Code Organization**:
+1. **Code Organization**:
+
    - Follow DRY (Don't Repeat Yourself) principle
    - Extract common logic into private helper methods
    - Keep public methods focused on their primary responsibility
@@ -763,15 +835,16 @@ When contributing to Valet, please follow these architectural patterns:
    - Apply Single Responsibility Principle - each function should do one thing well
    - Break complex functions into smaller, testable units
 
-6. **Logging**: Use slog with component context:
+1. **Logging**: Use slog with component context:
 
    ```go
    logger := slog.Default().With("component", "packagename")
    ```
 
-7. **Configuration**: All configuration structs belong in `internal/config`
+1. **Configuration**: All configuration structs belong in `internal/config`
 
-8. **Error Handling**:
+1. **Error Handling**:
+
    - Wrap errors with context using `fmt.Errorf`
    - Provide meaningful error messages
    - Handle errors at the appropriate level
@@ -824,6 +897,35 @@ To view an HTML coverage report:
 go tool cover -html=coverage.out
 ```
 
+#### Testing with Interface-Based Telemetry
+
+The interface-based telemetry design enables comprehensive testing without external dependencies:
+
+```go
+// Use mock providers for testing
+mockProvider := telemetry.NewMockProvider()
+mockProvider.TracerFunc = func(name string) trace.Tracer {
+    // Custom tracer behavior for testing
+    return trace.NewNoopTracerProvider().Tracer(name)
+}
+
+// Use mock metrics collectors
+mockCollector := telemetry.NewMockMetricsCollector()
+mockCollector.RecordCommandExecution(ctx, "test", time.Second, nil)
+
+// Verify calls were made
+assert.Equal(t, 1, mockCollector.RecordCommandExecutionCallCount)
+assert.Equal(t, "test", mockCollector.RecordedCommands[0].Command)
+```
+
+The telemetry package includes comprehensive tests demonstrating:
+
+- Unit testing with mocks
+- Integration testing with real implementations
+- Factory pattern usage
+- Thread-safe concurrent access
+- Mixed implementation scenarios (real + mock)
+
 #### Test Organization
 
 All tests are located in the `tests` directory and use the `ValetTestSuite` as the base test suite which provides:
@@ -843,6 +945,8 @@ Test structure:
 
 - **Logger Sync**: The telemetry package includes special handling for logger sync errors that commonly occur in test environments when stdout/stderr are redirected or closed. These harmless errors are automatically filtered out to prevent spurious test failures.
 
+- **Prometheus Global Registry**: The Prometheus metrics implementation uses a global registry, which means multiple Prometheus collectors cannot be created in the same test process. This is a known limitation of the Prometheus Go client library. In production, there would typically only be one metrics server per application. Tests that create Prometheus collectors should be run individually or use the mock implementations.
+
 The project maintains high test coverage standards:
 
 - 70% minimum coverage for each file
@@ -856,7 +960,9 @@ These thresholds are enforced in CI via the coverage workflow.
 This project uses [GoReleaser](https://goreleaser.com) to automate builds and releases. Binaries for Linux and macOS (amd64 and arm64) are built when tags (e.g., `v0.1.0`) are pushed.
 
 - A GitHub Actions workflow (`.github/workflows/release.yml`) runs GoReleaser on push tags and via manual dispatch.
+
 - **Note**: The release workflow sets `permissions.contents: write` so that the `GITHUB_TOKEN` has sufficient permissions to create releases.
+
 - To run a local release:
 
   ```bash
@@ -934,6 +1040,7 @@ Our development roadmap reflects our commitment to making Valet the most powerfu
 #### Observability & Monitoring
 
 - [x] **Comprehensive OpenTelemetry Integration**
+
   - [x] Distributed tracing for all operations
   - [x] Structured logging with slog and logr abstraction
   - [x] Telemetry-independent logging system
@@ -941,6 +1048,7 @@ Our development roadmap reflects our commitment to making Valet the most powerfu
   - [x] File path sanitization for security
 
 - [x] **Prometheus Metrics Endpoint**
+
   - [x] `/metrics` endpoint with comprehensive metrics
   - [x] Helm cache statistics (hits, misses, evictions, hit rate)
   - [x] Command execution metrics (duration, errors, counts)
@@ -955,6 +1063,7 @@ Our development roadmap reflects our commitment to making Valet the most powerfu
 #### Code Quality & Architecture
 
 - [x] **Clean Architecture & Performance**
+
   - [x] Dependency injection pattern with App struct
   - [x] Options pattern for flexible package initialization
   - [x] Comprehensive test coverage (>85%)
@@ -964,6 +1073,7 @@ Our development roadmap reflects our commitment to making Valet the most powerfu
   - [x] Proper error handling and context propagation
 
 - [x] **Security & Best Practices**
+
   - [x] Automatic credential redaction in debug output
   - [x] Input validation and sanitization
   - [x] Secure defaults (TLS enabled by default)
@@ -988,6 +1098,7 @@ Our development roadmap reflects our commitment to making Valet the most powerfu
 #### Short-term (Q3-Q4 2025)
 
 - [ ] **Enhanced Schema Features**
+
   - [ ] Custom validation rules support
   - [ ] Pattern matching for string fields
   - [ ] Enum detection from comments
@@ -996,6 +1107,7 @@ Our development roadmap reflects our commitment to making Valet the most powerfu
   - [ ] Advanced schema composition and inheritance
 
 - [ ] **CUE Integration**
+
   - [ ] See [HIP Draft](https://github.com/helm/helm/issues/13260) for details
   - [ ] Generate CUE schemas from Helm values
   - [ ] Support CUE validation in CLI
@@ -1005,6 +1117,7 @@ Our development roadmap reflects our commitment to making Valet the most powerfu
 #### Medium-term (Q4 2025 - Q1 2026)
 
 - [ ] **Advanced Type System**
+
   - [ ] Union types support
   - [ ] Conditional schema based on other fields
   - [ ] Reference resolution (`$ref`) support
@@ -1012,6 +1125,7 @@ Our development roadmap reflects our commitment to making Valet the most powerfu
   - [ ] Schema composition and modularity
 
 - [ ] **Integration Ecosystem**
+
   - [ ] Kubernetes CRD generation from schema
   - [ ] ArgoCD integration for GitOps workflows
   - [ ] Backstage plugin for documentation
@@ -1022,18 +1136,21 @@ Our development roadmap reflects our commitment to making Valet the most powerfu
 #### Long-term (2026 and beyond)
 
 - [ ] **AI-Powered Features**
+
   - [ ] Smart type inference using ML models
   - [ ] Natural language schema descriptions
   - [ ] Automated documentation generation
   - [ ] Schema optimization suggestions
 
 - [ ] **Enterprise Features**
+
   - [ ] Schema registry with versioning
   - [ ] Access control and approval workflows
   - [ ] Audit logging for schema changes
   - [ ] Multi-tenant support
 
 - [ ] **Performance & Scale**
+
   - [ ] Parallel processing for large charts
   - [ ] Incremental schema generation
   - [ ] Distributed caching support
@@ -1044,8 +1161,8 @@ Our development roadmap reflects our commitment to making Valet the most powerfu
 Want to contribute to the roadmap? Here's how:
 
 1. **Vote on features**: Add reactions to [existing issues](https://github.com/mkm29/valet/issues)
-2. **Suggest ideas**: Open a [new issue](https://github.com/mkm29/valet/issues/new) with your feature request
-3. **Contribute code**: Pick an item from the roadmap and submit a PR
-4. **Join discussions**: Participate in [GitHub Discussions](https://github.com/mkm29/valet/discussions)
+1. **Suggest ideas**: Open a [new issue](https://github.com/mkm29/valet/issues/new) with your feature request
+1. **Contribute code**: Pick an item from the roadmap and submit a PR
+1. **Join discussions**: Participate in [GitHub Discussions](https://github.com/mkm29/valet/discussions)
 
 See the [open issues](https://github.com/mkm29/valet/issues) for a detailed list of proposed features and known issues.

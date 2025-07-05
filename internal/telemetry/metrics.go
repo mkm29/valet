@@ -108,6 +108,11 @@ func NewMetricsServer(config *config.MetricsConfig, logger *slog.Logger) *Metric
 		logger = slog.Default().With("component", "metrics")
 	}
 
+	// Ensure config has required fields
+	if config.Path == "" {
+		config.Path = "/metrics"
+	}
+
 	// Convert slog logger to logr
 	logrLogger := NewLoggerFromSlog(logger)
 

@@ -212,7 +212,7 @@ docker run -d \
 The provided alerting rules monitor:
 
 - **Performance**: Commands taking >5s, error rates >10%
-- **Cache Health**: Hit rate <50%, cache >90% full
+- **Cache Health**: Hit rate \<50%, cache >90% full
 - **Server Health**: Downtime, frequent restarts, slow shutdowns
 - **Operational Issues**: Schema generation failures, file I/O errors
 
@@ -232,19 +232,23 @@ Modify `prometheus-alerts.yaml` thresholds based on your requirements:
 The sample chart's `values.yaml` demonstrates:
 
 1. **Component Detection**:
+
    - `app.enabled`, `database.enabled`, `redis.enabled` are recognized as components
    - Their nested properties become conditional based on the enabled flag
 
-2. **Type Inference**:
+1. **Type Inference**:
+
    - `replicaCount: 3` → `"type": "integer"`
    - `enabled: true` → `"type": "boolean"`
    - `name: "sample-app"` → `"type": "string"`
    - Arrays and objects are properly detected
 
-3. **Required Fields**:
+1. **Required Fields**:
+
    - Fields with non-empty default values are marked as required
    - Empty strings, empty arrays, and empty objects are not required
 
-4. **Nested Structures**:
+1. **Nested Structures**:
+
    - Deep nesting like `database.connectionPool.maxConnections`
    - Arrays of objects like `externalServices` and `tenants`
