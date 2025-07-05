@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/mkm29/valet/internal/config"
 	"github.com/mkm29/valet/internal/telemetry"
 	"github.com/mkm29/valet/internal/utils"
@@ -53,7 +54,7 @@ func NewRootCmdWithApp(app *App) *cobra.Command {
 
 			// Log config if debug level is enabled
 			if app.Config.LogLevel.Level == slog.LevelDebug {
-				logDebugConfiguration(app.Logger, app.Config)
+				logDebugConfiguration(app.Logr, app.Config)
 			}
 
 			// Initialize telemetry if enabled
@@ -62,7 +63,7 @@ func NewRootCmdWithApp(app *App) *cobra.Command {
 				t, err := telemetry.Initialize(ctx, app.Config.Telemetry)
 				if err != nil {
 					// Log error but don't fail - telemetry is optional
-					app.Logger.Debug("Failed to initialize telemetry", "error", err)
+					app.Logr.V(1).Info("Failed to initialize telemetry", "error", err)
 				} else {
 					app.Telemetry = t
 				}
@@ -80,9 +81,7 @@ func NewRootCmdWithApp(app *App) *cobra.Command {
 				defer cancel()
 
 				if err := app.Telemetry.Shutdown(shutdownCtx); err != nil {
-					if app.Logger != nil {
-						app.Logger.Error("Error shutting down telemetry", "error", err)
-					}
+					app.Logr.Error(err, "Error shutting down telemetry")
 				}
 			}
 
@@ -122,11 +121,11 @@ func NewRootCmdWithApp(app *App) *cobra.Command {
 }
 
 // logDebugConfiguration logs the configuration in debug mode
-func logDebugConfiguration(logger *slog.Logger, cfg *config.Config) {
+func logDebugConfiguration(logger logr.Logger, cfg *config.Config) {
 	// Pretty print configuration to stdout as JSON
 	configJSON, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
-		logger.Error("Failed to marshal config", "error", err)
+		logger.Error(err, "Failed to marshal config")
 	} else {
 		fmt.Println("=== Valet Configuration ===")
 		fmt.Println(string(configJSON))
@@ -135,7 +134,7 @@ func logDebugConfiguration(logger *slog.Logger, cfg *config.Config) {
 
 	// Also log with structured fields for debugging
 	fields := buildConfigFields(cfg)
-	logger.Debug("Configuration loaded", fields...)
+	logger.V(1).Info("Configuration loaded", fields...)
 }
 
 // buildConfigFields builds slog fields from config

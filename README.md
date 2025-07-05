@@ -102,7 +102,7 @@ graph TD
     RootCmd --> VersionCmd[cmd/version.go]
     App --> |provides dependencies| Config[internal/config]
     App --> |provides dependencies| Telemetry[internal/telemetry]
-    App --> |provides dependencies| Logger[zap.Logger]
+    App --> |provides dependencies| Logger[logr.Logger]
     GenerateCmd --> |schema generation| SchemaGen[Schema Generator]
     GenerateCmd --> Helm[internal/helm]
     Config --> |config loading| YAML[YAML Config Files]
@@ -145,7 +145,7 @@ graph TD
         Telemetry --> Logging[Structured Logging]
         Tracing --> OTLP[OTLP Exporter]
         Metrics --> OTLP
-        Logging --> |zap integration| Tracing
+        Logging --> |slog integration| Tracing
     end
 
     classDef core fill:#c678dd,stroke:#61afef,stroke-width:1px,color:#efefef;
@@ -250,7 +250,7 @@ Valet follows Go best practices with well-structured packages using a consistent
 - OpenTelemetry integration
 - Struct-based design with `Telemetry` type and `NewTelemetry` constructor
 - Flexible initialization via `TelemetryOptions` pattern
-- Structured logging with zap
+- Structured logging with slog/logr
 - Metrics and tracing support
 - Configurable exporters (OTLP, stdout)
 - Example usage:
@@ -325,13 +325,14 @@ Valet maintains high code quality standards through:
 
 ### Logging
 
-Valet uses [Uber's zap](https://github.com/uber-go/zap) throughout for high-performance structured logging:
+Valet uses [logr](https://github.com/go-logr/logr) as a logging abstraction with [slog](https://pkg.go.dev/log/slog) as the backend:
 
+- **Decoupled**: Uses logr interface allowing easy swapping of logging implementations
 - **Named loggers**: Each package has its own named logger (e.g., `helm`, `telemetry`)
 - **Structured fields**: All log data uses typed fields for consistency
-- **Level control**: Debug logs only shown when debug mode is enabled
+- **Level control**: Debug logs only shown when debug mode is enabled (using logr verbosity levels)
 - **Integration**: Logs include trace/span IDs when telemetry is enabled
-- **Performance**: Zero-allocation logging in hot paths
+- **Slog interoperability**: Uses official logr.FromSlogHandler for proper bridging
 - **Automatic flushing**: Logger buffers are automatically flushed on program exit to prevent log loss
 
 ## Installation
@@ -633,7 +634,8 @@ Valet uses dependency injection for better testability and maintainability:
    type App struct {
        Config    *config.Config
        Telemetry *telemetry.Telemetry
-       Logger    *zap.Logger
+       Logger    *slog.Logger
+       Logr      logr.Logger
    }
    ```
 
@@ -876,7 +878,7 @@ Our development roadmap reflects our commitment to making Valet the most powerfu
 
 - [x] **Comprehensive OpenTelemetry Integration**
   - [x] Distributed tracing for all operations
-  - [x] Structured logging with Uber Zap
+  - [x] Structured logging with slog and logr abstraction
   - [x] Telemetry-independent logging system
   - [x] Context-aware metrics recording
   - [x] File path sanitization for security

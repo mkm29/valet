@@ -5,6 +5,6 @@ bin/
 *.out
 dist/
 *.log
-**/.claude/settings.local.json
+**/.claude/
 charts/
 CLAUDE.md

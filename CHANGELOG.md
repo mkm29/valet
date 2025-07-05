@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Logging Architecture Improvements**:
+  - Implemented [logr](https://github.com/go-logr/logr) as the logging abstraction layer
+  - Decoupled logging interface from concrete implementation using logr
+  - Uses slog as the backend via official `logr.FromSlogHandler()` bridge
+  - Added `Logr` field to `App` struct alongside existing `Logger` field
+  - Renamed `NewLogrLogger` to `NewLogger` for cleaner API
+  - Renamed `NewLogrLoggerFromSlog` to `NewLoggerFromSlog` for consistency
+  - Updated all packages to use logr interface methods:
+    - `logger.V(1).Info()` for debug/verbose logging (replaces `logger.Debug()`)
+    - `logger.Info()` for info level logging
+    - `logger.Error(err, msg)` for error logging (error as first parameter per logr spec)
+  - Benefits:
+    - Easy swapping of logging backends without changing application code
+    - Consistent with Kubernetes ecosystem which uses logr
+    - Maintains structured logging capabilities
+    - Proper slog interoperability following logr documentation guidelines
+
 - **Logging Migration** (reverting [0.2.0] change):
   - Migrated back from Uber's zap logger to Go's built-in log/slog package
   - Updated all packages to use slog for logging

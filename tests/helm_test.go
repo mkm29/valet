@@ -13,8 +13,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-logr/logr"
 	"github.com/mkm29/valet/internal/config"
 	"github.com/mkm29/valet/internal/helm"
+	"github.com/mkm29/valet/internal/utils"
 	"github.com/stretchr/testify/suite"
 	"helm.sh/helm/v3/pkg/chart"
 )
@@ -22,12 +24,15 @@ import (
 type HelmTestSuite struct {
 	suite.Suite
 	logger  *slog.Logger
+	logr    logr.Logger
 	tempDir string
 }
 
 func (suite *HelmTestSuite) SetupSuite() {
 	// Create a test logger that discards output
 	suite.logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	// Convert to logr
+	suite.logr = utils.NewLoggerFromSlog(suite.logger)
 	suite.tempDir = suite.T().TempDir()
 }
 
@@ -79,7 +84,7 @@ func (suite *HelmTestSuite) TestHelm_HasSchema() {
 			// Create Helm instance
 			h := helm.NewHelm(helm.HelmOptions{
 				Debug:  true,
-				Logger: suite.logger,
+				Logger: suite.logr,
 			})
 
 			// Create chart config
@@ -144,7 +149,7 @@ func (suite *HelmTestSuite) TestHelm_DownloadSchema() {
 			// Create Helm instance
 			h := helm.NewHelm(helm.HelmOptions{
 				Debug:  true,
-				Logger: suite.logger,
+				Logger: suite.logr,
 			})
 
 			// Create chart config
@@ -206,7 +211,7 @@ func (suite *HelmTestSuite) TestHelm_CacheManagement() {
 	// Create Helm instance
 	h := helm.NewHelm(helm.HelmOptions{
 		Debug:  true,
-		Logger: suite.logger,
+		Logger: suite.logr,
 	})
 
 	// Create chart config
@@ -304,7 +309,7 @@ func (suite *HelmTestSuite) TestHelm_SizeLimits() {
 			// Create Helm instance with size limit
 			h := helm.NewHelm(helm.HelmOptions{
 				Debug:        true,
-				Logger:       suite.logger,
+				Logger:       suite.logr,
 				MaxChartSize: tt.maxSize,
 			})
 
@@ -629,7 +634,7 @@ func (suite *HelmTestSuite) TestHelm_CacheEviction() {
 	// Create Helm instance with small cache limits
 	h := helm.NewHelm(helm.HelmOptions{
 		Debug:           true,
-		Logger:          suite.logger,
+		Logger:          suite.logr,
 		MaxChartSize:    200 * 1024, // 200KB per chart
 		MaxCacheSize:    500 * 1024, // 500KB total (can fit ~4-5 charts)
 		MaxCacheEntries: 3,          // Max 3 entries
@@ -701,7 +706,7 @@ func (suite *HelmTestSuite) TestHelm_CacheStatistics() {
 	// Create Helm instance
 	h := helm.NewHelm(helm.HelmOptions{
 		Debug:  true,
-		Logger: suite.logger,
+		Logger: suite.logr,
 	})
 
 	// Initial stats should be zero
@@ -847,7 +852,7 @@ func (suite *HelmTestSuite) TestHelm_MetadataCache() {
 	// Create Helm instance
 	h := helm.NewHelm(helm.HelmOptions{
 		Debug:  true,
-		Logger: suite.logger,
+		Logger: suite.logr,
 	})
 
 	chartConfig := &config.HelmChart{
@@ -924,7 +929,7 @@ func (suite *HelmTestSuite) TestHelm_MetadataCacheEviction() {
 	// Create Helm instance with small limits
 	h := helm.NewHelm(helm.HelmOptions{
 		Debug:           true,
-		Logger:          suite.logger,
+		Logger:          suite.logr,
 		MaxCacheEntries: 2, // Small limit to test eviction
 	})
 

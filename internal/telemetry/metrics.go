@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/mkm29/valet/internal/config"
 	"github.com/mkm29/valet/internal/utils"
 	"github.com/prometheus/client_golang/prometheus"
@@ -47,7 +48,7 @@ const (
 // MetricsServer handles Prometheus metrics collection and exposure
 type MetricsServer struct {
 	server *http.Server
-	logger *slog.Logger
+	logger logr.Logger
 	config *config.MetricsConfig
 	mu     sync.RWMutex
 
@@ -107,8 +108,11 @@ func NewMetricsServer(config *config.MetricsConfig, logger *slog.Logger) *Metric
 		logger = slog.Default().With("component", "metrics")
 	}
 
+	// Convert slog logger to logr
+	logrLogger := utils.NewLoggerFromSlog(logger)
+
 	m := &MetricsServer{
-		logger: logger,
+		logger: logrLogger,
 		config: config,
 
 		// Initialize Helm cache metrics
@@ -548,14 +552,14 @@ func (m *MetricsServer) UpdateHelmCacheStats(stats interface{}) {
 		// FALLBACK METHOD: JSON marshaling for backward compatibility
 		// WARNING: This approach has significant performance overhead and should be avoided
 		// in performance-critical code paths. Consider implementing CacheStatsProvider instead.
-		m.logger.Debug("Using JSON marshaling fallback for metrics collection",
+		m.logger.V(1).Info("Using JSON marshaling fallback for metrics collection",
 			"type", fmt.Sprintf("%T", stats),
 			"recommendation", "implement CacheStatsProvider interface for better performance",
 		)
 
 		data, err := json.Marshal(stats)
 		if err != nil {
-			m.logger.Warn("Failed to marshal stats for metrics collection",
+			m.logger.V(0).Info("Failed to marshal stats for metrics collection",
 				"error", err,
 				"stats_type", fmt.Sprintf("%T", stats),
 			)
@@ -563,7 +567,7 @@ func (m *MetricsServer) UpdateHelmCacheStats(stats interface{}) {
 		}
 
 		if err := json.Unmarshal(data, &helmStats); err != nil {
-			m.logger.Warn("Failed to unmarshal stats for metrics collection",
+			m.logger.V(0).Info("Failed to unmarshal stats for metrics collection",
 				"error", err,
 				"stats_type", fmt.Sprintf("%T", stats),
 			)
@@ -817,9 +821,9 @@ func (m *MetricsServer) RecordCommandExecution(ctx context.Context, command stri
 
 	if err != nil {
 		logArgs = append(logArgs, "error", err)
-		m.logger.Error("Command execution failed", logArgs...)
-	} else if m.logger.Enabled(nil, slog.LevelDebug) {
-		m.logger.Debug("Command execution succeeded", logArgs...)
+		m.logger.Error(err, "Command execution failed", logArgs...)
+	} else if m.logger.V(1).Enabled() {
+		m.logger.V(1).Info("Command execution succeeded", logArgs...)
 	}
 }
 

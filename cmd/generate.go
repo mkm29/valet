@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/mkm29/valet/internal/helm"
 	"github.com/mkm29/valet/internal/telemetry"
 	"github.com/mkm29/valet/internal/utils"
@@ -110,8 +111,8 @@ func generateInternalWithApp(ctx context.Context, app *App, tel *telemetry.Telem
 
 	// Log some of the top-level default values to help with debugging
 	isDebug := app.Config != nil && app.Config.LogLevel.Level == slog.LevelDebug
-	if isDebug && tel.IsEnabled() && app.Logger != nil {
-		logDefaultValues(ctx, app.Logger, valuesPath, yaml1)
+	if isDebug && tel.IsEnabled() {
+		logDefaultValues(ctx, app.Logr, valuesPath, yaml1)
 	}
 
 	var merged map[string]any
@@ -188,8 +189,8 @@ func generateInternalWithApp(ctx context.Context, app *App, tel *telemetry.Telem
 }
 
 // logDefaultValues logs debugging information about default values
-func logDefaultValues(_ context.Context, logger *slog.Logger, valuesPath string, yaml1 map[string]any) {
-	logger.Debug("Original YAML values loaded",
+func logDefaultValues(_ context.Context, logger logr.Logger, valuesPath string, yaml1 map[string]any) {
+	logger.V(1).Info("Original YAML values loaded",
 		"file", valuesPath,
 		"top_level_keys", len(yaml1),
 	)
@@ -207,7 +208,7 @@ func logDefaultValues(_ context.Context, logger *slog.Logger, valuesPath string,
 					} else {
 						disabledComponentCount++
 					}
-					logger.Debug("Component status",
+					logger.V(1).Info("Component status",
 						"component", key,
 						"enabled", enabledBool,
 					)
@@ -215,7 +216,7 @@ func logDefaultValues(_ context.Context, logger *slog.Logger, valuesPath string,
 			}
 		}
 	}
-	logger.Debug("Component summary",
+	logger.V(1).Info("Component summary",
 		"enabled_count", enabledComponentCount,
 		"disabled_count", disabledComponentCount,
 	)
@@ -307,8 +308,8 @@ func shouldFieldBeRequiredWithApp(app *App, fieldName string, fieldValue, defaul
 	// Check for empty values
 	if utils.IsEmptyValue(defaultValue) {
 		isDebug := app.Config != nil && app.Config.LogLevel.Level == slog.LevelDebug
-		if isDebug && app.Logger != nil {
-			app.Logger.Debug("Skipping field because it has an empty default value",
+		if isDebug {
+			app.Logr.V(1).Info("Skipping field because it has an empty default value",
 				"field", fieldName,
 				"type", fmt.Sprintf("%T", defaultValue))
 		}

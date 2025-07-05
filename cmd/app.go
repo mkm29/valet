@@ -4,8 +4,10 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/go-logr/logr"
 	"github.com/mkm29/valet/internal/config"
 	"github.com/mkm29/valet/internal/telemetry"
+	"github.com/mkm29/valet/internal/utils"
 )
 
 // contextKey is a type for context keys to avoid collisions
@@ -19,6 +21,7 @@ type App struct {
 	Config        *config.Config
 	Telemetry     *telemetry.Telemetry
 	Logger        *slog.Logger
+	Logr          logr.Logger // logr interface for decoupled logging
 	loggerCleanup func()
 }
 
@@ -42,6 +45,16 @@ func (a *App) WithTelemetry(tel *telemetry.Telemetry) *App {
 // WithLogger sets the logger
 func (a *App) WithLogger(logger *slog.Logger) *App {
 	a.Logger = logger
+	// Create logr logger from slog
+	if logger != nil {
+		a.Logr = utils.NewLoggerFromSlog(logger)
+	}
+	return a
+}
+
+// WithLogr sets the logr logger
+func (a *App) WithLogr(logger logr.Logger) *App {
+	a.Logr = logger
 	return a
 }
 
@@ -55,6 +68,10 @@ func (a *App) InitializeLogger(level slog.Level) (func(), error) {
 	a.Logger = logger
 	slog.SetDefault(logger)
 
+	// Create logr logger from slog
+	handler := logger.Handler()
+	a.Logr = utils.NewLogger(handler)
+
 	// Return a cleanup function (no-op for slog)
 	cleanup := func() {
 		// slog doesn't require explicit syncing
@@ -67,7 +84,7 @@ func (a *App) InitializeLogger(level slog.Level) (func(), error) {
 func createLogger(level slog.Level) (*slog.Logger, error) {
 	// Create handler options with the specified level
 	opts := &slog.HandlerOptions{
-		Level: level,
+		Level:     level,
 		AddSource: level == slog.LevelDebug, // Add source info in debug mode
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 			// Customize attribute names for consistency

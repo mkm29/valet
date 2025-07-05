@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/go-logr/logr"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -12,6 +13,7 @@ import (
 // Logger wraps slog logger with OpenTelemetry integration
 type Logger struct {
 	*slog.Logger
+	logr logr.Logger // logr interface for compatibility
 }
 
 // NewLogger creates a new slog logger with OpenTelemetry integration
@@ -45,8 +47,14 @@ func NewLogger(debug bool) (*Logger, error) {
 	// Use JSON handler for structured logs
 	handler := slog.NewJSONHandler(os.Stdout, opts)
 	logger := slog.New(handler)
+	
+	// Create logr logger from the slog handler using official bridge
+	logrLogger := logr.FromSlogHandler(handler)
 
-	return &Logger{Logger: logger}, nil
+	return &Logger{
+		Logger: logger,
+		logr:   logrLogger,
+	}, nil
 }
 
 // SetDefault sets this logger as the global slog logger
@@ -168,4 +176,28 @@ func (l *Logger) WithError(err error) *slog.Logger {
 // Note: slog doesn't have a Sync method, so this is a no-op
 func (l *Logger) Sync() error {
 	return nil
+}
+
+// GetLogr returns the logr.Logger interface for compatibility
+func (l *Logger) GetLogr() logr.Logger {
+	return l.logr
+}
+
+// GetLogrWithContext returns a context-aware logr logger
+func (l *Logger) GetLogrWithContext(ctx context.Context) logr.Logger {
+	span := trace.SpanFromContext(ctx)
+	if !span.IsRecording() {
+		return l.logr
+	}
+
+	spanCtx := span.SpanContext()
+	if !spanCtx.HasTraceID() {
+		return l.logr
+	}
+
+	// Add trace context to logr logger
+	return l.logr.WithValues(
+		"trace_id", spanCtx.TraceID().String(),
+		"span_id", spanCtx.SpanID().String(),
+	)
 }
