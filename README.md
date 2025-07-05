@@ -247,39 +247,61 @@ Valet follows Go best practices with well-structured packages using a consistent
 
 #### internal/telemetry
 
-- OpenTelemetry integration with unified logging
-- Struct-based design with `Telemetry` type and `NewTelemetry` constructor
-- Flexible initialization via `TelemetryOptions` pattern
-- Integrated backend-agnostic logging system
-- Metrics and tracing support
-- Configurable exporters (OTLP, stdout)
+- Comprehensive observability package with interface-based design
+- OpenTelemetry integration with unified logging, metrics, and tracing
+- **Interface-Based Architecture**:
+  - `Provider` interface for telemetry providers (OpenTelemetry, no-op, future providers)
+  - `MetricsCollector` interface for metrics collection backends
+  - `LoggerBackendInterface` for pluggable logging implementations
+  - Mock implementations for all interfaces enabling easy testing
+- **Telemetry Providers**:
+  - `OpenTelemetryProvider`: Full OpenTelemetry integration with traces, metrics, and logs
+  - `NoopProvider`: Lightweight no-op implementation for testing or disabled telemetry
+  - Flexible provider selection via `ProviderType` enum
+  - Easy to add new providers (Jaeger, Zipkin) by implementing the interface
+- **Metrics Collection**:
+  - `PrometheusCollector`: Prometheus metrics with `/metrics` endpoint
+  - `NoopMetricsCollector`: No-op implementation for testing
+  - Support for future collectors (StatsD, CloudWatch) via interface
+  - Separate interfaces for collection (`MetricsCollector`) and export (`MetricsExporter`)
 - **Unified Logging Architecture**:
-  - Backend-agnostic design with pluggable logging implementations
+  - Backend-agnostic design with `LoggerBackendInterface`
   - Two built-in backends:
     - **SimpleBackend**: Basic slog logging without telemetry integration
     - **TelemetryBackend**: OpenTelemetry-integrated logging that adds span events
+  - Registry pattern for dynamic backend registration
   - Easy to add new backends (zap, zerolog) without changing application code
-- Key logging functions:
-  - `NewLoggerFromOptions(opts LoggerOptions)`: Creates a logr.Logger with specified backend
-  - `NewDebugLogger`: Pre-configured debug logger
-  - `NewProductionLogger`: Pre-configured production logger
-  - `NewTelemetryLogger`: Logger with OpenTelemetry integration
-  - `LogrWithContext`: Context-aware logger wrapper
+- Key functions:
+  - `NewProvider(ctx, opts)`: Creates a telemetry provider based on options
+  - `NewMetricsCollector(opts)`: Creates a metrics collector based on options
+  - `NewLoggerFromOptions(opts)`: Creates a logr.Logger with specified backend
+  - `RegisterLoggerBackend(name, backend)`: Register custom logger backends
 - Example usage:
 
   ```go
-  // Create telemetry instance
-  tel := telemetry.NewTelemetry(ctx, telemetry.TelemetryOptions{
+  // Create telemetry provider using interface
+  provider, err := telemetry.NewProvider(ctx, telemetry.ProviderOptions{
+      Type:   telemetry.ProviderTypeOpenTelemetry,
       Config: cfg,
   })
   
-  // Create logger with telemetry integration
+  // Create metrics collector using interface
+  collector, err := telemetry.NewMetricsCollector(telemetry.MetricsCollectorOptions{
+      Type:   telemetry.MetricsCollectorTypePrometheus,
+      Config: metricsConfig,
+  })
+  
+  // Create logger with backend selection
   logger := telemetry.NewLoggerFromOptions(telemetry.LoggerOptions{
       Backend:   telemetry.BackendTelemetry,
       Level:     "info",
       Format:    "json",
       Component: "myapp",
   })
+  
+  // Use mock implementations for testing
+  mockProvider := telemetry.NewMockProvider()
+  mockCollector := telemetry.NewMockMetricsCollector()
   ```
 
 #### internal/utils
@@ -324,6 +346,15 @@ The consistent Options pattern across packages provides:
 - **Extensibility**: Options structs can grow with new fields as needed
 - **Type Safety**: Compile-time checking of configuration options
 
+The interface-based design in the telemetry package provides additional benefits:
+
+- **Decoupling**: Client code depends on interfaces, not concrete implementations
+- **Runtime Flexibility**: Switch between providers/collectors based on configuration
+- **Testing Excellence**: Comprehensive mock implementations for all interfaces
+- **Future-Proof**: New telemetry providers (Jaeger, Zipkin) or metrics collectors (StatsD, CloudWatch) can be added without changing existing code
+- **Clear Contracts**: Interfaces define exact requirements for implementations
+- **Dependency Injection**: Interfaces enable clean dependency injection patterns
+
 ### Code Quality
 
 Valet maintains high code quality standards through:
@@ -348,9 +379,11 @@ Valet maintains high code quality standards through:
 Valet uses [logr](https://github.com/go-logr/logr) as a logging abstraction with a unified telemetry-aware design:
 
 - **Integrated with telemetry**: Logging is now part of the telemetry package for cohesive observability
-- **Backend-agnostic architecture**: Choose between SimpleBackend (basic slog) or TelemetryBackend (with OpenTelemetry integration)
+- **Interface-based architecture**: All logging backends implement `LoggerBackendInterface` for consistency
+- **Backend-agnostic design**: Choose between SimpleBackend (basic slog) or TelemetryBackend (with OpenTelemetry integration)
 - **OpenTelemetry integration**: TelemetryBackend automatically adds log events to spans for complete tracing
-- **Pluggable backends**: Architecture supports adding new backends (zap, zerolog, etc.) without changing application code
+- **Pluggable backends**: Registry pattern allows adding new backends (zap, zerolog, etc.) without changing application code
+- **Mock backend**: Built-in mock implementation for comprehensive testing
 - **Options pattern**: Configure loggers using `LoggerOptions` with backend type, level, format, and component settings
 - **Named loggers**: Each package has its own named logger (e.g., `helm`, `telemetry`)
 - **Structured fields**: All log data uses typed fields for consistency

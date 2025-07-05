@@ -6,7 +6,6 @@ import (
 
 	"github.com/mkm29/valet/internal/telemetry"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
 )
 
 func main() {

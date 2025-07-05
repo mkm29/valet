@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Interface-Based Telemetry Architecture**:
+  - Implemented comprehensive interface-based design for all telemetry components
+  - Created `Provider` interface for telemetry providers with implementations:
+    - `OpenTelemetryProvider`: Full OpenTelemetry integration
+    - `NoopProvider`: Lightweight no-op implementation
+  - Created `MetricsCollector` interface with implementations:
+    - `PrometheusCollector`: Prometheus metrics collection
+    - `NoopMetricsCollector`: No-op implementation
+  - Added `MetricsExporter` interface for metrics exposure
+  - Provider and collector selection via type enums with factory pattern
+  - Mock implementations for all interfaces:
+    - `MockProvider`: Full provider mock with call tracking
+    - `MockMetricsCollector`: Metrics collector mock
+    - `MockMetricsExporter`: Metrics exporter mock
+    - `MockTracerProvider` and `MockMeterProvider`: Specialized mocks
+  - Benefits:
+    - Easy unit testing with comprehensive mocks
+    - Flexible runtime provider/collector selection
+    - Clear separation of concerns
+    - Easy to add new implementations (Jaeger, StatsD, etc.)
+    - No tight coupling to specific implementations
+
 - **Unified Telemetry-Aware Logging Architecture**:
   - Consolidated logging functionality into the telemetry package for cohesive observability
   - Implemented backend-agnostic logging with pluggable implementations
@@ -17,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
     - **TelemetryBackend**: OpenTelemetry-integrated logging that automatically adds log events to spans
   - Added `LoggerOptions` struct with configurable backend type, level, format, component, and source settings
   - Created `LoggerBackendInterface` for easy addition of new logging implementations
+  - Registry pattern for dynamic backend registration
   - Mock backend support for improved testing
   - Benefits:
     - Unified observability with logs as part of telemetry
