@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/mkm29/valet/internal/config"
-	"github.com/mkm29/valet/internal/logging"
+	"github.com/mkm29/valet/internal/telemetry"
 	"github.com/mkm29/valet/internal/utils"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
@@ -98,12 +98,12 @@ func NewHelm(opts HelmOptions) *Helm {
 	logger := opts.Logger
 	if !logger.Enabled() {
 		// Create a default logger with helm component
-		opts := logging.LoggerOptions{
+		opts := telemetry.LoggerOptions{
 			Level:     "info",
 			Format:    "json",
 			Component: "helm",
 		}
-		logger = logging.NewLogger(opts)
+		logger = telemetry.NewLoggerFromOptions(opts)
 	}
 
 	maxChartSize := opts.MaxChartSize

@@ -6,7 +6,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/mkm29/valet/internal/config"
-	"github.com/mkm29/valet/internal/logging"
 	"github.com/mkm29/valet/internal/telemetry"
 )
 
@@ -47,7 +46,7 @@ func (a *App) WithLogger(logger *slog.Logger) *App {
 	a.Logger = logger
 	// Create logr logger from slog
 	if logger != nil {
-		a.Logr = logging.NewLoggerFromSlog(logger)
+		a.Logr = telemetry.NewLoggerFromSlog(logger)
 	}
 	return a
 }
@@ -74,12 +73,12 @@ func (a *App) InitializeLogger(level slog.Level) (func(), error) {
 		format = "text"
 	}
 
-	opts := logging.LoggerOptions{
+	opts := telemetry.LoggerOptions{
 		Level:     levelToString(level),
 		Format:    format,
 		AddSource: level == slog.LevelDebug,
 	}
-	a.Logr = logging.NewLogger(opts)
+	a.Logr = telemetry.NewLoggerFromOptions(opts)
 
 	// Return a cleanup function (no-op for slog)
 	cleanup := func() {

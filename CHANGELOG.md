@@ -9,17 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **Backend-Agnostic Logging Architecture**:
-  - Implemented a flexible logging architecture that decouples the logging interface from the backend implementation
+- **Unified Telemetry-Aware Logging Architecture**:
+  - Consolidated logging functionality into the telemetry package for cohesive observability
+  - Implemented backend-agnostic logging with pluggable implementations
+  - Created two built-in backends:
+    - **SimpleBackend**: Basic slog logging without telemetry integration
+    - **TelemetryBackend**: OpenTelemetry-integrated logging that automatically adds log events to spans
   - Added `LoggerOptions` struct with configurable backend type, level, format, component, and source settings
-  - Created `Backend` type to specify logging implementation (currently supports "slog")
-  - Architecture designed to easily support additional backends (zap, zerolog, etc.) in the future
-  - All backend-specific logic is encapsulated within the logging package
+  - Created `LoggerBackendInterface` for easy addition of new logging implementations
+  - Mock backend support for improved testing
   - Benefits:
-    - Easy to switch logging backends without changing application code
+    - Unified observability with logs as part of telemetry
+    - Automatic correlation between logs and traces
+    - Easy to switch between telemetry-aware and simple logging
     - Consistent API across different logging implementations
-    - Better testability with configurable options
-    - Future-proof design for evolving logging needs
+    - Better testability with mock backends
+    - Future-proof design for new logging backends (zap, zerolog, etc.)
 
 ### Changed
 
@@ -39,16 +44,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
     - Consistent with Kubernetes ecosystem which uses logr
     - Maintains structured logging capabilities
     - Proper slog interoperability following logr documentation guidelines
-  - **Moved logging utilities to dedicated package**:
-    - Created `internal/logging` package for all logging-related functionality
-    - Moved `logger.go` from `internal/utils` to `internal/logging`
-    - Better separation of concerns - logging is now isolated from general utilities
-    - Updated all imports throughout the codebase to use the new package location
-  - **Refactored NewLogger to use options pattern**:
-    - Changed from `NewLogger(handler slog.Handler)` to `NewLogger(opts LoggerOptions)`
-    - Removed direct coupling to slog handlers in API
-    - All callers updated to use the new options-based approach
-    - Handler creation is now internal to the logging package
+  - **Consolidated logging into telemetry package**:
+    - Moved all logging functionality from `internal/logging` to `internal/telemetry`
+    - Logging is now properly positioned as a form of telemetry
+    - Updated all imports throughout the codebase (`logging.NewLogger` → `telemetry.NewLoggerFromOptions`)
+    - Removed the separate `internal/logging` package
+    - Better architectural alignment with logging as observability
+  - **Enhanced logger integration**:
+    - Renamed `NewLogger` to `NewLoggerFromOptions` for clarity
+    - Added `NewTelemetryLogger` helper for OpenTelemetry-aware logging
+    - Integrated existing telemetry logger functionality with the backend system
+    - Maintained backward compatibility with `NewLoggerFromSlog`
 
 - **Logging Migration** (reverting [0.2.0] change):
   - Migrated back from Uber's zap logger to Go's built-in log/slog package

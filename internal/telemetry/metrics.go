@@ -12,7 +12,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/mkm29/valet/internal/config"
-	"github.com/mkm29/valet/internal/logging"
 	"github.com/mkm29/valet/internal/utils"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -110,7 +109,7 @@ func NewMetricsServer(config *config.MetricsConfig, logger *slog.Logger) *Metric
 	}
 
 	// Convert slog logger to logr
-	logrLogger := logging.NewLoggerFromSlog(logger)
+	logrLogger := NewLoggerFromSlog(logger)
 
 	m := &MetricsServer{
 		logger: logrLogger,

@@ -247,37 +247,40 @@ Valet follows Go best practices with well-structured packages using a consistent
 
 #### internal/telemetry
 
-- OpenTelemetry integration
+- OpenTelemetry integration with unified logging
 - Struct-based design with `Telemetry` type and `NewTelemetry` constructor
 - Flexible initialization via `TelemetryOptions` pattern
-- Structured logging with slog/logr
+- Integrated backend-agnostic logging system
 - Metrics and tracing support
 - Configurable exporters (OTLP, stdout)
+- **Unified Logging Architecture**:
+  - Backend-agnostic design with pluggable logging implementations
+  - Two built-in backends:
+    - **SimpleBackend**: Basic slog logging without telemetry integration
+    - **TelemetryBackend**: OpenTelemetry-integrated logging that adds span events
+  - Easy to add new backends (zap, zerolog) without changing application code
+- Key logging functions:
+  - `NewLoggerFromOptions(opts LoggerOptions)`: Creates a logr.Logger with specified backend
+  - `NewDebugLogger`: Pre-configured debug logger
+  - `NewProductionLogger`: Pre-configured production logger
+  - `NewTelemetryLogger`: Logger with OpenTelemetry integration
+  - `LogrWithContext`: Context-aware logger wrapper
 - Example usage:
 
   ```go
-  // Using options pattern
+  // Create telemetry instance
   tel := telemetry.NewTelemetry(ctx, telemetry.TelemetryOptions{
       Config: cfg,
   })
+  
+  // Create logger with telemetry integration
+  logger := telemetry.NewLoggerFromOptions(telemetry.LoggerOptions{
+      Backend:   telemetry.BackendTelemetry,
+      Level:     "info",
+      Format:    "json",
+      Component: "myapp",
+  })
   ```
-
-#### internal/logging
-
-- Dedicated package for backend-agnostic logging abstraction
-- Provides logr interface implementation with pluggable backends
-- Key features:
-  - **Backend-agnostic design**: Easily switch between logging implementations without changing application code
-  - **Options pattern**: Configure loggers with `LoggerOptions` struct specifying backend, level, format, etc.
-  - **Currently supports slog**: Additional backends (zap, zerolog) can be added without API changes
-- Key functions:
-  - `NewLogger(opts LoggerOptions)`: Creates a logr.Logger with specified options
-  - `NewLoggerFromSlog`: Creates a logr.Logger from existing slog.Logger (backward compatibility)
-  - `NewDebugLogger`: Pre-configured debug logger with text output
-  - `NewProductionLogger`: Pre-configured production logger with JSON output
-- `LogrWithContext`: Context-aware logger wrapper for OpenTelemetry integration
-  - Automatically adds trace and span IDs to logs
-  - Provides convenient methods for context propagation
 
 #### internal/utils
 
@@ -342,15 +345,16 @@ Valet maintains high code quality standards through:
 
 ### Logging
 
-Valet uses [logr](https://github.com/go-logr/logr) as a logging abstraction with a backend-agnostic design:
+Valet uses [logr](https://github.com/go-logr/logr) as a logging abstraction with a unified telemetry-aware design:
 
-- **Backend-agnostic architecture**: Currently uses [slog](https://pkg.go.dev/log/slog) but designed for easy backend swapping
+- **Integrated with telemetry**: Logging is now part of the telemetry package for cohesive observability
+- **Backend-agnostic architecture**: Choose between SimpleBackend (basic slog) or TelemetryBackend (with OpenTelemetry integration)
+- **OpenTelemetry integration**: TelemetryBackend automatically adds log events to spans for complete tracing
 - **Pluggable backends**: Architecture supports adding new backends (zap, zerolog, etc.) without changing application code
 - **Options pattern**: Configure loggers using `LoggerOptions` with backend type, level, format, and component settings
 - **Named loggers**: Each package has its own named logger (e.g., `helm`, `telemetry`)
 - **Structured fields**: All log data uses typed fields for consistency
 - **Level control**: Debug logs only shown when debug mode is enabled (using logr verbosity levels)
-- **Integration**: Logs include trace/span IDs when telemetry is enabled
 - **Automatic flushing**: Logger buffers are automatically flushed on program exit to prevent log loss
 
 ## Installation
