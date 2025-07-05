@@ -59,7 +59,24 @@ func (a *App) WithLogr(logger logr.Logger) *App {
 
 // InitializeLogger creates a new logger based on log level
 // Returns a cleanup function that should be deferred to ensure logs are flushed
+// This method now uses the backend-agnostic logging infrastructure
 func (a *App) InitializeLogger(level slog.Level) (func(), error) {
+	// Create logr logger using the backend-agnostic infrastructure
+	format := "json"
+	if level == slog.LevelDebug {
+		format = "text"
+	}
+
+	opts := telemetry.LoggerOptions{
+		Backend:   telemetry.BackendSimple, // Use simple backend for general logging
+		Level:     levelToString(level),
+		Format:    format,
+		AddSource: level == slog.LevelDebug,
+		Component: "valet", // Set component name
+	}
+	a.Logr = telemetry.NewLoggerFromOptions(opts)
+
+	// For backward compatibility, also create a slog logger
 	logger, err := createLogger(level)
 	if err != nil {
 		return nil, err
@@ -67,22 +84,10 @@ func (a *App) InitializeLogger(level slog.Level) (func(), error) {
 	a.Logger = logger
 	slog.SetDefault(logger)
 
-	// Create logr logger with appropriate options
-	format := "json"
-	if level == slog.LevelDebug {
-		format = "text"
-	}
-
-	opts := telemetry.LoggerOptions{
-		Level:     levelToString(level),
-		Format:    format,
-		AddSource: level == slog.LevelDebug,
-	}
-	a.Logr = telemetry.NewLoggerFromOptions(opts)
-
-	// Return a cleanup function (no-op for slog)
+	// Return a cleanup function (no-op for current backends)
 	cleanup := func() {
-		// slog doesn't require explicit syncing
+		// Current backends don't require explicit cleanup,
+		// but this allows for future backends that might need it
 	}
 
 	return cleanup, nil

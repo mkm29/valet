@@ -297,6 +297,8 @@ Valet follows Go best practices with well-structured packages using a consistent
 
   - `NewProvider(ctx, opts)`: Creates a telemetry provider based on options
   - `NewMetricsCollector(opts)`: Creates a metrics collector based on options
+  - `NewLogger(debug)`: Creates a Logger struct with telemetry backend (backward compatible)
+  - `NewLoggerWithOptions(opts)`: Creates a Logger struct with full backend control
   - `NewLoggerFromOptions(opts)`: Creates a logr.Logger with specified backend
   - `RegisterLoggerBackend(name, backend)`: Register custom logger backends
 
@@ -421,6 +423,31 @@ Valet uses [logr](https://github.com/go-logr/logr) as a logging abstraction with
 - **Level control**: Debug logs only shown when debug mode is enabled (using logr verbosity levels)
 - **Automatic flushing**: Logger buffers are automatically flushed on program exit to prevent log loss
 
+#### Logger Creation Examples
+
+```go
+// Using the backend-agnostic constructor with options
+logger, err := telemetry.NewLoggerWithOptions(telemetry.LoggerOptions{
+    Backend:   telemetry.BackendTelemetry,  // or BackendSimple
+    Level:     "info",
+    Format:    "json",
+    Component: "my-service",
+    AddSource: true,
+})
+
+// Using the convenience constructor (backward compatible)
+logger, err := telemetry.NewLogger(true)  // debug = true
+
+// Using logr directly with backend selection
+logrLogger := telemetry.NewLoggerFromOptions(telemetry.LoggerOptions{
+    Backend: telemetry.BackendSimple,
+    Level:   "debug",
+})
+
+// Registering a custom backend
+telemetry.RegisterLoggerBackend("custom", myCustomBackend)
+```
+
 ## Installation
 
 ### From Source
@@ -539,6 +566,14 @@ helm:
 ```
 
 For complete configuration options and examples, see the [examples directory](examples/README.md).
+
+#### Logging Configuration Examples
+
+See [examples/logging/backend-agnostic.go](examples/logging/backend-agnostic.go) for a complete example of:
+- Using different logging backends (simple vs telemetry)
+- Creating loggers with custom options
+- Registering and using custom backends
+- Backend-agnostic logger construction
 
 ### Examples
 

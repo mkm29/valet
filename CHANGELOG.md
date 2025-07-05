@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Backend-Agnostic Logger Construction**:
+  - Refactored `NewLogger` function in `internal/telemetry/logger.go` to use the backend-agnostic infrastructure
+  - Added `NewLoggerWithOptions` function that accepts `LoggerOptions` for full control over backend selection
+  - The `NewLogger` function now delegates to `NewLoggerWithOptions` with appropriate defaults
+  - Updated `App.InitializeLogger` to explicitly specify the backend (simple or telemetry)
+  - Created comprehensive tests for the new logger constructors
+  - Added example code demonstrating backend-agnostic logging usage
+  - Benefits:
+    - Logger creation is no longer tightly coupled to slog implementation
+    - Easy to switch between different logging backends without changing client code
+    - Consistent with the rest of the telemetry package's interface-based design
+    - Maintains backward compatibility while enabling future flexibility
+    - Supports custom backend registration for specialized logging needs
+
 ### Added
 
 - **Interface-Based Telemetry Architecture**:

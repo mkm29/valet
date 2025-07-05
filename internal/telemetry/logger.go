@@ -16,20 +16,40 @@ type Logger struct {
 	logr logr.Logger // logr interface for compatibility
 }
 
-// NewLogger creates a new slog logger with OpenTelemetry integration
+// NewLogger creates a new logger with backend-agnostic configuration
+// The debug parameter controls the log level and format
+// This function now uses the backend-agnostic infrastructure for flexibility
 func NewLogger(debug bool) (*Logger, error) {
-	// Set log level based on debug flag
-	var level slog.Level
-	if debug {
-		level = slog.LevelDebug
-	} else {
-		level = slog.LevelInfo
+	// Configure logger options based on debug flag
+	opts := LoggerOptions{
+		Backend:   BackendTelemetry, // Default to telemetry backend for OpenTelemetry integration
+		Level:     "info",
+		Format:    "json",
+		AddSource: debug,
 	}
 
-	// Create JSON handler with options
-	opts := &slog.HandlerOptions{
+	if debug {
+		opts.Level = "debug"
+		opts.Format = "text" // Text format is more readable for debugging
+	}
+
+	return NewLoggerWithOptions(opts)
+}
+
+// NewLoggerWithOptions creates a new logger with explicit backend-agnostic options
+// This is the preferred constructor as it allows full control over the backend
+func NewLoggerWithOptions(opts LoggerOptions) (*Logger, error) {
+	// Create the logr logger using the backend-agnostic function
+	logrLogger := NewLoggerFromOptions(opts)
+
+	// For backward compatibility, we need to create a slog.Logger as well
+	// We'll create one that matches the configuration
+	level := parseLevel(opts.Level)
+
+	// Create slog handler with same options for consistency
+	slogOpts := &slog.HandlerOptions{
 		Level:     level,
-		AddSource: true,
+		AddSource: opts.AddSource,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 			// Customize attribute names to match previous format
 			switch a.Key {
@@ -38,21 +58,33 @@ func NewLogger(debug bool) (*Logger, error) {
 			case slog.MessageKey:
 				return slog.Attr{Key: "message", Value: a.Value}
 			case slog.SourceKey:
-				return slog.Attr{Key: "caller", Value: a.Value}
+				if opts.AddSource {
+					return slog.Attr{Key: "caller", Value: a.Value}
+				}
+				return slog.Attr{}
 			}
 			return a
 		},
 	}
 
-	// Use JSON handler for structured logs
-	handler := slog.NewJSONHandler(os.Stdout, opts)
-	logger := slog.New(handler)
+	var handler slog.Handler
+	if opts.Format == "text" {
+		handler = slog.NewTextHandler(os.Stdout, slogOpts)
+	} else {
+		handler = slog.NewJSONHandler(os.Stdout, slogOpts)
+	}
 
-	// Create logr logger from the slog handler using official bridge
-	logrLogger := logr.FromSlogHandler(handler)
+	// If component is specified, add it as an attribute
+	if opts.Component != "" {
+		handler = handler.WithAttrs([]slog.Attr{
+			slog.String("component", opts.Component),
+		})
+	}
+
+	slogLogger := slog.New(handler)
 
 	return &Logger{
-		Logger: logger,
+		Logger: slogLogger,
 		logr:   logrLogger,
 	}, nil
 }

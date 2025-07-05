@@ -105,7 +105,26 @@ Example Alertmanager configuration showing:
 - Inhibition rules to prevent alert storms
 - Grouping and timing configuration
 
-### 5. `sample-chart/`
+### 5. `logging/`
+
+Logging examples demonstrating Valet's backend-agnostic logging architecture:
+
+#### `backend-agnostic.go`
+
+Complete example showing:
+- Creating loggers with different backends (SimpleBackend vs TelemetryBackend)
+- Using `NewLoggerWithOptions` for full control over backend selection
+- Backward compatibility with `NewLogger(debug)` function
+- Registering and using custom logging backends
+- How the logging infrastructure is decoupled from specific implementations
+
+To run the example:
+```bash
+cd examples/logging
+go run backend-agnostic.go
+```
+
+### 6. `sample-chart/`
 
 A comprehensive Helm chart demonstrating various patterns that Valet handles:
 
