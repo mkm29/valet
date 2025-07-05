@@ -264,13 +264,17 @@ Valet follows Go best practices with well-structured packages using a consistent
 
 #### internal/logging
 
-- Dedicated package for logging abstraction layer
-- Provides logr interface implementation backed by slog
+- Dedicated package for backend-agnostic logging abstraction
+- Provides logr interface implementation with pluggable backends
+- Key features:
+  - **Backend-agnostic design**: Easily switch between logging implementations without changing application code
+  - **Options pattern**: Configure loggers with `LoggerOptions` struct specifying backend, level, format, etc.
+  - **Currently supports slog**: Additional backends (zap, zerolog) can be added without API changes
 - Key functions:
-  - `NewLogger`: Creates a logr.Logger from a slog.Handler
-  - `NewLoggerFromSlog`: Creates a logr.Logger from an existing slog.Logger
-  - `NewDebugLogger`: Creates a pre-configured debug logger
-  - `NewProductionLogger`: Creates a pre-configured production logger
+  - `NewLogger(opts LoggerOptions)`: Creates a logr.Logger with specified options
+  - `NewLoggerFromSlog`: Creates a logr.Logger from existing slog.Logger (backward compatibility)
+  - `NewDebugLogger`: Pre-configured debug logger with text output
+  - `NewProductionLogger`: Pre-configured production logger with JSON output
 - `LogrWithContext`: Context-aware logger wrapper for OpenTelemetry integration
   - Automatically adds trace and span IDs to logs
   - Provides convenient methods for context propagation
@@ -338,14 +342,15 @@ Valet maintains high code quality standards through:
 
 ### Logging
 
-Valet uses [logr](https://github.com/go-logr/logr) as a logging abstraction with [slog](https://pkg.go.dev/log/slog) as the backend:
+Valet uses [logr](https://github.com/go-logr/logr) as a logging abstraction with a backend-agnostic design:
 
-- **Decoupled**: Uses logr interface allowing easy swapping of logging implementations
+- **Backend-agnostic architecture**: Currently uses [slog](https://pkg.go.dev/log/slog) but designed for easy backend swapping
+- **Pluggable backends**: Architecture supports adding new backends (zap, zerolog, etc.) without changing application code
+- **Options pattern**: Configure loggers using `LoggerOptions` with backend type, level, format, and component settings
 - **Named loggers**: Each package has its own named logger (e.g., `helm`, `telemetry`)
 - **Structured fields**: All log data uses typed fields for consistency
 - **Level control**: Debug logs only shown when debug mode is enabled (using logr verbosity levels)
 - **Integration**: Logs include trace/span IDs when telemetry is enabled
-- **Slog interoperability**: Uses official logr.FromSlogHandler for proper bridging
 - **Automatic flushing**: Logger buffers are automatically flushed on program exit to prevent log loss
 
 ## Installation

@@ -68,9 +68,18 @@ func (a *App) InitializeLogger(level slog.Level) (func(), error) {
 	a.Logger = logger
 	slog.SetDefault(logger)
 
-	// Create logr logger from slog
-	handler := logger.Handler()
-	a.Logr = logging.NewLogger(handler)
+	// Create logr logger with appropriate options
+	format := "json"
+	if level == slog.LevelDebug {
+		format = "text"
+	}
+
+	opts := logging.LoggerOptions{
+		Level:     levelToString(level),
+		Format:    format,
+		AddSource: level == slog.LevelDebug,
+	}
+	a.Logr = logging.NewLogger(opts)
 
 	// Return a cleanup function (no-op for slog)
 	cleanup := func() {
@@ -78,6 +87,20 @@ func (a *App) InitializeLogger(level slog.Level) (func(), error) {
 	}
 
 	return cleanup, nil
+}
+
+// levelToString converts slog.Level to string
+func levelToString(level slog.Level) string {
+	switch level {
+	case slog.LevelDebug:
+		return "debug"
+	case slog.LevelWarn:
+		return "warn"
+	case slog.LevelError:
+		return "error"
+	default:
+		return "info"
+	}
 }
 
 // createLogger creates a new slog logger based on log level

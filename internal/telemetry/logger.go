@@ -28,7 +28,7 @@ func NewLogger(debug bool) (*Logger, error) {
 
 	// Create JSON handler with options
 	opts := &slog.HandlerOptions{
-		Level: level,
+		Level:     level,
 		AddSource: true,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 			// Customize attribute names to match previous format
@@ -47,7 +47,7 @@ func NewLogger(debug bool) (*Logger, error) {
 	// Use JSON handler for structured logs
 	handler := slog.NewJSONHandler(os.Stdout, opts)
 	logger := slog.New(handler)
-	
+
 	// Create logr logger from the slog handler using official bridge
 	logrLogger := logr.FromSlogHandler(handler)
 

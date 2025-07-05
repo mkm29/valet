@@ -5,7 +5,6 @@ package helm
 import (
 	"container/list"
 	"fmt"
-	"log/slog"
 	"os"
 	"sync"
 	"time"
@@ -98,9 +97,13 @@ type chartCache struct {
 func NewHelm(opts HelmOptions) *Helm {
 	logger := opts.Logger
 	if !logger.Enabled() {
-		// Create a default logger using slog
-		handler := slog.Default().With("component", "helm").Handler()
-		logger = logging.NewLogger(handler)
+		// Create a default logger with helm component
+		opts := logging.LoggerOptions{
+			Level:     "info",
+			Format:    "json",
+			Component: "helm",
+		}
+		logger = logging.NewLogger(opts)
 	}
 
 	maxChartSize := opts.MaxChartSize

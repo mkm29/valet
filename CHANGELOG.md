@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Backend-Agnostic Logging Architecture**:
+  - Implemented a flexible logging architecture that decouples the logging interface from the backend implementation
+  - Added `LoggerOptions` struct with configurable backend type, level, format, component, and source settings
+  - Created `Backend` type to specify logging implementation (currently supports "slog")
+  - Architecture designed to easily support additional backends (zap, zerolog, etc.) in the future
+  - All backend-specific logic is encapsulated within the logging package
+  - Benefits:
+    - Easy to switch logging backends without changing application code
+    - Consistent API across different logging implementations
+    - Better testability with configurable options
+    - Future-proof design for evolving logging needs
+
 ### Changed
 
 - **Logging Architecture Improvements**:
@@ -30,6 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
     - Moved `logger.go` from `internal/utils` to `internal/logging`
     - Better separation of concerns - logging is now isolated from general utilities
     - Updated all imports throughout the codebase to use the new package location
+  - **Refactored NewLogger to use options pattern**:
+    - Changed from `NewLogger(handler slog.Handler)` to `NewLogger(opts LoggerOptions)`
+    - Removed direct coupling to slog handlers in API
+    - All callers updated to use the new options-based approach
+    - Handler creation is now internal to the logging package
 
 - **Logging Migration** (reverting [0.2.0] change):
   - Migrated back from Uber's zap logger to Go's built-in log/slog package
