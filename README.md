@@ -262,6 +262,19 @@ Valet follows Go best practices with well-structured packages using a consistent
   })
   ```
 
+#### internal/logging
+
+- Dedicated package for logging abstraction layer
+- Provides logr interface implementation backed by slog
+- Key functions:
+  - `NewLogger`: Creates a logr.Logger from a slog.Handler
+  - `NewLoggerFromSlog`: Creates a logr.Logger from an existing slog.Logger
+  - `NewDebugLogger`: Creates a pre-configured debug logger
+  - `NewProductionLogger`: Creates a pre-configured production logger
+- `LogrWithContext`: Context-aware logger wrapper for OpenTelemetry integration
+  - Automatically adds trace and span IDs to logs
+  - Provides convenient methods for context propagation
+
 #### internal/utils
 
 - Centralized utility functions for common operations
@@ -676,12 +689,14 @@ When contributing to Valet, please follow these architectural patterns:
    - A main struct type (e.g., `Helm`, `Telemetry`)
    - Clear separation of concerns between packages
 
-2. **Utils Package**: The `internal/utils` package contains shared utility functions organized by domain:
-   - `schema.go`: Schema generation utilities (`InferBooleanSchema`, `InferArraySchema`, etc.)
-   - `yaml.go`: YAML processing functions (`DeepMerge`, `LoadYAML`)
-   - `string.go`: String manipulation utilities (`MaskString`, `FormatBytes`)
-   - `reflection.go`: Reflection helpers for struct field extraction
-   - `build.go`: Build information utilities (`GetBuildVersion`)
+2. **Package Organization**: 
+   - Each distinct concern gets its own package (e.g., `internal/logging` for logging abstraction)
+   - The `internal/utils` package contains shared utility functions organized by domain:
+     - `schema.go`: Schema generation utilities (`InferBooleanSchema`, `InferArraySchema`, etc.)
+     - `yaml.go`: YAML processing functions (`DeepMerge`, `LoadYAML`)
+     - `string.go`: String manipulation utilities (`MaskString`, `FormatBytes`)
+     - `reflection.go`: Reflection helpers for struct field extraction
+     - `build.go`: Build information utilities (`GetBuildVersion`)
 
 3. **Command Package Organization**: The `cmd` package focuses on CLI orchestration:
    - Command setup and flag management

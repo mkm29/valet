@@ -16,7 +16,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/mkm29/valet/internal/config"
 	"github.com/mkm29/valet/internal/helm"
-	"github.com/mkm29/valet/internal/utils"
+	"github.com/mkm29/valet/internal/logging"
 	"github.com/stretchr/testify/suite"
 	"helm.sh/helm/v3/pkg/chart"
 )
@@ -32,7 +32,7 @@ func (suite *HelmTestSuite) SetupSuite() {
 	// Create a test logger that discards output
 	suite.logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	// Convert to logr
-	suite.logr = utils.NewLoggerFromSlog(suite.logger)
+	suite.logr = logging.NewLoggerFromSlog(suite.logger)
 	suite.tempDir = suite.T().TempDir()
 }
 

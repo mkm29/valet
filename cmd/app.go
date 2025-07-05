@@ -6,8 +6,8 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/mkm29/valet/internal/config"
+	"github.com/mkm29/valet/internal/logging"
 	"github.com/mkm29/valet/internal/telemetry"
-	"github.com/mkm29/valet/internal/utils"
 )
 
 // contextKey is a type for context keys to avoid collisions
@@ -47,7 +47,7 @@ func (a *App) WithLogger(logger *slog.Logger) *App {
 	a.Logger = logger
 	// Create logr logger from slog
 	if logger != nil {
-		a.Logr = utils.NewLoggerFromSlog(logger)
+		a.Logr = logging.NewLoggerFromSlog(logger)
 	}
 	return a
 }
@@ -70,7 +70,7 @@ func (a *App) InitializeLogger(level slog.Level) (func(), error) {
 
 	// Create logr logger from slog
 	handler := logger.Handler()
-	a.Logr = utils.NewLogger(handler)
+	a.Logr = logging.NewLogger(handler)
 
 	// Return a cleanup function (no-op for slog)
 	cleanup := func() {

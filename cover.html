@@ -71,19 +71,19 @@
 				
 				<option value="file7">github.com/mkm29/valet/internal/helm/helm.go (74.6%)</option>
 				
-				<option value="file8">github.com/mkm29/valet/internal/telemetry/helpers.go (84.9%)</option>
+				<option value="file8">github.com/mkm29/valet/internal/logging/logger.go (6.9%)</option>
 				
-				<option value="file9">github.com/mkm29/valet/internal/telemetry/logger.go (48.6%)</option>
+				<option value="file9">github.com/mkm29/valet/internal/telemetry/helpers.go (84.9%)</option>
 				
-				<option value="file10">github.com/mkm29/valet/internal/telemetry/metrics.go (30.4%)</option>
+				<option value="file10">github.com/mkm29/valet/internal/telemetry/logger.go (48.6%)</option>
 				
-				<option value="file11">github.com/mkm29/valet/internal/telemetry/telemetry.go (61.7%)</option>
+				<option value="file11">github.com/mkm29/valet/internal/telemetry/metrics.go (30.4%)</option>
 				
-				<option value="file12">github.com/mkm29/valet/internal/utils/build.go (69.2%)</option>
+				<option value="file12">github.com/mkm29/valet/internal/telemetry/telemetry.go (61.7%)</option>
 				
-				<option value="file13">github.com/mkm29/valet/internal/utils/error.go (13.3%)</option>
+				<option value="file13">github.com/mkm29/valet/internal/utils/build.go (69.2%)</option>
 				
-				<option value="file14">github.com/mkm29/valet/internal/utils/logger.go (6.9%)</option>
+				<option value="file14">github.com/mkm29/valet/internal/utils/error.go (13.3%)</option>
 				
 				<option value="file15">github.com/mkm29/valet/internal/utils/math.go (0.0%)</option>
 				
@@ -128,8 +128,8 @@ import (
 
         "github.com/go-logr/logr"
         "github.com/mkm29/valet/internal/config"
+        "github.com/mkm29/valet/internal/logging"
         "github.com/mkm29/valet/internal/telemetry"
-        "github.com/mkm29/valet/internal/utils"
 )
 
 // contextKey is a type for context keys to avoid collisions
@@ -169,7 +169,7 @@ func (a *App) WithLogger(logger *slog.Logger) *App <span class="cov0" title="0">
         a.Logger = logger
         // Create logr logger from slog
         if logger != nil </span><span class="cov0" title="0">{
-                a.Logr = utils.NewLoggerFromSlog(logger)
+                a.Logr = logging.NewLoggerFromSlog(logger)
         }</span>
         <span class="cov0" title="0">return a</span>
 }
@@ -189,10 +189,10 @@ func (a *App) InitializeLogger(level slog.Level) (func(), error) <span class="co
         }</span>
         <span class="cov5" title="15">a.Logger = logger
         slog.SetDefault(logger)
-        
+
         // Create logr logger from slog
         handler := logger.Handler()
-        a.Logr = utils.NewLogger(handler)
+        a.Logr = logging.NewLogger(handler)
 
         // Return a cleanup function (no-op for slog)
         cleanup := func() </span>{<span class="cov5" title="10">
@@ -206,7 +206,7 @@ func (a *App) InitializeLogger(level slog.Level) (func(), error) <span class="co
 func createLogger(level slog.Level) (*slog.Logger, error) <span class="cov5" title="15">{
         // Create handler options with the specified level
         opts := &amp;slog.HandlerOptions{
-                Level: level,
+                Level:     level,
                 AddSource: level == slog.LevelDebug, // Add source info in debug mode
                 ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr </span><span class="cov10" title="136">{
                         // Customize attribute names for consistency
@@ -2037,6 +2037,7 @@ import (
 
         "github.com/go-logr/logr"
         "github.com/mkm29/valet/internal/config"
+        "github.com/mkm29/valet/internal/logging"
         "github.com/mkm29/valet/internal/utils"
         "helm.sh/helm/v3/pkg/chart"
         "helm.sh/helm/v3/pkg/chart/loader"
@@ -2124,7 +2125,7 @@ func NewHelm(opts HelmOptions) *Helm <span class="cov6" title="14">{
         if !logger.Enabled() </span><span class="cov1" title="1">{
                 // Create a default logger using slog
                 handler := slog.Default().With("component", "helm").Handler()
-                logger = utils.NewLogger(handler)
+                logger = logging.NewLogger(handler)
         }</span>
 
         <span class="cov6" title="14">maxChartSize := opts.MaxChartSize
@@ -2896,7 +2897,127 @@ func (h *Helm) updateMetrics() <span class="cov7" title="28">{
 }
 </pre>
 		
-		<pre class="file" id="file8" style="display: none">package telemetry
+		<pre class="file" id="file8" style="display: none">package logging
+
+import (
+        "context"
+        "log/slog"
+        "os"
+
+        "github.com/go-logr/logr"
+        "go.opentelemetry.io/otel/trace"
+)
+
+// NewLogger creates a new logr.Logger backed by slog
+func NewLogger(handler slog.Handler) logr.Logger <span class="cov10" title="16">{
+        // Use the official logr slog bridge
+        return logr.FromSlogHandler(handler)
+}</span>
+
+// NewLoggerFromSlog creates a new logr.Logger from an existing slog.Logger
+func NewLoggerFromSlog(logger *slog.Logger) logr.Logger <span class="cov3" title="2">{
+        // Use the official logr slog bridge with the logger's handler
+        return logr.FromSlogHandler(logger.Handler())
+}</span>
+
+// Helper functions for creating loggers with different configurations
+
+// NewDebugLogger creates a logr logger suitable for debug output
+func NewDebugLogger() logr.Logger <span class="cov0" title="0">{
+        opts := &amp;slog.HandlerOptions{
+                Level:     slog.LevelDebug,
+                AddSource: true,
+                ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr </span><span class="cov0" title="0">{
+                        switch a.Key </span>{
+                        case slog.TimeKey:<span class="cov0" title="0">
+                                return slog.Attr{Key: "timestamp", Value: a.Value}</span>
+                        case slog.SourceKey:<span class="cov0" title="0">
+                                return slog.Attr{Key: "caller", Value: a.Value}</span>
+                        }
+                        <span class="cov0" title="0">return a</span>
+                },
+        }
+        <span class="cov0" title="0">handler := slog.NewTextHandler(os.Stdout, opts)
+        return logr.FromSlogHandler(handler)</span>
+}
+
+// NewProductionLogger creates a logr logger suitable for production
+func NewProductionLogger() logr.Logger <span class="cov0" title="0">{
+        opts := &amp;slog.HandlerOptions{
+                Level: slog.LevelInfo,
+                ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr </span><span class="cov0" title="0">{
+                        switch a.Key </span>{
+                        case slog.TimeKey:<span class="cov0" title="0">
+                                return slog.Attr{Key: "timestamp", Value: a.Value}</span>
+                        }
+                        <span class="cov0" title="0">return a</span>
+                },
+        }
+        <span class="cov0" title="0">handler := slog.NewJSONHandler(os.Stdout, opts)
+        return logr.FromSlogHandler(handler)</span>
+}
+
+// LogrWithContext provides a context-aware logr logger with OpenTelemetry integration
+type LogrWithContext struct {
+        base logr.Logger
+}
+
+// NewLogrWithContext creates a new context-aware logr logger
+func NewLogrWithContext(base logr.Logger) *LogrWithContext <span class="cov0" title="0">{
+        return &amp;LogrWithContext{base: base}
+}</span>
+
+// WithContext returns a logger that includes trace information from the context
+func (l *LogrWithContext) WithContext(ctx context.Context) logr.Logger <span class="cov0" title="0">{
+        span := trace.SpanFromContext(ctx)
+        if !span.IsRecording() </span><span class="cov0" title="0">{
+                return l.base
+        }</span>
+
+        <span class="cov0" title="0">spanCtx := span.SpanContext()
+        if !spanCtx.HasTraceID() </span><span class="cov0" title="0">{
+                return l.base
+        }</span>
+
+        // Add trace context to logger
+        <span class="cov0" title="0">return l.base.WithValues(
+                "trace_id", spanCtx.TraceID().String(),
+                "span_id", spanCtx.SpanID().String(),
+        )</span>
+}
+
+// V returns a logger with the specified verbosity level
+func (l *LogrWithContext) V(level int) logr.Logger <span class="cov0" title="0">{
+        return l.base.V(level)
+}</span>
+
+// Info logs a non-error message
+func (l *LogrWithContext) Info(msg string, keysAndValues ...any) <span class="cov0" title="0">{
+        l.base.Info(msg, keysAndValues...)
+}</span>
+
+// Error logs an error message
+func (l *LogrWithContext) Error(err error, msg string, keysAndValues ...any) <span class="cov0" title="0">{
+        l.base.Error(err, msg, keysAndValues...)
+}</span>
+
+// WithValues returns a logger with additional key-value pairs
+func (l *LogrWithContext) WithValues(keysAndValues ...any) *LogrWithContext <span class="cov0" title="0">{
+        return &amp;LogrWithContext{base: l.base.WithValues(keysAndValues...)}
+}</span>
+
+// WithName returns a logger with the specified name
+func (l *LogrWithContext) WithName(name string) *LogrWithContext <span class="cov0" title="0">{
+        return &amp;LogrWithContext{base: l.base.WithName(name)}
+}</span>
+
+// GetLogger returns the underlying logr.Logger
+func (l *LogrWithContext) GetLogger() logr.Logger <span class="cov0" title="0">{
+        return l.base
+}</span>
+</pre>
+		
+		<pre class="file" id="file9" style="display: none">package telemetry
 
 import (
         "context"
@@ -3188,7 +3309,7 @@ func (m *SchemaGenerationMetrics) RecordSchemaGeneration(ctx context.Context, fi
 }
 </pre>
 		
-		<pre class="file" id="file9" style="display: none">package telemetry
+		<pre class="file" id="file10" style="display: none">package telemetry
 
 import (
         "context"
@@ -3393,7 +3514,7 @@ func (l *Logger) GetLogrWithContext(ctx context.Context) logr.Logger <span class
 }
 </pre>
 		
-		<pre class="file" id="file10" style="display: none">package telemetry
+		<pre class="file" id="file11" style="display: none">package telemetry
 
 import (
         "context"
@@ -3407,6 +3528,7 @@ import (
 
         "github.com/go-logr/logr"
         "github.com/mkm29/valet/internal/config"
+        "github.com/mkm29/valet/internal/logging"
         "github.com/mkm29/valet/internal/utils"
         "github.com/prometheus/client_golang/prometheus"
         "github.com/prometheus/client_golang/prometheus/promauto"
@@ -3502,9 +3624,9 @@ func NewMetricsServer(config *config.MetricsConfig, logger *slog.Logger) *Metric
         if logger == nil </span><span class="cov0" title="0">{
                 logger = slog.Default().With("component", "metrics")
         }</span>
-        
+
         // Convert slog logger to logr
-        <span class="cov1" title="1">logrLogger := utils.NewLoggerFromSlog(logger)
+        <span class="cov1" title="1">logrLogger := logging.NewLoggerFromSlog(logger)
 
         m := &amp;MetricsServer{
                 logger: logrLogger,
@@ -4372,7 +4494,7 @@ func (m *MetricsServer) storeLastValues(stats HelmCacheStats) <span class="cov0"
 }</span>
 </pre>
 		
-		<pre class="file" id="file11" style="display: none">package telemetry
+		<pre class="file" id="file12" style="display: none">package telemetry
 
 import (
         "context"
@@ -4723,7 +4845,7 @@ func AddAttributes(ctx context.Context, attrs ...attribute.KeyValue) <span class
 }
 </pre>
 		
-		<pre class="file" id="file12" style="display: none">package utils
+		<pre class="file" id="file13" style="display: none">package utils
 
 import (
         "fmt"
@@ -4761,7 +4883,7 @@ func GetBuildVersion() string <span class="cov6" title="25">{
 }
 </pre>
 		
-		<pre class="file" id="file13" style="display: none">package utils
+		<pre class="file" id="file14" style="display: none">package utils
 
 import (
         "errors"
@@ -4815,125 +4937,6 @@ func IsIgnorableSyncError(err error) bool <span class="cov0" title="0">{
         <span class="cov0" title="0">return false</span>
 }
 </pre>
-		
-		<pre class="file" id="file14" style="display: none">package utils
-
-import (
-        "context"
-        "log/slog"
-        "os"
-
-        "github.com/go-logr/logr"
-        "go.opentelemetry.io/otel/trace"
-)
-
-// NewLogger creates a new logr.Logger backed by slog
-func NewLogger(handler slog.Handler) logr.Logger <span class="cov10" title="16">{
-        // Use the official logr slog bridge
-        return logr.FromSlogHandler(handler)
-}</span>
-
-// NewLoggerFromSlog creates a new logr.Logger from an existing slog.Logger
-func NewLoggerFromSlog(logger *slog.Logger) logr.Logger <span class="cov3" title="2">{
-        // Use the official logr slog bridge with the logger's handler
-        return logr.FromSlogHandler(logger.Handler())
-}</span>
-
-// Helper functions for creating loggers with different configurations
-
-// NewDebugLogger creates a logr logger suitable for debug output
-func NewDebugLogger() logr.Logger <span class="cov0" title="0">{
-        opts := &amp;slog.HandlerOptions{
-                Level:     slog.LevelDebug,
-                AddSource: true,
-                ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr </span><span class="cov0" title="0">{
-                        switch a.Key </span>{
-                        case slog.TimeKey:<span class="cov0" title="0">
-                                return slog.Attr{Key: "timestamp", Value: a.Value}</span>
-                        case slog.SourceKey:<span class="cov0" title="0">
-                                return slog.Attr{Key: "caller", Value: a.Value}</span>
-                        }
-                        <span class="cov0" title="0">return a</span>
-                },
-        }
-        <span class="cov0" title="0">handler := slog.NewTextHandler(os.Stdout, opts)
-        return logr.FromSlogHandler(handler)</span>
-}
-
-// NewProductionLogger creates a logr logger suitable for production
-func NewProductionLogger() logr.Logger <span class="cov0" title="0">{
-        opts := &amp;slog.HandlerOptions{
-                Level: slog.LevelInfo,
-                ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr </span><span class="cov0" title="0">{
-                        switch a.Key </span>{
-                        case slog.TimeKey:<span class="cov0" title="0">
-                                return slog.Attr{Key: "timestamp", Value: a.Value}</span>
-                        }
-                        <span class="cov0" title="0">return a</span>
-                },
-        }
-        <span class="cov0" title="0">handler := slog.NewJSONHandler(os.Stdout, opts)
-        return logr.FromSlogHandler(handler)</span>
-}
-
-// LogrWithContext provides a context-aware logr logger with OpenTelemetry integration
-type LogrWithContext struct {
-        base logr.Logger
-}
-
-// NewLogrWithContext creates a new context-aware logr logger
-func NewLogrWithContext(base logr.Logger) *LogrWithContext <span class="cov0" title="0">{
-        return &amp;LogrWithContext{base: base}
-}</span>
-
-// WithContext returns a logger that includes trace information from the context
-func (l *LogrWithContext) WithContext(ctx context.Context) logr.Logger <span class="cov0" title="0">{
-        span := trace.SpanFromContext(ctx)
-        if !span.IsRecording() </span><span class="cov0" title="0">{
-                return l.base
-        }</span>
-
-        <span class="cov0" title="0">spanCtx := span.SpanContext()
-        if !spanCtx.HasTraceID() </span><span class="cov0" title="0">{
-                return l.base
-        }</span>
-
-        // Add trace context to logger
-        <span class="cov0" title="0">return l.base.WithValues(
-                "trace_id", spanCtx.TraceID().String(),
-                "span_id", spanCtx.SpanID().String(),
-        )</span>
-}
-
-// V returns a logger with the specified verbosity level
-func (l *LogrWithContext) V(level int) logr.Logger <span class="cov0" title="0">{
-        return l.base.V(level)
-}</span>
-
-// Info logs a non-error message
-func (l *LogrWithContext) Info(msg string, keysAndValues ...any) <span class="cov0" title="0">{
-        l.base.Info(msg, keysAndValues...)
-}</span>
-
-// Error logs an error message
-func (l *LogrWithContext) Error(err error, msg string, keysAndValues ...any) <span class="cov0" title="0">{
-        l.base.Error(err, msg, keysAndValues...)
-}</span>
-
-// WithValues returns a logger with additional key-value pairs
-func (l *LogrWithContext) WithValues(keysAndValues ...any) *LogrWithContext <span class="cov0" title="0">{
-        return &amp;LogrWithContext{base: l.base.WithValues(keysAndValues...)}
-}</span>
-
-// WithName returns a logger with the specified name
-func (l *LogrWithContext) WithName(name string) *LogrWithContext <span class="cov0" title="0">{
-        return &amp;LogrWithContext{base: l.base.WithName(name)}
-}</span>
-
-// GetLogger returns the underlying logr.Logger
-func (l *LogrWithContext) GetLogger() logr.Logger <span class="cov0" title="0">{
-        return l.base
-}</pre>
 		
 		<pre class="file" id="file15" style="display: none">package utils
 

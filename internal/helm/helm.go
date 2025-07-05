@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/mkm29/valet/internal/config"
+	"github.com/mkm29/valet/internal/logging"
 	"github.com/mkm29/valet/internal/utils"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
@@ -99,7 +100,7 @@ func NewHelm(opts HelmOptions) *Helm {
 	if !logger.Enabled() {
 		// Create a default logger using slog
 		handler := slog.Default().With("component", "helm").Handler()
-		logger = utils.NewLogger(handler)
+		logger = logging.NewLogger(handler)
 	}
 
 	maxChartSize := opts.MaxChartSize

@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
     - Consistent with Kubernetes ecosystem which uses logr
     - Maintains structured logging capabilities
     - Proper slog interoperability following logr documentation guidelines
+  - **Moved logging utilities to dedicated package**:
+    - Created `internal/logging` package for all logging-related functionality
+    - Moved `logger.go` from `internal/utils` to `internal/logging`
+    - Better separation of concerns - logging is now isolated from general utilities
+    - Updated all imports throughout the codebase to use the new package location
 
 - **Logging Migration** (reverting [0.2.0] change):
   - Migrated back from Uber's zap logger to Go's built-in log/slog package
