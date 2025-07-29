@@ -11,8 +11,12 @@ help: ## This help.
 GOBIN ?= $$(go env GOPATH)/bin
 
 .PHONY: build
-build: ## Build the project
-	go build -o bin/valet main.go
+build: ## Build the project with optimizations
+	go build -ldflags="-s -w" -o bin/valet main.go
+
+.PHONY: build-no-telemetry
+build-no-telemetry: ## Build without telemetry (smaller binary)
+	go build -tags=notelemetry -ldflags="-s -w" -o bin/valet main.go
 
 .PHONY: clean
 clean: ## Clean the project
@@ -32,3 +36,4 @@ install-go-test-coverage: ## Install go-test-coverage
 check-coverage: install-go-test-coverage ## Check the coverage
 	go test ./... -coverprofile=./cover.out -covermode=atomic -coverpkg=./...
 	${GOBIN}/go-test-coverage --config=./.testcoverage.yml
+
