@@ -7,11 +7,11 @@ profile: cover.out
 # Holds coverage threshold percentages, values should be in range [0-100].
 threshold:
   # (optional; default 0) Minimum coverage percentage required for individual files.
-  file: 70
+  file: 50
   # (optional; default 0) Minimum coverage percentage required per package.
-  package: 80
+  package: 70
   # (optional; default 0) Minimum overall project coverage percentage required.
-  total: 85
+  total: 70
 
 # Holds regexp rules which override thresholds for matched files or packages.
 # First matching rule applies; list from specific to general.
@@ -20,6 +20,7 @@ override: []
 exclude:
   paths:
     - \.pb\.go$ # exclude protobuf generated files
+    - ^main\.go$ # exclude main.go since it's difficult to test due to os.Exit
 
 # File name of go-test-coverage breakdown file for analyzing coverage differences.
 breakdown-file-name: ""

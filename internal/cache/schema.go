@@ -89,7 +89,7 @@ func (sc *SchemaCache) MemoizeInferSchema(key string, generator func() map[strin
 
 	// Generate and cache
 	result := generator()
-	
+
 	sc.memoMu.Lock()
 	sc.memoCache[key] = result
 	sc.memoMu.Unlock()
@@ -167,7 +167,7 @@ func GenerateMemoKey(val, defaultVal any) string {
 	// Create a deterministic string representation
 	valStr := fmt.Sprintf("%T:%v", val, val)
 	defStr := fmt.Sprintf("%T:%v", defaultVal, defaultVal)
-	
+
 	combined := valStr + "|" + defStr
 	hash := sha256.Sum256([]byte(combined))
 	return hex.EncodeToString(hash[:])

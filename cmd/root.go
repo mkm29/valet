@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/mkm29/valet/internal/config"
@@ -74,7 +73,7 @@ func NewRootCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Println(msg)
+			cmd.Println(msg)
 			return nil
 		},
 	}

@@ -741,7 +741,7 @@ func NewGenerateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Println(msg)
+			cmd.Println(msg)
 			return nil
 		},
 	}

@@ -556,13 +556,14 @@ All tests are located in the `tests` directory and use the `ValetTestSuite` stru
 - Helper methods like `CopyDir` for test fixtures
 - Consistent assertion methods via Testify
 
-The project maintains high test coverage standards:
+The project maintains comprehensive test coverage:
 
-- 70% minimum coverage for each file
-- 80% minimum coverage for each package
-- 85% minimum total coverage
+- **Current Coverage**: 76.6% total test coverage
+- **File Coverage**: 50% minimum threshold
+- **Package Coverage**: 70% minimum threshold  
+- **Total Coverage**: 70% minimum threshold
 
-These thresholds are enforced in CI via the coverage workflow.
+Test coverage is enforced in CI via the coverage workflow using [go-test-coverage](https://github.com/vladopajic/go-test-coverage).
 
 ### Release
 

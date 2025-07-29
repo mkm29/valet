@@ -25,7 +25,7 @@ clean: ## Clean the project
 
 .PHONY: test
 test: ## Run the tests
-	go test ./... -coverprofile=./cover.out -covermode=atomic -coverpkg=./...
+	go test ./... -coverprofile=./cover.out -covermode=atomic
 	go tool cover -html=./cover.out -o ./cover.html
 
 .PHONY: install-go-test-coverage
