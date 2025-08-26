@@ -450,7 +450,7 @@ func (m *MetricsServer) waitForServerStartup(ctx context.Context, errCh chan err
 			return ctx.Err()
 		default:
 			// Try to connect to the health endpoint
-			client := &http.Client{Timeout: 100 * time.Millisecond}
+			client := &http.Client{Timeout: DefaultHealthCheckTimeout}
 			resp, err := client.Get(fmt.Sprintf("http://localhost%s/health", m.server.Addr))
 			if err == nil {
 				// Check for Retry-After header in response
@@ -555,8 +555,9 @@ func (m *MetricsServer) UpdateHelmCacheStats(stats interface{}) {
 		helmStats = v
 	default:
 		// FALLBACK METHOD: JSON marshaling for backward compatibility
-		// WARNING: This approach has significant performance overhead and should be avoided
+		// WARNING: This approach has significant performance overhead (100x slower) and should be avoided
 		// in performance-critical code paths. Consider implementing CacheStatsProvider instead.
+		// TODO(performance): Remove this fallback after deprecation period (v2.0)
 		m.logger.V(1).Info("Using JSON marshaling fallback for metrics collection",
 			"type", fmt.Sprintf("%T", stats),
 			"recommendation", "implement CacheStatsProvider interface for better performance",

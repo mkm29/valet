@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/mkm29/valet/internal/config"
 	"go.opentelemetry.io/otel"
@@ -50,22 +51,39 @@ func newOpenTelemetryProvider(ctx context.Context, opts ProviderOptions) (Provid
 		return nil, fmt.Errorf("failed to initialize meter provider: %w", err)
 	}
 
-	// Set global providers
+	// Set global providers with proper type assertion
 	if tp, ok := tracerProvider.(*otelTracerProvider); ok {
 		otel.SetTracerProvider(tp.provider)
+	} else {
+		// Log warning if type assertion fails
+		if opts.Logger != nil {
+			opts.Logger.Warn(ctx, "unexpected tracer provider type", "type", fmt.Sprintf("%T", tracerProvider))
+		}
 	}
 	if mp, ok := meterProvider.(*otelMeterProvider); ok {
 		otel.SetMeterProvider(mp.provider)
+	} else {
+		// Log warning if type assertion fails
+		if opts.Logger != nil {
+			opts.Logger.Warn(ctx, "unexpected meter provider type", "type", fmt.Sprintf("%T", meterProvider))
+		}
 	}
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 
 	// Create logger
 	logger := opts.Logger
 	if logger == nil {
-		logger, err = NewLogger(cfg.SampleRate > 0)
+		logger, err = NewLogger(cfg.SampleRate >= 1.0) // More explicit debug detection
 		if err != nil {
-			_ = meterProvider.Shutdown(ctx)
-			_ = tracerProvider.Shutdown(ctx)
+			// Best-effort cleanup with timeout
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), DefaultBatchTimeout)
+			defer cancel()
+			if mpErr := meterProvider.Shutdown(cleanupCtx); mpErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: failed to shutdown meter provider: %v\n", mpErr)
+			}
+			if tpErr := tracerProvider.Shutdown(cleanupCtx); tpErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: failed to shutdown tracer provider: %v\n", tpErr)
+			}
 			return nil, fmt.Errorf("failed to create logger: %w", err)
 		}
 	}

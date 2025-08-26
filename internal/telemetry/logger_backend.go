@@ -69,17 +69,13 @@ func NewLoggerFromOptions(opts LoggerOptions) logr.Logger {
 	return backend.CreateLogger(opts)
 }
 
-// simpleBackend implements LoggerBackendInterface using basic slog
-type simpleBackend struct{}
+// createCommonSlogHandler creates a consistent slog handler with the given options.
+// This eliminates duplication between logger.go and logger_backend.go
+func createCommonSlogHandler(opts LoggerOptions, output *os.File) slog.Handler {
+	if output == nil {
+		output = os.Stdout
+	}
 
-// CreateLogger implements LoggerBackendInterface for simple slog backend
-func (s *simpleBackend) CreateLogger(opts LoggerOptions) logr.Logger {
-	handler := s.createHandler(opts)
-	return logr.FromSlogHandler(handler)
-}
-
-// createHandler creates the appropriate slog handler based on options
-func (s *simpleBackend) createHandler(opts LoggerOptions) slog.Handler {
 	level := parseLevel(opts.Level)
 
 	handlerOpts := &slog.HandlerOptions{
@@ -89,6 +85,8 @@ func (s *simpleBackend) createHandler(opts LoggerOptions) slog.Handler {
 			switch a.Key {
 			case slog.TimeKey:
 				return slog.Attr{Key: "timestamp", Value: a.Value}
+			case slog.MessageKey:
+				return slog.Attr{Key: "message", Value: a.Value}
 			case slog.SourceKey:
 				if opts.AddSource {
 					return slog.Attr{Key: "caller", Value: a.Value}
@@ -100,11 +98,10 @@ func (s *simpleBackend) createHandler(opts LoggerOptions) slog.Handler {
 	}
 
 	var handler slog.Handler
-	switch opts.Format {
-	case "text":
-		handler = slog.NewTextHandler(os.Stdout, handlerOpts)
-	default: // "json" or any other value defaults to JSON
-		handler = slog.NewJSONHandler(os.Stdout, handlerOpts)
+	if opts.Format == "text" {
+		handler = slog.NewTextHandler(output, handlerOpts)
+	} else {
+		handler = slog.NewJSONHandler(output, handlerOpts)
 	}
 
 	// Add component context if specified
@@ -115,6 +112,15 @@ func (s *simpleBackend) createHandler(opts LoggerOptions) slog.Handler {
 	}
 
 	return handler
+}
+
+// simpleBackend implements LoggerBackendInterface using basic slog
+type simpleBackend struct{}
+
+// CreateLogger implements LoggerBackendInterface for simple slog backend
+func (s *simpleBackend) CreateLogger(opts LoggerOptions) logr.Logger {
+	handler := createCommonSlogHandler(opts, nil)
+	return logr.FromSlogHandler(handler)
 }
 
 // telemetryBackend implements LoggerBackendInterface with OpenTelemetry integration
@@ -135,9 +141,8 @@ func (t *telemetryBackend) CreateLogger(opts LoggerOptions) logr.Logger {
 
 // createHandler creates the base slog handler
 func (t *telemetryBackend) createHandler(opts LoggerOptions) slog.Handler {
-	// Reuse the simple backend's handler creation
-	simple := &simpleBackend{}
-	return simple.createHandler(opts)
+	// Use the common handler creation function
+	return createCommonSlogHandler(opts, nil)
 }
 
 // telemetryHandler wraps a slog.Handler to add OpenTelemetry integration

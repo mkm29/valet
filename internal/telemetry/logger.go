@@ -42,45 +42,8 @@ func NewLoggerWithOptions(opts LoggerOptions) (*Logger, error) {
 	// Create the logr logger using the backend-agnostic function
 	logrLogger := NewLoggerFromOptions(opts)
 
-	// For backward compatibility, we need to create a slog.Logger as well
-	// We'll create one that matches the configuration
-	level := parseLevel(opts.Level)
-
-	// Create slog handler with same options for consistency
-	slogOpts := &slog.HandlerOptions{
-		Level:     level,
-		AddSource: opts.AddSource,
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			// Customize attribute names to match previous format
-			switch a.Key {
-			case slog.TimeKey:
-				return slog.Attr{Key: "timestamp", Value: a.Value}
-			case slog.MessageKey:
-				return slog.Attr{Key: "message", Value: a.Value}
-			case slog.SourceKey:
-				if opts.AddSource {
-					return slog.Attr{Key: "caller", Value: a.Value}
-				}
-				return slog.Attr{}
-			}
-			return a
-		},
-	}
-
-	var handler slog.Handler
-	if opts.Format == "text" {
-		handler = slog.NewTextHandler(os.Stdout, slogOpts)
-	} else {
-		handler = slog.NewJSONHandler(os.Stdout, slogOpts)
-	}
-
-	// If component is specified, add it as an attribute
-	if opts.Component != "" {
-		handler = handler.WithAttrs([]slog.Attr{
-			slog.String("component", opts.Component),
-		})
-	}
-
+	// For backward compatibility, create a slog.Logger using the common handler
+	handler := createCommonSlogHandler(opts, nil)
 	slogLogger := slog.New(handler)
 
 	return &Logger{

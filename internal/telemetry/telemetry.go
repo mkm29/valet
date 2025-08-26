@@ -25,6 +25,21 @@ import (
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
+// Configuration constants
+const (
+	// DefaultShutdownTimeout is the default timeout for shutdown operations
+	DefaultShutdownTimeout = 10 * time.Second
+
+	// DefaultHealthCheckTimeout is the timeout for health check operations
+	DefaultHealthCheckTimeout = 100 * time.Millisecond
+
+	// DefaultBatchTimeout is the default timeout for batch operations
+	DefaultBatchTimeout = 5 * time.Second
+
+	// DefaultMetricInterval is the default interval for metric collection
+	DefaultMetricInterval = 30 * time.Second
+)
+
 // Telemetry holds the telemetry providers and instruments
 type Telemetry struct {
 	config         *config.TelemetryConfig
@@ -85,12 +100,19 @@ func NewTelemetry(ctx context.Context, opts TelemetryOptions) (*Telemetry, error
 	tracer := otel.Tracer("valet")
 	meter := otel.Meter("valet")
 
-	// Create structured logger
-	logger, err := NewLogger(cfg.SampleRate > 0) // Use sample rate as debug indicator
+	// Create structured logger with proper debug mode detection
+	debugMode := cfg.SampleRate >= 1.0 // More explicit debug mode detection
+	logger, err := NewLogger(debugMode)
 	if err != nil {
-		// Cleanup providers on error
-		_ = meterProvider.Shutdown(context.Background())
-		_ = traceProvider.Shutdown(context.Background())
+		// Cleanup providers on error with timeout
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), DefaultBatchTimeout)
+		defer cancel()
+		if mpErr := meterProvider.Shutdown(cleanupCtx); mpErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to shutdown meter provider: %v\n", mpErr)
+		}
+		if tpErr := traceProvider.Shutdown(cleanupCtx); tpErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to shutdown tracer provider: %v\n", tpErr)
+		}
 		return nil, fmt.Errorf("failed to create logger: %w", err)
 	}
 
@@ -100,9 +122,15 @@ func NewTelemetry(ctx context.Context, opts TelemetryOptions) (*Telemetry, error
 		// Use the metrics config directly from the config package
 		metricsServer = NewMetricsServer(cfg.Metrics, logger.Logger)
 		if err := metricsServer.Start(ctx); err != nil {
-			// Cleanup on error
-			_ = meterProvider.Shutdown(context.Background())
-			_ = traceProvider.Shutdown(context.Background())
+			// Cleanup on error with timeout
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), DefaultBatchTimeout)
+			defer cancel()
+			if mpErr := meterProvider.Shutdown(cleanupCtx); mpErr != nil {
+				logger.Warn(context.Background(), "failed to shutdown meter provider during cleanup", "error", mpErr)
+			}
+			if tpErr := traceProvider.Shutdown(cleanupCtx); tpErr != nil {
+				logger.Warn(context.Background(), "failed to shutdown tracer provider during cleanup", "error", tpErr)
+			}
 			return nil, fmt.Errorf("failed to start metrics server: %w", err)
 		}
 	}
